@@ -431,7 +431,7 @@ Possible future versions may include:
 
 ---
 
-## 📁 Planned Repository Structure
+## 📁 Repository Structure
 
 ```text
 memorycue/
@@ -455,40 +455,6 @@ memorycue/
 ```
 
 ---
-
-## 🧑‍💻 Development Status
-
-<div align="center">
-
-| Area | Status |
-|---|---|
-| Concept | ✅ Complete |
-| README | ✅ In progress |
-| Hardware setup | ⏳ Not started |
-| Object detection | ⏳ Not started |
-| Local memory | ⏳ Not started |
-| Audio cues | ⏳ Not started |
-| Final demo | ⏳ Not started |
-
-</div>
-
----
-
-## 🤝 Contributing
-
-This project is currently in the early planning and prototyping stage.
-
-Ideas, suggestions, ethical concerns, and accessibility feedback are welcome.
-
----
-
-## 📜 License
-
-License to be decided.
-
----
-
-<div align="center">
 
 ### MemoryCue
 
