@@ -1,55 +1,147 @@
 # MemoryCue
 
-> A software prototype exploring AI-assisted memory glasses for people experiencing memory loss and their caregivers.
+> AI-assisted memory support designed for people experiencing memory loss and the caregivers who support them.
 
-MemoryCue is an experimental prototype exploring privacy-first, AI-assisted memory support for everyday activities and objects. It is intended to help retrieve observed context through calm, grounded cues.
+MemoryCue is an experimental software project exploring how AI-powered smart glasses could act as an external memory aid in everyday life.
 
-## Important Notice
+The idea is simple: the system observes important moments, remembers useful context, and helps the user recall that information later through short, calm prompts.
 
-This project is an experimental prototype. It is not a medical device and it is not a diagnostic system. It does not diagnose, treat, or replace professional or caregiver support.
+For example, a user could ask:
 
-The first MVP is software-only and does not require physical smart glasses.
+* **What was I doing?**
+* **Where did I leave my keys?**
+* **Who is Sarah?**
+* **What am I doing today?**
 
-## Development Status
+Instead of relying on a general-purpose chatbot to guess, MemoryCue is designed to answer from information that was previously observed or provided by a caregiver.
 
-Current stage: MVP planning / repository bootstrap
+## The Idea
 
-This initial repository setup establishes the project structure and documents the MVP boundary. No frameworks, physical hardware integrations, or production services are included yet.
+Memory loss can make ordinary daily situations unexpectedly difficult.
 
-## MVP Direction
+Someone may forget:
 
-The prototype will demonstrate a small, privacy-conscious memory loop:
+* what they were doing a few minutes ago;
+* where they placed an important object;
+* who someone is;
+* what they planned to do that day.
+
+MemoryCue explores whether an AI system connected to smart glasses could provide a lightweight layer of memory support.
+
+The long-term concept is:
 
 ```text
-Observe something
-    -> turn it into a memory
-    -> store it
-    -> ask about it later
-    -> return a grounded answer
+See and hear what the user experiences
+                ↓
+Identify useful moments
+                ↓
+Store structured memories
+                ↓
+Retrieve them when needed
+                ↓
+Provide a short spoken or visual reminder
 ```
 
-The first demo is intended to answer four simple questions:
+## Current MVP
 
-- What was I doing?
-- Where are my keys?
-- Who is Sarah?
-- What am I doing today?
+The first version is a software-only prototype.
 
-Answers should be based on observed or explicitly provided information. When information is unknown, the system should say so rather than inventing a personal answer.
+No physical smart glasses are required.
 
-See the [MVP definition](docs/MVP.md) and [architecture direction](docs/architecture.md) for the current scope.
+The MVP focuses on four core experiences:
 
-## Privacy and Safety Principles
+### 1. Recent activity recall
 
-MemoryCue is designed around privacy and dignity. The intended prototype direction is local-first, with no continuous cloud video upload, no remote video streaming, and no biometric face recognition in the MVP. Prompts should be gentle, transparent about uncertainty, and supportive rather than judgmental.
+The user can ask:
 
-## Repository Layout
+> What was I doing?
+
+The system recalls a recent observed activity.
+
+### 2. Last-seen object recall
+
+The user can ask:
+
+> Where are my keys?
+
+The system returns the most recent place the keys were observed.
+
+### 3. People and relationship context
+
+The user can ask:
+
+> Who is Sarah?
+
+The system retrieves caregiver-provided information about that person.
+
+### 4. Daily schedule support
+
+The user can ask:
+
+> What am I doing today?
+
+The system returns a simple schedule of upcoming activities.
+
+## Example
+
+A simulated day might contain:
+
+```text
+10:00 AM — Making tea in the kitchen
+10:10 AM — Reading in the living room
+10:18 AM — Keys seen on the kitchen counter
+10:25 AM — Preparing to leave for a walk
+```
+
+Later, the user asks:
+
+> Where are my keys?
+
+MemoryCue responds:
+
+> I last saw your keys on the kitchen counter at 10:18 AM.
+
+The distinction matters: the system reports what it remembers seeing rather than pretending it knows where the keys are now.
+
+## Caregiver Support
+
+The project also explores a caregiver interface where trusted people can provide useful context such as:
+
+* names and relationships;
+* daily routines;
+* appointments;
+* important places;
+* reminders.
+
+Example:
+
+```text
+Sarah
+Relationship: Daughter
+Visiting today at 3:30 PM
+```
+
+This information can then be used to answer simple questions in a familiar and consistent way.
+
+## Future Smart Glasses Integration
+
+The initial prototype runs entirely as software using simulated camera input.
+
+The architecture is intended to later support wearable devices such as Meta AI glasses.
+
+A future version could use:
+
+* first-person camera input;
+* microphone input;
+* open-ear audio responses;
+* wearable display prompts where supported.
+
+The software prototype allows the memory system to be developed and tested before physical hardware is required.
+
+## Project Structure
 
 ```text
 .
-├── README.md
-├── AGENTS.md
-├── .env.example
 ├── apps/
 │   ├── web/
 │   └── api/
@@ -57,11 +149,39 @@ MemoryCue is designed around privacy and dignity. The intended prototype directi
 │   ├── browser-simulator/
 │   └── meta/
 ├── fixtures/
-└── docs/
-    ├── MVP.md
-    └── architecture.md
+├── docs/
+├── AGENTS.md
+└── README.md
 ```
 
-## Contributing Direction
+## Project Status
 
-Keep the MVP small and deterministic. Read `docs/MVP.md` before implementing features, and update it before expanding the product scope. Never commit API keys, secrets, local data, or generated media.
+**Current stage:** MVP development
+
+The project is currently focused on building the core memory loop:
+
+```text
+observe → remember → retrieve → assist
+```
+
+See:
+
+* [MVP definition](docs/MVP.md)
+* [Architecture](docs/architecture.md)
+
+## Safety and Scope
+
+MemoryCue is an experimental assistive technology prototype.
+
+It is **not**:
+
+* a medical device;
+* a diagnostic system;
+* a replacement for caregivers;
+* a replacement for medical professionals.
+
+The project focuses on memory retrieval and everyday support rather than diagnosis or treatment.
+
+## Vision
+
+The goal is to explore whether AI can provide a quiet, respectful form of memory assistance that helps people stay more independent and connected to the people and routines around them.
