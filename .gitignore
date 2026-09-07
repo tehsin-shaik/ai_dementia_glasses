@@ -1,0 +1,59 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Environment variables and local secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Node.js / frontend
+node_modules/
+.next/
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+ENV/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local databases and application data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Test and tool output
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated media
+media/
+recordings/
+snapshots/
+local_snapshots/
+*.mp4
+*.mov
+*.avi
+*.webm
+*.wav
+*.mp3
