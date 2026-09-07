@@ -35,42 +35,58 @@ def safe_media_path(filename: str) -> Path:
 
 
 async def save_uploaded_image(upload: UploadFile) -> str:
-    """Stream a supported image to a unique local filename."""
+    """Store a supported image under a unique local filename."""
 
-    extension = Path(upload.filename or "").suffix.lower()
-    if extension not in ALLOWED_EXTENSIONS:
-        allowed = ", ".join(sorted(ALLOWED_EXTENSIONS))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported image type. Use one of: {allowed}.",
-        )
+    extension, image_bytes = await read_uploaded_image(upload)
 
     media_directory = configured_media_directory()
     media_directory.mkdir(parents=True, exist_ok=True)
     unique_name = f"{uuid4().hex}{extension}"
     final_path = media_directory / unique_name
     temporary_path = media_directory / f".{uuid4().hex}.upload"
-    total_bytes = 0
 
     try:
-        with temporary_path.open("wb") as destination:
-            while chunk := await upload.read(CHUNK_SIZE):
-                total_bytes += len(chunk)
-                if total_bytes > MAX_UPLOAD_BYTES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail="Image is too large. The maximum size is 10 MB.",
-                    )
-                destination.write(chunk)
-
-        if total_bytes == 0:
-            raise HTTPException(status_code=400, detail="Image file cannot be empty.")
-
+        temporary_path.write_bytes(image_bytes)
         temporary_path.replace(final_path)
         return unique_name
     finally:
         if temporary_path.exists():
             temporary_path.unlink()
+
+
+def validate_image_extension(filename: str | None) -> str:
+    """Return a supported image extension or raise a client-facing error."""
+
+    extension = Path(filename or "").suffix.lower()
+    if extension not in ALLOWED_EXTENSIONS:
+        allowed = ", ".join(sorted(ALLOWED_EXTENSIONS))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported image type. Use one of: {allowed}.",
+        )
+    return extension
+
+
+async def read_uploaded_image(upload: UploadFile) -> tuple[str, bytes]:
+    """Read a supported image for temporary analysis using the upload size limit."""
+
+    extension = validate_image_extension(upload.filename)
+    chunks: list[bytes] = []
+    total_bytes = 0
+
+    while chunk := await upload.read(CHUNK_SIZE):
+        total_bytes += len(chunk)
+        if total_bytes > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Image is too large. The maximum size is 10 MB.",
+            )
+        chunks.append(chunk)
+
+    if total_bytes == 0:
+        raise HTTPException(status_code=400, detail="Image file cannot be empty.")
+
+    return extension, b"".join(chunks)
 
 
 def remove_uploaded_image(filename: str) -> None:

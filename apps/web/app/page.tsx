@@ -16,6 +16,19 @@ type MemoryListItem = {
   image_url: string | null;
 };
 
+type DetectedObject = {
+  name: string;
+  location: string | null;
+  confidence: number | null;
+};
+
+type VisionAnalysis = {
+  description: string;
+  location: string | null;
+  activity: string | null;
+  objects: DetectedObject[];
+};
+
 type ApiError = {
   detail?: string;
 };
@@ -62,8 +75,13 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [memoryTimestamp, setMemoryTimestamp] = useState("");
   const [memoryLocation, setMemoryLocation] = useState("");
+  const [memoryActivity, setMemoryActivity] = useState("");
   const [memoryDescription, setMemoryDescription] = useState("");
   const [memoryObjectName, setMemoryObjectName] = useState("");
+  const [visionAnalysis, setVisionAnalysis] = useState<VisionAnalysis | null>(null);
+  const [visionMessage, setVisionMessage] = useState<string | null>(null);
+  const [visionError, setVisionError] = useState(false);
+  const [isAnalyzingVision, setIsAnalyzingVision] = useState(false);
   const [isSavingMemory, setIsSavingMemory] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [recentMemories, setRecentMemories] = useState<MemoryListItem[]>([]);
@@ -154,6 +172,9 @@ export default function Home() {
     formData.append("timestamp", memoryTimestamp);
     formData.append("location", memoryLocation);
     formData.append("description", memoryDescription);
+    if (memoryActivity.trim()) {
+      formData.append("activity", memoryActivity);
+    }
     if (memoryObjectName.trim()) {
       formData.append("object_name", memoryObjectName);
     }
@@ -183,6 +204,47 @@ export default function Home() {
     }
   }
 
+  async function analyzeImage() {
+    if (!memoryImage) {
+      setVisionError(true);
+      setVisionMessage("Choose an image before asking MemoryCue to analyze it.");
+      return;
+    }
+
+    setIsAnalyzingVision(true);
+    setVisionError(false);
+    setVisionMessage(null);
+    setError(null);
+    setSaveMessage(null);
+    const formData = new FormData();
+    formData.append("image", memoryImage);
+
+    try {
+      const response = await fetch(`${API_URL}/api/vision/analyze`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response, "The image could not be analyzed."));
+      }
+
+      const analysis = (await response.json()) as VisionAnalysis;
+      setVisionAnalysis(analysis);
+      setMemoryLocation(analysis.location ?? "");
+      setMemoryActivity(analysis.activity ?? "");
+      setMemoryDescription(analysis.description);
+      setMemoryObjectName(analysis.objects[0]?.name ?? "");
+      setVisionMessage("AI suggestions added below. Review or edit them before saving.");
+    } catch (requestError) {
+      setVisionError(true);
+      setVisionMessage(
+        `${requestError instanceof Error ? requestError.message : "The image could not be analyzed."} You can still complete the form manually.`,
+      );
+    } finally {
+      setIsAnalyzingVision(false);
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void askQuestion();
@@ -192,6 +254,9 @@ export default function Home() {
     setMemoryImage(event.target.files?.[0] ?? null);
     setSaveMessage(null);
     setError(null);
+    setVisionAnalysis(null);
+    setVisionMessage(null);
+    setVisionError(false);
     const nextFile = event.target.files?.[0];
     setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
   }
@@ -269,7 +334,7 @@ export default function Home() {
               <p className="section-kicker">Manual memory creation</p>
               <h2 id="memory-heading">Add a memory</h2>
             </div>
-            <p className="memory-helper">Describe what the image shows. AI image understanding is not used yet.</p>
+            <p className="memory-helper">Use AI to suggest details, then review them. You can always enter the memory manually.</p>
           </div>
 
           <div className="memory-form">
@@ -288,6 +353,31 @@ export default function Home() {
                   <strong>{memoryImage.name}</strong>
                   <span>{Math.max(1, Math.round(memoryImage.size / 1024))} KB selected</span>
                 </div>
+              </div>
+            )}
+            <div className="analysis-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void analyzeImage()}
+                disabled={!memoryImage || isAnalyzingVision || isSavingMemory}
+              >
+                {isAnalyzingVision ? "Analyzing..." : "Analyze with AI"}
+              </button>
+              {visionMessage && (
+                <p className={`vision-status ${visionError ? "is-error" : ""}`} role="status">
+                  {visionMessage}
+                </p>
+              )}
+            </div>
+            {visionAnalysis && (
+              <div className="ai-suggestions" role="status">
+                <strong>AI suggestions — review before saving</strong>
+                <span>
+                  Visible objects: {visionAnalysis.objects.length
+                    ? visionAnalysis.objects.map((object) => object.name).join(", ")
+                    : "none identified"}
+                </span>
               </div>
             )}
 
@@ -317,6 +407,15 @@ export default function Home() {
                 onChange={(event) => setMemoryDescription(event.target.value)}
                 placeholder="e.g. I left my keys on the kitchen counter."
                 rows={3}
+              />
+            </label>
+            <label>
+              <span>Activity <em>(optional)</em></span>
+              <input
+                type="text"
+                value={memoryActivity}
+                onChange={(event) => setMemoryActivity(event.target.value)}
+                placeholder="e.g. preparing to leave"
               />
             </label>
             <label>

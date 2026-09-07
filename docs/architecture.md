@@ -9,7 +9,7 @@ Camera / Simulator
 Capture
         |
         v
-Memory extraction
+Memory extraction / image analysis
         |
         v
 Memory storage
@@ -39,5 +39,27 @@ Real Meta glasses
 ```
 
 The backend should eventually be independent of the device producing the image/audio input.
+
+## Optional Vision Analysis
+
+Uploaded images can be sent to one configured vision provider through a provider-neutral interface:
+
+```text
+Temporary image upload
+        |
+        v
+Vision provider
+        |
+        v
+Strict normalized analysis
+        |
+        v
+User review and edit
+        |
+        v
+Explicit memory save
+```
+
+The analysis endpoint does not write to the database or permanent media storage. Provider output is validated against the internal `VisionAnalysis` schema before it is returned to the client. The client chooses which suggested object, if any, to include when saving a memory.
 
 This document describes the intended direction only. It does not define a complete production architecture.

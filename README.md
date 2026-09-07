@@ -82,11 +82,32 @@ The user can ask:
 
 The system returns a simple schedule of upcoming activities.
 
-## Manual Memory Creation
+## Creating Memories
 
-The prototype also supports creating a memory manually from an uploaded image. Select an image, enter its time, location, and description, and optionally provide an object name such as `keys`.
+The prototype supports creating a memory from an uploaded image. Select an image, enter its time, location, description, and optional activity, then optionally provide an object name such as `keys`.
 
-Uploaded images are stored locally with generated filenames. When an object is provided, MemoryCue records the observation so later questions use the newest matching memory. The current prototype accepts `.jpg`, `.jpeg`, `.png`, and `.webp` images up to 10 MB; it does not interpret image contents automatically yet.
+Uploaded images are stored locally with generated filenames. When an object is provided, MemoryCue records the observation so later questions use the newest matching memory. The current prototype accepts `.jpg`, `.jpeg`, `.png`, and `.webp` images up to 10 MB.
+
+### AI-assisted image understanding
+
+When the optional vision provider is configured, select an image and choose **Analyze with AI**. MemoryCue returns concise suggestions for the description, location, activity, and visible objects. The suggestions are placed into the editable form for review; nothing is stored until the user chooses **Save memory**.
+
+To enable the OpenAI provider locally, set these variables in a `.env` file and start the API with that file:
+
+```dotenv
+VISION_PROVIDER=openai
+VISION_MODEL=<a vision-capable model available to your account>
+VISION_API_KEY=<your API key>
+```
+
+```powershell
+Copy-Item .env.example .env
+uvicorn --env-file ../../.env app.main:app --reload
+```
+
+The API key is read only by the backend and must never be committed or exposed to the browser. If these variables are blank or missing, image analysis is disabled with a clear response and manual memory creation continues to work.
+
+AI-generated metadata is a suggestion, not a fact. Review and edit it before saving.
 
 ## Example
 
@@ -201,7 +222,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), load the demo data, and ask one of the four suggested questions. To create a memory, use the **Add a memory** form below the question controls. The backend uses a local SQLite database by default.
+Open [http://localhost:3000](http://localhost:3000), load the demo data, and ask one of the four suggested questions. To create a memory, use the **Add a memory** form below the question controls. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
 
 ## Safety and Scope
 

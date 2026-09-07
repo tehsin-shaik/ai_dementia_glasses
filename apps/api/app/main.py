@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, File, Form, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from .database import get_db, init_db
 from .media_storage import (
     media_type_for,
     remove_uploaded_image,
+    read_uploaded_image,
     safe_media_path,
     save_uploaded_image,
 )
@@ -27,6 +29,9 @@ from .schemas import (
     SeedResponse,
 )
 from .seed import seed_demo_data
+from .vision import VisionAnalysis
+from .vision import provider as vision_provider
+from .vision.provider import VisionProviderError, VisionProviderNotConfiguredError
 
 
 init_db()
@@ -71,15 +76,19 @@ async def create_memory(
     timestamp: datetime = Form(...),
     location: str = Form(...),
     description: str = Form(...),
+    activity: str | None = Form(default=None),
     object_name: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ) -> MemoryResponse:
     location_value = location.strip()
     description_value = description.strip()
+    activity_value = (activity or "").strip()
     if not location_value:
         raise HTTPException(status_code=422, detail="Location cannot be empty.")
     if not description_value:
         raise HTTPException(status_code=422, detail="Description cannot be empty.")
+    if len(activity_value) > 200:
+        raise HTTPException(status_code=422, detail="Activity cannot exceed 200 characters.")
 
     # Store timestamps consistently as naive local datetimes for SQLite.
     if timestamp.tzinfo is not None:
@@ -97,10 +106,11 @@ async def create_memory(
             user_id=user.id,
             timestamp=timestamp,
             location=location_value,
-            activity="",
+            activity=activity_value,
             description=description_value,
             image_path=stored_filename,
         )
+
         db.add(memory)
         db.flush()
 
@@ -131,6 +141,45 @@ async def create_memory(
         db.rollback()
         remove_uploaded_image(stored_filename)
         raise
+
+
+@app.post("/api/vision/analyze", response_model=VisionAnalysis)
+async def analyze_vision(
+    image: UploadFile = File(...),
+    context: str | None = Form(default=None),
+) -> VisionAnalysis:
+    """Analyze an uploaded image without creating a memory."""
+
+    context_value = context.strip() if context else None
+    if context_value and len(context_value) > 500:
+        raise HTTPException(status_code=422, detail="Context cannot exceed 500 characters.")
+
+    extension, image_bytes = await read_uploaded_image(image)
+    try:
+        analyzer = vision_provider.get_vision_analyzer()
+    except VisionProviderNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Vision analysis is not configured.",
+        ) from exc
+    except VisionProviderError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Vision analysis is unavailable.",
+        ) from exc
+
+    try:
+        analysis = await analyzer.analyze_image(
+            image_bytes=image_bytes,
+            filename=image.filename or f"image{extension}",
+            context=context_value,
+        )
+        return VisionAnalysis.model_validate(analysis)
+    except (VisionProviderError, ValidationError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="The image could not be analyzed.",
+        ) from exc
 
 
 @app.get("/api/memories", response_model=list[MemoryListItem])

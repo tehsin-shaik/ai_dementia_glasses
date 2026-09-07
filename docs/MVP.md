@@ -18,11 +18,15 @@ Observe something
 
 The system should retrieve information that has been observed or explicitly provided. It should not invent personal information.
 
-## Manual Memory Creation
+## Memory Creation
 
-The prototype supports manual memory creation from an uploaded image and metadata. A user can provide an image, timestamp, location, and description, plus an optional object name such as `keys`.
+The prototype supports manual memory creation from an uploaded image and metadata. A user can provide an image, timestamp, location, description, optional activity, and optional object name such as `keys`.
 
-Uploaded images are stored locally with generated filenames. When an object name is provided, the system creates an object observation linked to the memory. Later object questions use the newest matching observation. Image contents are not interpreted automatically yet.
+Uploaded images are stored locally with generated filenames. When an object name is provided, the system creates an object observation linked to the memory. Later object questions use the newest matching observation.
+
+When configured, the Stage 3 vision flow analyzes an uploaded image and proposes normalized description, location, activity, and visible objects. The user must review or edit those suggestions and explicitly save the memory. Analysis alone does not create a memory and the manual workflow remains available without AI credentials.
+
+The current prototype accepts `.jpg`, `.jpeg`, `.png`, and `.webp` images up to 10 MB.
 
 ## Questions the MVP Must Answer
 

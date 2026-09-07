@@ -12,12 +12,17 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, get_db
 from app.main import app
+from app.vision import VisionAnalysis
+from app.vision import provider as vision_provider
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
     media_directory = tmp_path / "media"
     monkeypatch.setenv("MEDIA_DIR", str(media_directory))
+    monkeypatch.delenv("VISION_PROVIDER", raising=False)
+    monkeypatch.delenv("VISION_MODEL", raising=False)
+    monkeypatch.delenv("VISION_API_KEY", raising=False)
     engine = create_engine(
         f"sqlite:///{tmp_path / 'test.db'}",
         connect_args={"check_same_thread": False},
@@ -51,6 +56,7 @@ def upload_memory(
     timestamp: str,
     location: str,
     description: str,
+    activity: str | None = None,
     object_name: str | None = None,
     filename: str = "memory.jpg",
 ):
@@ -61,6 +67,8 @@ def upload_memory(
     }
     if object_name is not None:
         data["object_name"] = object_name
+    if activity is not None:
+        data["activity"] = activity
     return client.post(
         "/api/memories",
         files={"image": (filename, b"fake-image-content", "image/jpeg")},
@@ -266,3 +274,106 @@ def test_memory_listing_is_newest_first(client: TestClient) -> None:
     assert memories[0]["location"] == "Bedroom desk"
     assert memories[0]["description"] == "I left my keys on the bedroom desk."
     assert memories[0]["image_url"].startswith("/api/media/")
+
+
+def test_vision_analysis_returns_normalized_result(client: TestClient, monkeypatch) -> None:
+    class StubVisionAnalyzer:
+        async def analyze_image(self, image_bytes, filename, context=None):
+            assert image_bytes == b"fake-image-content"
+            assert filename == "memory.jpg"
+            assert context == "Focus on useful everyday details."
+            return VisionAnalysis(
+                description="A set of keys is resting on a kitchen counter.",
+                location="Kitchen counter",
+                activity=None,
+                objects=[{"name": "keys", "location": "Kitchen counter", "confidence": 0.98}],
+            )
+
+    monkeypatch.setattr(vision_provider, "get_vision_analyzer", lambda: StubVisionAnalyzer())
+    response = client.post(
+        "/api/vision/analyze",
+        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+        data={"context": "Focus on useful everyday details."},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "description": "A set of keys is resting on a kitchen counter.",
+        "location": "Kitchen counter",
+        "activity": None,
+        "objects": [
+            {"name": "keys", "location": "Kitchen counter", "confidence": 0.98}
+        ],
+    }
+    assert client.get("/api/memories").json() == []
+
+
+def test_vision_analysis_requires_image(client: TestClient) -> None:
+    response = client.post("/api/vision/analyze")
+    assert response.status_code == 422
+
+
+def test_vision_analysis_rejects_unsupported_file_type(client: TestClient) -> None:
+    response = client.post(
+        "/api/vision/analyze",
+        files={"image": ("memory.gif", b"fake-image-content", "image/gif")},
+    )
+    assert response.status_code == 400
+    assert "Unsupported image type" in response.json()["detail"]
+
+
+def test_vision_analysis_handles_provider_not_configured(client: TestClient) -> None:
+    response = client.post(
+        "/api/vision/analyze",
+        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+    )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Vision analysis is not configured."}
+
+
+def test_vision_analysis_handles_invalid_provider_response(client: TestClient, monkeypatch) -> None:
+    class InvalidVisionAnalyzer:
+        async def analyze_image(self, image_bytes, filename, context=None):
+            return {"description": "This has an unexpected shape.", "unexpected": True}
+
+    monkeypatch.setattr(vision_provider, "get_vision_analyzer", lambda: InvalidVisionAnalyzer())
+    response = client.post(
+        "/api/vision/analyze",
+        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+    )
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "The image could not be analyzed."}
+
+
+def test_manual_memory_creation_still_works_without_ai(client: TestClient) -> None:
+    response = upload_memory(
+        client,
+        timestamp=timestamp_at(11, 5),
+        location="Living room",
+        description="A book is on the coffee table.",
+    )
+    assert response.status_code == 201
+    assert response.json()["description"] == "A book is on the coffee table."
+
+
+def test_recent_activity_uses_latest_non_null_activity(client: TestClient) -> None:
+    seed(client)
+    activity_response = upload_memory(
+        client,
+        timestamp=timestamp_at(10, 30),
+        location="Living room",
+        description="I was reading in the living room.",
+        activity="reading in the living room",
+    )
+    assert activity_response.status_code == 201
+    newer_without_activity = upload_memory(
+        client,
+        timestamp=timestamp_at(10, 40),
+        location="Hallway",
+        description="I was standing in the hallway.",
+    )
+    assert newer_without_activity.status_code == 201
+
+    response = client.post("/api/query", json={"question": "What was I doing?"})
+    assert response.json()["answer"] == "You were reading in the living room."
