@@ -169,6 +169,34 @@ See:
 * [MVP definition](docs/MVP.md)
 * [Architecture](docs/architecture.md)
 
+## Run Locally
+
+Start the backend from `apps/api`:
+
+```bash
+cd apps/api
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+On Windows PowerShell, activate the environment with:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+In a second terminal, start the frontend:
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000), load the demo data, and ask one of the four suggested questions. The backend uses a local SQLite database by default.
+
 ## Safety and Scope
 
 MemoryCue is an experimental assistive technology prototype.
