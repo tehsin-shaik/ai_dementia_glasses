@@ -51,6 +51,8 @@ def answer_question(db: Session, question: str) -> QueryResponse:
         memory = db.scalar(
             select(Memory)
             .where(Memory.user_id == user.id)
+            .where(Memory.activity.is_not(None))
+            .where(Memory.activity != "")
             .order_by(Memory.timestamp.desc(), Memory.id.desc())
             .limit(1)
         )

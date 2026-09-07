@@ -24,6 +24,7 @@ class Memory(Base):
     location: Mapped[str] = mapped_column(String(120), nullable=False)
     activity: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class ObjectObservation(Base):

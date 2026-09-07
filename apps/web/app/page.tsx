@@ -1,11 +1,23 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
 type QueryResult = {
   answer: string;
   intent: string;
   source_ids: string[];
+};
+
+type MemoryListItem = {
+  id: number;
+  timestamp: string;
+  location: string;
+  description: string;
+  image_url: string | null;
+};
+
+type ApiError = {
+  detail?: string;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -16,6 +28,29 @@ const SUGGESTED_QUESTIONS = [
   "What am I doing today?",
 ];
 
+function localDateTimeValue(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
+function displayTime(timestamp: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function imageUrl(path: string): string {
+  return path.startsWith("http") ? path : `${API_URL}${path}`;
+}
+
+async function errorMessage(response: Response, fallback: string): Promise<string> {
+  const payload = (await response.json().catch(() => null)) as ApiError | null;
+  return payload?.detail ?? fallback;
+}
+
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<QueryResult | null>(null);
@@ -23,17 +58,51 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [memoryImage, setMemoryImage] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [memoryTimestamp, setMemoryTimestamp] = useState("");
+  const [memoryLocation, setMemoryLocation] = useState("");
+  const [memoryDescription, setMemoryDescription] = useState("");
+  const [memoryObjectName, setMemoryObjectName] = useState("");
+  const [isSavingMemory, setIsSavingMemory] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [recentMemories, setRecentMemories] = useState<MemoryListItem[]>([]);
+
+  useEffect(() => {
+    setMemoryTimestamp(localDateTimeValue(new Date()));
+    void refreshMemories();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  async function refreshMemories() {
+    try {
+      const response = await fetch(`${API_URL}/api/memories`);
+      if (response.ok) {
+        setRecentMemories((await response.json()) as MemoryListItem[]);
+      }
+    } catch {
+      // The page remains usable when the API has not been started yet.
+    }
+  }
 
   async function loadDemo() {
     setIsSeeding(true);
     setError(null);
+    setSaveMessage(null);
     try {
       const response = await fetch(`${API_URL}/api/demo/seed`, { method: "POST" });
       if (!response.ok) {
-        throw new Error("The demo data could not be loaded.");
+        throw new Error(await errorMessage(response, "The demo data could not be loaded."));
       }
       setDemoLoaded(true);
-      setResult(null);
+      await refreshMemories();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
     } finally {
@@ -57,7 +126,7 @@ export default function Home() {
         body: JSON.stringify({ question: trimmedQuestion }),
       });
       if (!response.ok) {
-        throw new Error("The question could not be answered.");
+        throw new Error(await errorMessage(response, "The question could not be answered."));
       }
       setResult((await response.json()) as QueryResult);
     } catch (requestError) {
@@ -67,9 +136,64 @@ export default function Home() {
     }
   }
 
+  async function saveMemory() {
+    if (!memoryImage) {
+      setError("Choose an image before saving the memory.");
+      return;
+    }
+    if (!memoryTimestamp || !memoryLocation.trim() || !memoryDescription.trim()) {
+      setError("Time, location, and description are required.");
+      return;
+    }
+
+    setIsSavingMemory(true);
+    setError(null);
+    setSaveMessage(null);
+    const formData = new FormData();
+    formData.append("image", memoryImage);
+    formData.append("timestamp", memoryTimestamp);
+    formData.append("location", memoryLocation);
+    formData.append("description", memoryDescription);
+    if (memoryObjectName.trim()) {
+      formData.append("object_name", memoryObjectName);
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/memories`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response, "The memory could not be saved."));
+      }
+      const savedMemory = (await response.json()) as {
+        location: string;
+        object_observation_id: number | null;
+      };
+      setSaveMessage(
+        savedMemory.object_observation_id
+          ? `Memory saved — ${memoryObjectName.trim()} observed at ${savedMemory.location}.`
+          : "Memory saved.",
+      );
+      await refreshMemories();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+    } finally {
+      setIsSavingMemory(false);
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void askQuestion();
+  }
+
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    setMemoryImage(event.target.files?.[0] ?? null);
+    setSaveMessage(null);
+    setError(null);
+    const nextFile = event.target.files?.[0];
+    setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
   }
 
   return (
@@ -138,6 +262,104 @@ export default function Home() {
             </div>
           </section>
         </div>
+
+        <section className="memory-panel" aria-labelledby="memory-heading">
+          <div className="memory-panel-heading">
+            <div>
+              <p className="section-kicker">Manual memory creation</p>
+              <h2 id="memory-heading">Add a memory</h2>
+            </div>
+            <p className="memory-helper">Describe what the image shows. AI image understanding is not used yet.</p>
+          </div>
+
+          <div className="memory-form">
+            <label className="file-picker">
+              <span>Image</span>
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                onChange={handleImageChange}
+              />
+            </label>
+            {memoryImage && (
+              <div className="selected-image">
+                {previewUrl && <img src={previewUrl} alt="Selected memory preview" />}
+                <div>
+                  <strong>{memoryImage.name}</strong>
+                  <span>{Math.max(1, Math.round(memoryImage.size / 1024))} KB selected</span>
+                </div>
+              </div>
+            )}
+
+            <div className="memory-form-grid">
+              <label>
+                <span>Time</span>
+                <input
+                  type="datetime-local"
+                  value={memoryTimestamp}
+                  onChange={(event) => setMemoryTimestamp(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Location</span>
+                <input
+                  type="text"
+                  value={memoryLocation}
+                  onChange={(event) => setMemoryLocation(event.target.value)}
+                  placeholder="e.g. Kitchen counter"
+                />
+              </label>
+            </div>
+            <label>
+              <span>Description</span>
+              <textarea
+                value={memoryDescription}
+                onChange={(event) => setMemoryDescription(event.target.value)}
+                placeholder="e.g. I left my keys on the kitchen counter."
+                rows={3}
+              />
+            </label>
+            <label>
+              <span>Object <em>(optional)</em></span>
+              <input
+                type="text"
+                value={memoryObjectName}
+                onChange={(event) => setMemoryObjectName(event.target.value)}
+                placeholder="e.g. keys"
+              />
+            </label>
+            <div className="save-row">
+              <button className="primary-button" type="button" onClick={saveMemory} disabled={isSavingMemory}>
+                {isSavingMemory ? "Saving..." : "Save memory"}
+              </button>
+              {saveMessage && <p className="success-message" role="status">{saveMessage}</p>}
+            </div>
+          </div>
+        </section>
+
+        {recentMemories.length > 0 && (
+          <section className="recent-panel" aria-labelledby="recent-heading">
+            <div className="recent-heading-row">
+              <div>
+                <p className="section-kicker">Stored context</p>
+                <h2 id="recent-heading">Recent memories</h2>
+              </div>
+              <span className="recent-count">Showing {Math.min(recentMemories.length, 5)}</span>
+            </div>
+            <div className="recent-list">
+              {recentMemories.slice(0, 5).map((memory) => (
+                <article className="recent-memory" key={memory.id}>
+                  {memory.image_url && <img src={imageUrl(memory.image_url)} alt="" />}
+                  <div>
+                    <p className="recent-time">{displayTime(memory.timestamp)}</p>
+                    <p className="recent-location">{memory.location}</p>
+                    <p className="recent-description">{memory.description}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         {error && <p className="error-message" role="alert">{error}</p>}
 

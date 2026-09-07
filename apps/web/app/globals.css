@@ -165,6 +165,215 @@ h2 {
   background: #fff;
 }
 
+.memory-panel,
+.recent-panel {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 26px;
+}
+
+.memory-panel {
+  background: #fffdf9;
+}
+
+.memory-panel-heading,
+.recent-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.memory-helper {
+  max-width: 19rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.memory-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.memory-form label,
+.file-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.memory-form label em {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.memory-form input[type="text"],
+.memory-form input[type="datetime-local"],
+.memory-form textarea,
+.file-picker input[type="file"] {
+  width: 100%;
+  border: 1px solid #c8d7d8;
+  border-radius: 10px;
+  padding: 11px 13px;
+  color: var(--ink);
+  background: white;
+  font-size: 0.9rem;
+  font-weight: 400;
+  outline: none;
+}
+
+.memory-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.memory-form input:focus,
+.memory-form textarea:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(29, 119, 112, 0.12);
+}
+
+.file-picker input[type="file"] {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.memory-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 14px;
+}
+
+.selected-image {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d7e8e4;
+  border-radius: 12px;
+  padding: 8px;
+  background: var(--teal-soft);
+}
+
+.selected-image img {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.selected-image div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.selected-image strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.selected-image span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.save-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.success-message {
+  margin: 0;
+  color: var(--teal-dark);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.recent-panel {
+  background: #f8fbfa;
+}
+
+.recent-count {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.recent-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.recent-memory {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.recent-memory:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.recent-memory img {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: #e7eeee;
+  object-fit: cover;
+}
+
+.recent-memory > div {
+  min-width: 0;
+}
+
+.recent-time,
+.recent-location,
+.recent-description {
+  margin: 0;
+}
+
+.recent-time {
+  color: var(--teal);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.recent-location {
+  margin-top: 3px;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.recent-description {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.83rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .primary-button,
 .secondary-button {
   border: 0;
@@ -346,5 +555,20 @@ h2 {
 
   .question-form .primary-button {
     width: 100%;
+  }
+
+  .memory-panel-heading,
+  .recent-heading-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .memory-helper {
+    max-width: none;
+    text-align: left;
+  }
+
+  .memory-form-grid {
+    grid-template-columns: 1fr;
   }
 }

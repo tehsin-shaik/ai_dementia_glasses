@@ -82,6 +82,12 @@ The user can ask:
 
 The system returns a simple schedule of upcoming activities.
 
+## Manual Memory Creation
+
+The prototype also supports creating a memory manually from an uploaded image. Select an image, enter its time, location, and description, and optionally provide an object name such as `keys`.
+
+Uploaded images are stored locally with generated filenames. When an object is provided, MemoryCue records the observation so later questions use the newest matching memory. The current prototype accepts `.jpg`, `.jpeg`, `.png`, and `.webp` images up to 10 MB; it does not interpret image contents automatically yet.
+
 ## Example
 
 A simulated day might contain:
@@ -195,7 +201,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), load the demo data, and ask one of the four suggested questions. The backend uses a local SQLite database by default.
+Open [http://localhost:3000](http://localhost:3000), load the demo data, and ask one of the four suggested questions. To create a memory, use the **Add a memory** form below the question controls. The backend uses a local SQLite database by default.
 
 ## Safety and Scope
 

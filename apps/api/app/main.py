@@ -1,13 +1,31 @@
 """FastAPI entry point for the MemoryCue vertical slice."""
 
-from fastapi import Depends, FastAPI
+from datetime import datetime, timezone
+
+from fastapi import Depends, File, Form, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import models  # noqa: F401 - registers models before table creation
 from .database import get_db, init_db
+from .media_storage import (
+    media_type_for,
+    remove_uploaded_image,
+    safe_media_path,
+    save_uploaded_image,
+)
+from .models import Memory, ObjectObservation, User
 from .query_service import answer_question
-from .schemas import HealthResponse, QueryRequest, QueryResponse, SeedResponse
+from .schemas import (
+    HealthResponse,
+    MemoryListItem,
+    MemoryResponse,
+    QueryRequest,
+    QueryResponse,
+    SeedResponse,
+)
 from .seed import seed_demo_data
 
 
@@ -35,3 +53,114 @@ def seed_demo(db: Session = Depends(get_db)) -> SeedResponse:
 @app.post("/api/query", response_model=QueryResponse)
 def query(request: QueryRequest, db: Session = Depends(get_db)) -> QueryResponse:
     return answer_question(db, request.question)
+
+
+def first_user(db: Session) -> User | None:
+    return db.scalar(select(User).order_by(User.id).limit(1))
+
+
+def image_url(image_path: str | None) -> str | None:
+    if image_path is None:
+        return None
+    return f"/api/media/{image_path}"
+
+
+@app.post("/api/memories", response_model=MemoryResponse, status_code=201)
+async def create_memory(
+    image: UploadFile = File(...),
+    timestamp: datetime = Form(...),
+    location: str = Form(...),
+    description: str = Form(...),
+    object_name: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+) -> MemoryResponse:
+    location_value = location.strip()
+    description_value = description.strip()
+    if not location_value:
+        raise HTTPException(status_code=422, detail="Location cannot be empty.")
+    if not description_value:
+        raise HTTPException(status_code=422, detail="Description cannot be empty.")
+
+    # Store timestamps consistently as naive local datetimes for SQLite.
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+
+    stored_filename = await save_uploaded_image(image)
+    try:
+        user = first_user(db)
+        if user is None:
+            user = User(name="Demo User")
+            db.add(user)
+            db.flush()
+
+        memory = Memory(
+            user_id=user.id,
+            timestamp=timestamp,
+            location=location_value,
+            activity="",
+            description=description_value,
+            image_path=stored_filename,
+        )
+        db.add(memory)
+        db.flush()
+
+        observation = None
+        normalized_object_name = (object_name or "").strip().casefold()
+        if normalized_object_name:
+            observation = ObjectObservation(
+                user_id=user.id,
+                object_name=normalized_object_name,
+                location=location_value,
+                observed_at=timestamp,
+                memory_id=memory.id,
+            )
+            db.add(observation)
+            db.flush()
+
+        db.commit()
+        return MemoryResponse(
+            id=memory.id,
+            timestamp=memory.timestamp,
+            location=memory.location,
+            activity=memory.activity or None,
+            description=memory.description,
+            image_url=image_url(memory.image_path),
+            object_observation_id=observation.id if observation else None,
+        )
+    except Exception:
+        db.rollback()
+        remove_uploaded_image(stored_filename)
+        raise
+
+
+@app.get("/api/memories", response_model=list[MemoryListItem])
+def list_memories(db: Session = Depends(get_db)) -> list[MemoryListItem]:
+    user = first_user(db)
+    if user is None:
+        return []
+
+    memories = list(
+        db.scalars(
+            select(Memory)
+            .where(Memory.user_id == user.id)
+            .order_by(Memory.timestamp.desc(), Memory.id.desc())
+        )
+    )
+    return [
+        MemoryListItem(
+            id=memory.id,
+            timestamp=memory.timestamp,
+            location=memory.location,
+            description=memory.description,
+            image_url=image_url(memory.image_path),
+        )
+        for memory in memories
+    ]
+
+
+@app.get("/api/media/{filename:path}")
+def get_media(filename: str) -> FileResponse:
+    path = safe_media_path(filename)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Media file not found.")
+    return FileResponse(path=path, media_type=media_type_for(path.name))

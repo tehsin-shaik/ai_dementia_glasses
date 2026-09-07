@@ -1,5 +1,6 @@
 """Pydantic request and response schemas."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -35,3 +36,21 @@ class QueryResponse(BaseModel):
     answer: str
     intent: Intent
     source_ids: list[str]
+
+
+class MemoryResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    location: str
+    activity: str | None
+    description: str
+    image_url: str
+    object_observation_id: int | None
+
+
+class MemoryListItem(BaseModel):
+    id: int
+    timestamp: datetime
+    location: str
+    description: str
+    image_url: str | None

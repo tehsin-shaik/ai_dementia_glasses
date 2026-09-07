@@ -18,6 +18,12 @@ Observe something
 
 The system should retrieve information that has been observed or explicitly provided. It should not invent personal information.
 
+## Manual Memory Creation
+
+The prototype supports manual memory creation from an uploaded image and metadata. A user can provide an image, timestamp, location, and description, plus an optional object name such as `keys`.
+
+Uploaded images are stored locally with generated filenames. When an object name is provided, the system creates an object observation linked to the memory. Later object questions use the newest matching observation. Image contents are not interpreted automatically yet.
+
 ## Questions the MVP Must Answer
 
 ### 1. What was I doing?
