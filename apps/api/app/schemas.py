@@ -21,7 +21,8 @@ class HealthResponse(BaseModel):
 
 class SeedResponse(BaseModel):
     status: Literal["ok"]
-    user_id: int
+    user_ids: list[int]
+    user_count: int
     memory_count: int
     observation_count: int
     person_count: int

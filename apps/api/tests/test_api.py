@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, create_database_engine, get_db
+from app.identity import USER_ID_HEADER
 from app.main import app
 from app.media_storage import MAX_UPLOAD_BYTES, safe_media_path
 from app.vision import VisionAnalysis
@@ -39,7 +40,7 @@ def client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={USER_ID_HEADER: "1"}) as test_client:
         yield test_client
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=engine)
@@ -51,6 +52,10 @@ def seed(client: TestClient) -> None:
     assert response.status_code == 200
 
 
+def user_headers(user_id: int) -> dict[str, str]:
+    return {USER_ID_HEADER: str(user_id)}
+
+
 def upload_memory(
     client: TestClient,
     *,
@@ -60,6 +65,7 @@ def upload_memory(
     activity: str | None = None,
     object_name: str | None = None,
     filename: str = "memory.jpg",
+    user_id: int = 1,
 ):
     data = {
         "timestamp": timestamp,
@@ -74,6 +80,7 @@ def upload_memory(
         "/api/memories",
         files={"image": (filename, b"fake-image-content", "image/jpeg")},
         data=data,
+        headers=user_headers(user_id),
     )
 
 
@@ -156,11 +163,12 @@ def test_seed_can_be_run_twice_without_duplicate_demo_state(client: TestClient) 
     assert second.status_code == 200
     assert second.json() == {
         "status": "ok",
-        "user_id": 1,
-        "memory_count": 4,
-        "observation_count": 1,
-        "person_count": 1,
-        "schedule_count": 2,
+        "user_ids": [1, 2],
+        "user_count": 2,
+        "memory_count": 8,
+        "observation_count": 2,
+        "person_count": 2,
+        "schedule_count": 4,
     }
 
     response = client.post("/api/query", json={"question": "Where are my keys?"})
@@ -195,6 +203,7 @@ def test_create_uploaded_memory(client: TestClient) -> None:
 
 
 def test_timezone_aware_timestamp_uses_backend_local_time(client: TestClient) -> None:
+    seed(client)
     aware_timestamp = datetime.now().astimezone().replace(second=0, microsecond=0)
     response = upload_memory(
         client,
@@ -208,6 +217,7 @@ def test_timezone_aware_timestamp_uses_backend_local_time(client: TestClient) ->
 
 
 def test_failed_memory_commit_removes_uploaded_image(client: TestClient, monkeypatch) -> None:
+    seed(client)
     def fail_commit(_session) -> None:
         raise RuntimeError("database unavailable")
 
@@ -262,6 +272,7 @@ def test_latest_uploaded_object_overrides_seeded_last_seen(client: TestClient) -
 
 
 def test_reject_unsupported_file_type(client: TestClient) -> None:
+    seed(client)
     response = upload_memory(
         client,
         timestamp=timestamp_at(),
@@ -274,6 +285,7 @@ def test_reject_unsupported_file_type(client: TestClient) -> None:
 
 
 def test_reject_mismatched_image_content_type(client: TestClient) -> None:
+    seed(client)
     response = client.post(
         "/api/memories",
         files={"image": ("memory.png", b"fake-image-content", "image/jpeg")},
@@ -288,6 +300,7 @@ def test_reject_mismatched_image_content_type(client: TestClient) -> None:
 
 
 def test_reject_oversized_image(client: TestClient) -> None:
+    seed(client)
     response = client.post(
         "/api/memories",
         files={"image": ("memory.jpg", b"x" * (MAX_UPLOAD_BYTES + 1), "image/jpeg")},
@@ -301,6 +314,7 @@ def test_reject_oversized_image(client: TestClient) -> None:
 
 
 def test_reject_memory_field_overflow(client: TestClient) -> None:
+    seed(client)
     response = upload_memory(
         client,
         timestamp=timestamp_at(),
@@ -312,6 +326,7 @@ def test_reject_memory_field_overflow(client: TestClient) -> None:
 
 
 def test_reject_missing_required_fields(client: TestClient) -> None:
+    seed(client)
     missing_form_fields = client.post(
         "/api/memories",
         files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
@@ -352,11 +367,13 @@ def test_media_path_traversal_is_blocked(client: TestClient, tmp_path, monkeypat
 
 
 def test_media_path_traversal_is_blocked_by_route(client: TestClient) -> None:
+    seed(client)
     response = client.get("/api/media/..%5Csecret.txt")
     assert response.status_code == 404
 
 
 def test_unsupported_media_file_is_not_served(client: TestClient, tmp_path, monkeypatch) -> None:
+    seed(client)
     media_directory = tmp_path / "media"
     media_directory.mkdir()
     (media_directory / "notes.txt").write_text("not an image", encoding="utf-8")
@@ -387,6 +404,8 @@ def test_memory_listing_is_newest_first(client: TestClient) -> None:
 
 
 def test_vision_analysis_returns_normalized_result(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    memories_before = client.get("/api/memories").json()
     class StubVisionAnalyzer:
         async def analyze_image(self, image_bytes, filename, context=None):
             assert image_bytes == b"fake-image-content"
@@ -415,15 +434,17 @@ def test_vision_analysis_returns_normalized_result(client: TestClient, monkeypat
             {"name": "keys", "location": "Kitchen counter", "confidence": 0.98}
         ],
     }
-    assert client.get("/api/memories").json() == []
+    assert client.get("/api/memories").json() == memories_before
 
 
 def test_vision_analysis_requires_image(client: TestClient) -> None:
+    seed(client)
     response = client.post("/api/vision/analyze")
     assert response.status_code == 422
 
 
 def test_vision_analysis_rejects_unsupported_file_type(client: TestClient) -> None:
+    seed(client)
     response = client.post(
         "/api/vision/analyze",
         files={"image": ("memory.gif", b"fake-image-content", "image/gif")},
@@ -433,6 +454,7 @@ def test_vision_analysis_rejects_unsupported_file_type(client: TestClient) -> No
 
 
 def test_vision_analysis_handles_provider_not_configured(client: TestClient) -> None:
+    seed(client)
     response = client.post(
         "/api/vision/analyze",
         files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
@@ -442,6 +464,7 @@ def test_vision_analysis_handles_provider_not_configured(client: TestClient) -> 
 
 
 def test_vision_analysis_handles_invalid_provider_response(client: TestClient, monkeypatch) -> None:
+    seed(client)
     class InvalidVisionAnalyzer:
         async def analyze_image(self, image_bytes, filename, context=None):
             return {"description": "This has an unexpected shape.", "unexpected": True}
@@ -457,6 +480,7 @@ def test_vision_analysis_handles_invalid_provider_response(client: TestClient, m
 
 
 def test_vision_analysis_handles_provider_failure(client: TestClient, monkeypatch) -> None:
+    seed(client)
     class FailingVisionAnalyzer:
         async def analyze_image(self, image_bytes, filename, context=None):
             raise VisionProviderError("provider failed")
@@ -472,6 +496,7 @@ def test_vision_analysis_handles_provider_failure(client: TestClient, monkeypatc
 
 
 def test_manual_memory_creation_still_works_without_ai(client: TestClient) -> None:
+    seed(client)
     response = upload_memory(
         client,
         timestamp=timestamp_at(11, 5),
@@ -502,3 +527,227 @@ def test_recent_activity_uses_latest_non_null_activity(client: TestClient) -> No
 
     response = client.post("/api/query", json={"question": "What was I doing?"})
     assert response.json()["answer"] == "You were reading in the living room."
+
+
+def test_personal_endpoints_require_identity(client: TestClient) -> None:
+    seed(client)
+    with TestClient(app) as anonymous_client:
+        health_response = anonymous_client.get("/api/health")
+        seed_response = anonymous_client.post("/api/demo/seed")
+        query_response = anonymous_client.post(
+            "/api/query",
+            json={"question": "Where are my keys?"},
+        )
+        memories_response = anonymous_client.get("/api/memories")
+        create_response = anonymous_client.post(
+            "/api/memories",
+            files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+            data={
+                "timestamp": timestamp_at(),
+                "location": "Kitchen counter",
+                "description": "No identity should be accepted.",
+            },
+        )
+        vision_response = anonymous_client.post(
+            "/api/vision/analyze",
+            files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+        )
+        media_response = anonymous_client.get("/api/media/missing.jpg")
+
+    assert health_response.status_code == 200
+    assert seed_response.status_code == 200
+    assert query_response.status_code == 401
+    assert query_response.json() == {"detail": "User identity is required."}
+    assert memories_response.status_code == 401
+    assert memories_response.json() == {"detail": "User identity is required."}
+    assert create_response.status_code == 401
+    assert create_response.json() == {"detail": "User identity is required."}
+    assert vision_response.status_code == 401
+    assert vision_response.json() == {"detail": "User identity is required."}
+    assert media_response.status_code == 401
+    assert media_response.json() == {"detail": "User identity is required."}
+
+
+def test_unknown_identity_is_rejected_consistently(client: TestClient) -> None:
+    seed(client)
+    headers = user_headers(999)
+    query_response = client.post(
+        "/api/query",
+        json={"question": "Where are my keys?"},
+        headers=headers,
+    )
+    memories_response = client.get("/api/memories", headers=headers)
+
+    assert query_response.status_code == 404
+    assert query_response.json() == {"detail": "User not found."}
+    assert memories_response.status_code == 404
+    assert memories_response.json() == {"detail": "User not found."}
+
+
+def test_malformed_identity_is_rejected_as_unknown_user(client: TestClient) -> None:
+    seed(client)
+    response = client.post(
+        "/api/query",
+        headers={USER_ID_HEADER: "not-a-user"},
+        json={"question": "Where are my keys?"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "User not found."}
+
+
+def test_queries_are_scoped_to_selected_user(client: TestClient) -> None:
+    seed(client)
+
+    alex_keys = client.post(
+        "/api/query",
+        json={"question": "Where are my keys?"},
+        headers=user_headers(1),
+    ).json()
+    jordan_keys = client.post(
+        "/api/query",
+        json={"question": "Where are my keys?"},
+        headers=user_headers(2),
+    ).json()
+    alex_person = client.post(
+        "/api/query",
+        json={"question": "Who is Sarah?"},
+        headers=user_headers(1),
+    ).json()
+    jordan_person = client.post(
+        "/api/query",
+        json={"question": "Who is Sarah?"},
+        headers=user_headers(2),
+    ).json()
+    alex_schedule = client.post(
+        "/api/query",
+        json={"question": "What am I doing today?"},
+        headers=user_headers(1),
+    ).json()
+    jordan_schedule = client.post(
+        "/api/query",
+        json={"question": "What am I doing today?"},
+        headers=user_headers(2),
+    ).json()
+
+    assert alex_keys["answer"] == "I last saw your keys on the kitchen counter at 10:18 AM."
+    assert jordan_keys["answer"] == "I last saw your keys on the bedroom desk at 10:24 AM."
+    assert alex_keys["source_ids"] != jordan_keys["source_ids"]
+    assert alex_person["answer"] == "Sarah is your daughter."
+    assert jordan_person["answer"] == "Sarah is your neighbor."
+    assert alex_person["source_ids"] != jordan_person["source_ids"]
+    assert alex_schedule["answer"] == "Sarah visits at 3:30 PM. Dinner is at 6:00 PM."
+    assert jordan_schedule["answer"] == "Michael calls at 4:00 PM. Dinner is at 6:30 PM."
+    assert alex_schedule["source_ids"] != jordan_schedule["source_ids"]
+
+
+def test_memory_listing_and_creation_are_scoped_to_selected_user(client: TestClient) -> None:
+    seed(client)
+    alex_response = upload_memory(
+        client,
+        timestamp=timestamp_at(11, 0),
+        location="Alex desk",
+        description="Alex added this memory.",
+        user_id=1,
+    )
+    jordan_response = upload_memory(
+        client,
+        timestamp=timestamp_at(11, 1),
+        location="Jordan desk",
+        description="Jordan added this memory.",
+        user_id=2,
+    )
+    assert alex_response.status_code == 201
+    assert jordan_response.status_code == 201
+
+    alex_memories = client.get("/api/memories", headers=user_headers(1)).json()
+    jordan_memories = client.get("/api/memories", headers=user_headers(2)).json()
+    alex_descriptions = {memory["description"] for memory in alex_memories}
+    jordan_descriptions = {memory["description"] for memory in jordan_memories}
+
+    assert "Alex added this memory." in alex_descriptions
+    assert "Jordan added this memory." not in alex_descriptions
+    assert "Jordan added this memory." in jordan_descriptions
+    assert "Alex added this memory." not in jordan_descriptions
+
+
+def test_memory_creation_ignores_client_user_id_payload(client: TestClient) -> None:
+    seed(client)
+    response = client.post(
+        "/api/memories",
+        headers=user_headers(1),
+        files={"image": ("memory.jpg", b"alex-image", "image/jpeg")},
+        data={
+            "timestamp": timestamp_at(11, 2),
+            "location": "Alex kitchen",
+            "description": "The selected user owns this memory.",
+            "user_id": "2",
+        },
+    )
+    assert response.status_code == 201
+
+    alex_descriptions = {
+        memory["description"]
+        for memory in client.get("/api/memories", headers=user_headers(1)).json()
+    }
+    jordan_descriptions = {
+        memory["description"]
+        for memory in client.get("/api/memories", headers=user_headers(2)).json()
+    }
+    assert "The selected user owns this memory." in alex_descriptions
+    assert "The selected user owns this memory." not in jordan_descriptions
+
+
+def test_object_observations_are_scoped_to_selected_user(client: TestClient) -> None:
+    seed(client)
+    alex_response = upload_memory(
+        client,
+        timestamp=timestamp_at(11, 3),
+        location="Alex table",
+        description="Alex saw keys on the table.",
+        object_name="keys",
+        user_id=1,
+    )
+    jordan_response = upload_memory(
+        client,
+        timestamp=timestamp_at(11, 4),
+        location="Jordan shelf",
+        description="Jordan saw keys on the shelf.",
+        object_name="keys",
+        user_id=2,
+    )
+    assert alex_response.status_code == 201
+    assert jordan_response.status_code == 201
+
+    alex_answer = client.post(
+        "/api/query",
+        json={"question": "Where are my keys?"},
+        headers=user_headers(1),
+    ).json()["answer"]
+    jordan_answer = client.post(
+        "/api/query",
+        json={"question": "Where are my keys?"},
+        headers=user_headers(2),
+    ).json()["answer"]
+    assert alex_answer == "I last saw your keys on the Alex table at 11:03 AM."
+    assert jordan_answer == "I last saw your keys on the Jordan shelf at 11:04 AM."
+
+
+def test_media_is_only_available_to_its_owner(client: TestClient) -> None:
+    seed(client)
+    response = upload_memory(
+        client,
+        timestamp=timestamp_at(11, 5),
+        location="Alex kitchen",
+        description="An image belonging to Alex.",
+        user_id=1,
+    )
+    assert response.status_code == 201
+    image_url = response.json()["image_url"]
+
+    unauthorized = client.get(image_url, headers=user_headers(2))
+    authorized = client.get(image_url, headers=user_headers(1))
+    assert unauthorized.status_code == 404
+    assert unauthorized.json() == {"detail": "Media file not found."}
+    assert authorized.status_code == 200
+    assert authorized.content == b"fake-image-content"

@@ -40,6 +40,12 @@ Stage 5 adds a wearer-facing HUD to the live camera view. While the webcam is ac
 
 The HUD supports idle, querying, result, unknown, and error states. A cue can be dismissed without stopping the camera. It does not perform continuous background analysis, face recognition, or automatic querying.
 
+## Development Identity and User Scoping
+
+Stage 6A adds two deterministic local demo profiles, Alex and Jordan. The browser's development profile selector sends the selected user ID in the `X-MemoryCue-User-Id` header. Query answers, memory creation and listing, people, schedules, object observations, vision analysis, and media access are scoped to that user. Switching profiles clears visible answers and unsaved camera/form state.
+
+This is explicit development identity only; it is not authentication or authorization. The demo seed resets both profiles and their data. Production identity, caregiver roles, consent, and permissions remain outside this MVP.
+
 ## Questions the MVP Must Answer
 
 ### 1. What was I doing?

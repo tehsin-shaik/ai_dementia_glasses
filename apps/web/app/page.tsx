@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, SyntheticEvent, useEffect, useRef, useState } f
 
 import GlassesSimulator from "./GlassesSimulator";
 import { MemoryHudState } from "./MemoryHud";
+import { memoryCueFetch } from "./api";
 
 type QueryResult = {
   answer: string;
@@ -45,6 +46,10 @@ const SUGGESTED_QUESTIONS = [
   "Who is Sarah?",
   "What am I doing today?",
 ];
+const DEMO_PROFILES = [
+  { id: 1, name: "Alex" },
+  { id: 2, name: "Jordan" },
+] as const;
 
 function localDateTimeValue(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -159,6 +164,7 @@ function parseMemoryList(payload: unknown): MemoryListItem[] {
 }
 
 export default function Home() {
+  const [activeUserId, setActiveUserId] = useState<number>(DEMO_PROFILES[0].id);
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<QueryResult | null>(null);
   const [hudState, setHudState] = useState<MemoryHudState>("idle");
@@ -185,11 +191,15 @@ export default function Home() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [recentMemories, setRecentMemories] = useState<MemoryListItem[]>([]);
   const hudRequestRef = useRef(0);
+  const profileVersionRef = useRef(0);
+
+  const activeProfile = DEMO_PROFILES.find((profile) => profile.id === activeUserId) ?? DEMO_PROFILES[0];
 
   useEffect(() => {
     setMemoryTimestamp(localDateTimeValue(new Date()));
-    void refreshMemories();
-  }, []);
+    setRecentMemories([]);
+    void refreshMemories(activeUserId, profileVersionRef.current);
+  }, [activeUserId]);
 
   useEffect(() => {
     return () => {
@@ -199,10 +209,13 @@ export default function Home() {
     };
   }, [previewUrl]);
 
-  async function refreshMemories() {
+  async function refreshMemories(
+    userId = activeUserId,
+    profileVersion = profileVersionRef.current,
+  ) {
     try {
-      const response = await fetch(`${API_URL}/api/memories`);
-      if (response.ok) {
+      const response = await memoryCueFetch(`${API_URL}/api/memories`, userId);
+      if (response.ok && profileVersionRef.current === profileVersion) {
         setRecentMemories(parseMemoryList(await response.json()));
       }
     } catch {
@@ -211,20 +224,29 @@ export default function Home() {
   }
 
   async function loadDemo() {
+    const requestUserId = activeUserId;
+    const requestProfileVersion = profileVersionRef.current;
     setIsSeeding(true);
     setError(null);
     setSaveMessage(null);
     try {
-      const response = await fetch(`${API_URL}/api/demo/seed`, { method: "POST" });
+      const response = await memoryCueFetch(`${API_URL}/api/demo/seed`, requestUserId, { method: "POST" });
       if (!response.ok) {
         throw new Error(await errorMessage(response, "The demo data could not be loaded."));
       }
+      if (profileVersionRef.current !== requestProfileVersion) {
+        return;
+      }
       setDemoLoaded(true);
-      await refreshMemories();
+      await refreshMemories(requestUserId, requestProfileVersion);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+      if (profileVersionRef.current === requestProfileVersion) {
+        setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+      }
     } finally {
-      setIsSeeding(false);
+      if (profileVersionRef.current === requestProfileVersion) {
+        setIsSeeding(false);
+      }
     }
   }
 
@@ -240,6 +262,8 @@ export default function Home() {
     if (!trimmedQuestion) {
       return;
     }
+    const requestUserId = activeUserId;
+    const requestProfileVersion = profileVersionRef.current;
     const hudRequestId = surface === "hud" ? hudRequestRef.current + 1 : 0;
 
     if (surface === "normal") {
@@ -254,7 +278,7 @@ export default function Home() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/query`, {
+      const response = await memoryCueFetch(`${API_URL}/api/query`, requestUserId, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: trimmedQuestion }),
@@ -263,12 +287,18 @@ export default function Home() {
         throw new Error(await errorMessage(response, "The question could not be answered."));
       }
       const queryResult = parseQueryResult(await response.json());
+      if (profileVersionRef.current !== requestProfileVersion) {
+        return;
+      }
       setResult(queryResult);
       if (surface === "hud" && hudRequestRef.current === hudRequestId) {
         setHudAnswer(queryResult.answer);
         setHudState(queryResult.intent === "unknown" ? "unknown" : "result");
       }
     } catch (requestError) {
+      if (profileVersionRef.current !== requestProfileVersion) {
+        return;
+      }
       const message = requestError instanceof Error ? requestError.message : "Something went wrong.";
       if (surface === "hud") {
         if (hudRequestRef.current === hudRequestId) {
@@ -279,7 +309,7 @@ export default function Home() {
         setError(message);
       }
     } finally {
-      if (surface === "normal") {
+      if (surface === "normal" && profileVersionRef.current === requestProfileVersion) {
         setIsLoading(false);
       }
     }
@@ -306,6 +336,8 @@ export default function Home() {
     setIsSavingMemory(true);
     setError(null);
     setSaveMessage(null);
+    const requestUserId = activeUserId;
+    const requestProfileVersion = profileVersionRef.current;
     const formData = new FormData();
     formData.append("image", memoryImage);
     formData.append("timestamp", memoryTimestamp);
@@ -319,7 +351,7 @@ export default function Home() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/memories`, {
+      const response = await memoryCueFetch(`${API_URL}/api/memories`, requestUserId, {
         method: "POST",
         body: formData,
       });
@@ -327,6 +359,9 @@ export default function Home() {
         throw new Error(await errorMessage(response, "The memory could not be saved."));
       }
       const savedMemory = parseSavedMemory(await response.json());
+      if (profileVersionRef.current !== requestProfileVersion) {
+        return;
+      }
       setSaveMessage(
         savedMemory.object_observation_id
           ? `Memory saved — ${memoryObjectName.trim()} observed at ${savedMemory.location}.`
@@ -335,11 +370,15 @@ export default function Home() {
       if (memoryImageSource === "camera") {
         setCameraSaved(true);
       }
-      await refreshMemories();
+      await refreshMemories(requestUserId, requestProfileVersion);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+      if (profileVersionRef.current === requestProfileVersion) {
+        setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+      }
     } finally {
-      setIsSavingMemory(false);
+      if (profileVersionRef.current === requestProfileVersion) {
+        setIsSavingMemory(false);
+      }
     }
   }
 
@@ -355,11 +394,13 @@ export default function Home() {
     setVisionMessage(null);
     setError(null);
     setSaveMessage(null);
+    const requestUserId = activeUserId;
+    const requestProfileVersion = profileVersionRef.current;
     const formData = new FormData();
     formData.append("image", memoryImage);
 
     try {
-      const response = await fetch(`${API_URL}/api/vision/analyze`, {
+      const response = await memoryCueFetch(`${API_URL}/api/vision/analyze`, requestUserId, {
         method: "POST",
         body: formData,
       });
@@ -368,6 +409,9 @@ export default function Home() {
       }
 
       const analysis = parseVisionAnalysis(await response.json());
+      if (profileVersionRef.current !== requestProfileVersion) {
+        return;
+      }
       setVisionAnalysis(analysis);
       setCameraSaved(false);
       setMemoryLocation(analysis.location ?? "");
@@ -376,12 +420,16 @@ export default function Home() {
       setMemoryObjectName(analysis.objects[0]?.name ?? "");
       setVisionMessage("AI suggestions added below. Review or edit them before saving.");
     } catch (requestError) {
-      setVisionError(true);
-      setVisionMessage(
-        `${requestError instanceof Error ? requestError.message : "The image could not be analyzed."} You can still complete the form manually.`,
-      );
+      if (profileVersionRef.current === requestProfileVersion) {
+        setVisionError(true);
+        setVisionMessage(
+          `${requestError instanceof Error ? requestError.message : "The image could not be analyzed."} You can still complete the form manually.`,
+        );
+      }
     } finally {
-      setIsAnalyzingVision(false);
+      if (profileVersionRef.current === requestProfileVersion) {
+        setIsAnalyzingVision(false);
+      }
     }
   }
 
@@ -448,6 +496,23 @@ export default function Home() {
     dismissHud();
   }
 
+  function handleProfileChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextUserId = Number(event.target.value);
+    if (!DEMO_PROFILES.some((profile) => profile.id === nextUserId)) {
+      return;
+    }
+    profileVersionRef.current += 1;
+    setActiveUserId(nextUserId);
+    setQuestion("");
+    setResult(null);
+    setRecentMemories([]);
+    setIsLoading(false);
+    setIsSeeding(false);
+    setIsAnalyzingVision(false);
+    setIsSavingMemory(false);
+    handleCameraRetake();
+  }
+
   return (
     <main className="page-shell">
       <section className="app-card" aria-labelledby="page-title">
@@ -457,9 +522,22 @@ export default function Home() {
             <h1 id="page-title">MemoryCue</h1>
             <p className="subtitle">Software memory assistant prototype</p>
           </div>
-          <div className={`demo-status ${demoLoaded ? "is-loaded" : ""}`}>
-            <span className="status-dot" aria-hidden="true" />
-            {demoLoaded ? "Demo data loaded" : "Demo data not loaded"}
+          <div className="header-actions">
+            <label className="profile-selector">
+              <span>Development profile</span>
+              <select value={activeUserId} onChange={handleProfileChange}>
+                {DEMO_PROFILES.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <small>{activeProfile.name}&apos;s private demo context · not authentication</small>
+            </label>
+            <div className={`demo-status ${demoLoaded ? "is-loaded" : ""}`}>
+              <span className="status-dot" aria-hidden="true" />
+              {demoLoaded ? "Demo data loaded" : "Demo data not loaded"}
+            </div>
           </div>
         </header>
 

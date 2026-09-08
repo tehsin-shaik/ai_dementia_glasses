@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from . import models  # noqa: F401 - registers models before table creation
 from .database import get_db, init_db
+from .identity import get_current_user
 from .media_storage import (
     media_type_for,
     remove_uploaded_image,
@@ -56,12 +57,12 @@ def seed_demo(db: Session = Depends(get_db)) -> SeedResponse:
 
 
 @app.post("/api/query", response_model=QueryResponse)
-def query(request: QueryRequest, db: Session = Depends(get_db)) -> QueryResponse:
-    return answer_question(db, request.question)
-
-
-def first_user(db: Session) -> User | None:
-    return db.scalar(select(User).order_by(User.id).limit(1))
+def query(
+    request: QueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> QueryResponse:
+    return answer_question(db, current_user.id, request.question)
 
 
 def image_url(image_path: str | None) -> str | None:
@@ -79,6 +80,7 @@ async def create_memory(
     activity: str | None = Form(default=None),
     object_name: str | None = Form(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> MemoryResponse:
     location_value = location.strip()
     description_value = description.strip()
@@ -103,14 +105,8 @@ async def create_memory(
 
     stored_filename = await save_uploaded_image(image)
     try:
-        user = first_user(db)
-        if user is None:
-            user = User(name="Demo User")
-            db.add(user)
-            db.flush()
-
         memory = Memory(
-            user_id=user.id,
+            user_id=current_user.id,
             timestamp=timestamp,
             location=location_value,
             activity=activity_value,
@@ -125,7 +121,7 @@ async def create_memory(
         normalized_object_name = object_name_value.casefold()
         if normalized_object_name:
             observation = ObjectObservation(
-                user_id=user.id,
+                user_id=current_user.id,
                 object_name=normalized_object_name,
                 location=location_value,
                 observed_at=timestamp,
@@ -155,6 +151,7 @@ async def create_memory(
 async def analyze_vision(
     image: UploadFile = File(...),
     context: str | None = Form(default=None),
+    _current_user: User = Depends(get_current_user),
 ) -> VisionAnalysis:
     """Analyze an uploaded image without creating a memory."""
 
@@ -191,15 +188,14 @@ async def analyze_vision(
 
 
 @app.get("/api/memories", response_model=list[MemoryListItem])
-def list_memories(db: Session = Depends(get_db)) -> list[MemoryListItem]:
-    user = first_user(db)
-    if user is None:
-        return []
-
+def list_memories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[MemoryListItem]:
     memories = list(
         db.scalars(
             select(Memory)
-            .where(Memory.user_id == user.id)
+            .where(Memory.user_id == current_user.id)
             .order_by(Memory.timestamp.desc(), Memory.id.desc())
         )
     )
@@ -216,8 +212,20 @@ def list_memories(db: Session = Depends(get_db)) -> list[MemoryListItem]:
 
 
 @app.get("/api/media/{filename:path}")
-def get_media(filename: str) -> FileResponse:
+def get_media(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
     path = safe_media_path(filename)
+    memory = db.scalar(
+        select(Memory).where(
+            Memory.user_id == current_user.id,
+            Memory.image_path == filename,
+        )
+    )
+    if memory is None:
+        raise HTTPException(status_code=404, detail="Media file not found.")
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Media file not found.")
     return FileResponse(path=path, media_type=media_type_for(path.name))

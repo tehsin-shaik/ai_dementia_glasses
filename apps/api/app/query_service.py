@@ -6,7 +6,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Memory, ObjectObservation, Person, ScheduleItem, User
+from .models import Memory, ObjectObservation, Person, ScheduleItem
 from .schemas import Intent, QueryResponse
 
 
@@ -38,19 +38,15 @@ def format_time(value: datetime) -> str:
     return value.strftime("%I:%M %p").lstrip("0")
 
 
-def answer_question(db: Session, question: str) -> QueryResponse:
+def answer_question(db: Session, user_id: int, question: str) -> QueryResponse:
     intent = detect_intent(question)
     if intent == "unknown":
-        return unknown_response()
-
-    user = db.scalar(select(User).order_by(User.id).limit(1))
-    if user is None:
         return unknown_response()
 
     if intent == "recent_activity":
         memory = db.scalar(
             select(Memory)
-            .where(Memory.user_id == user.id)
+            .where(Memory.user_id == user_id)
             .where(Memory.activity.is_not(None))
             .where(Memory.activity != "")
             .order_by(Memory.timestamp.desc(), Memory.id.desc())
@@ -68,7 +64,7 @@ def answer_question(db: Session, question: str) -> QueryResponse:
         observation = db.scalar(
             select(ObjectObservation)
             .where(
-                ObjectObservation.user_id == user.id,
+                ObjectObservation.user_id == user_id,
                 ObjectObservation.object_name == "keys",
             )
             .order_by(ObjectObservation.observed_at.desc(), ObjectObservation.id.desc())
@@ -91,7 +87,7 @@ def answer_question(db: Session, question: str) -> QueryResponse:
     if intent == "person_lookup":
         person = db.scalar(
             select(Person)
-            .where(Person.user_id == user.id, Person.name.ilike("sarah"))
+            .where(Person.user_id == user_id, Person.name.ilike("sarah"))
             .order_by(Person.id)
             .limit(1)
         )
@@ -109,7 +105,7 @@ def answer_question(db: Session, question: str) -> QueryResponse:
         db.scalars(
             select(ScheduleItem)
             .where(
-                ScheduleItem.user_id == user.id,
+                ScheduleItem.user_id == user_id,
                 ScheduleItem.scheduled_at >= today_start,
                 ScheduleItem.scheduled_at < tomorrow_start,
             )

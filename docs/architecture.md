@@ -64,6 +64,25 @@ Dismissible HUD cue
 
 There is no continuous camera analysis, background querying, or face-recognition path in this prototype.
 
+## Development Identity Boundary
+
+Personal API operations resolve the selected local demo user from the `X-MemoryCue-User-Id` request header before reading or writing user data:
+
+```text
+Development profile selector
+            |
+            v
+X-MemoryCue-User-Id
+            |
+            v
+Current-user dependency
+            |
+            v
+User-scoped query / memory / people / schedule / object / media access
+```
+
+`GET /api/health` remains public, and `POST /api/demo/seed` is an intentionally unscoped local reset operation. Vision analysis requires a valid development identity even though it does not write a memory. Media access checks both the requested filename and ownership of the stored memory before returning a file. The header is a development boundary, not production authentication; caregiver permissions and consent are future work.
+
 ## Timestamp Convention
 
 The local prototype stores timestamps as naive local wall-clock datetimes. Seed data and schedule queries use the backend's local date, while browser `datetime-local` and camera capture values represent the browser's local wall-clock time. If an API client sends a timezone-aware timestamp, the API converts it to the backend's local time before removing the timezone for SQLite storage. This is intentionally simple and is not a multi-timezone production model.

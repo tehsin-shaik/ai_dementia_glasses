@@ -127,6 +127,12 @@ While the webcam is active, the simulator also provides a compact glasses-style 
 
 The cue shows the existing answer directly, including a clear unknown state when MemoryCue has no matching context. Choose **Dismiss** to clear it without stopping the camera. All cues are manually triggered: the simulator does not identify faces, continuously analyze video, or run background queries.
 
+## Development Profiles
+
+The local prototype includes a clearly labeled **Development profile** selector for two deterministic demo users: Alex and Jordan. Choose a profile to view its isolated memories, people, schedule, object observations, and HUD answers. Changing profiles clears the current question result and any unsaved camera memory so captured information cannot be saved under the wrong profile.
+
+This selector is a development convenience, not authentication. The browser sends the selected profile ID in the `X-MemoryCue-User-Id` request header, and the API uses it to scope personal data. The demo seed is a local reset operation that recreates both profiles; caregiver permissions and production identity remain future work.
+
 ## Example
 
 A simulated day might contain:
@@ -240,7 +246,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), load the demo data, and ask one of the four suggested questions. To create a memory, use the **Add a memory** form below the question controls. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
+Open [http://localhost:3000](http://localhost:3000), choose **Alex** or **Jordan** in the development profile selector, and load the demo data. Ask one of the four suggested questions to see profile-specific answers. To create a memory, use the **Add a memory** form below the question controls. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
 
 The local prototype stores timestamps as naive local wall-clock values. The browser and backend use their local time for manual/camera entries and the demo schedule; timezone-aware API timestamps are converted to the backend's local time before storage.
 

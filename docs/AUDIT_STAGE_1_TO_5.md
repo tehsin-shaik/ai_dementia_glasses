@@ -157,3 +157,16 @@ No Stage 6 feature was added by this audit.
 - API contract smoke: OpenAPI exposed the seven expected application operations across six paths.
 - Frontend render smoke: `GET http://localhost:3000` — HTTP 200; HUD controls were present.
 - Repository checks: no tracked media or credential-like values; generated databases, media, environments, caches, and build output remain ignored.
+
+## Post-Audit Follow-Up
+
+Stage 6A addressed the audit's profile-readiness follow-up items that were in scope for explicit identity and user scoping:
+
+- added a central current-user dependency with consistent missing-identity (`401`) and unknown-identity (`404`) responses;
+- replaced the runtime `first_user()` assumption with explicit user IDs on query, memory, people, schedule, object-observation, vision, and media paths;
+- seeded isolated Alex and Jordan demo users with deterministic, intentionally different context;
+- protected media by checking the stored memory owner before serving a file;
+- added backend cross-user tests for query results, memory ownership/listing, same-name person relationships, schedules, object observations, media, invalid identity, and ignored client `user_id` payloads; and
+- added the browser development profile selector and reset behavior for unsaved camera/form state.
+
+The `X-MemoryCue-User-Id` header and profile selector are development conveniences, not production authentication. Caregiver roles, consent, and caregiver-specific permissions remain Stage 6B work.
