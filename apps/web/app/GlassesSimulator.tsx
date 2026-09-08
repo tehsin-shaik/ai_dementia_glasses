@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { captureVideoFrame } from "./camera";
+import { MemoryHudControls, MemoryHudOverlay, MemoryHudState } from "./MemoryHud";
 
 export type CameraStatus =
   | "inactive"
@@ -25,6 +26,11 @@ type GlassesSimulatorProps = {
   onCapture: (file: File) => void;
   onRetake: () => void;
   onAnalyze: () => void;
+  hudState: MemoryHudState;
+  hudAnswer: string | null;
+  hudError: string | null;
+  onHudQuery: (question: string) => void;
+  onDismissHud: () => void;
 };
 
 type BaseCameraStatus = "inactive" | "starting" | "active" | "captured" | "error";
@@ -99,6 +105,11 @@ export default function GlassesSimulator({
   onCapture,
   onRetake,
   onAnalyze,
+  hudState,
+  hudAnswer,
+  hudError,
+  onHudQuery,
+  onDismissHud,
 }: GlassesSimulatorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -220,6 +231,8 @@ export default function GlassesSimulator({
   const status = effectiveStatus();
   const isStarting = baseStatus === "starting";
   const isActive = baseStatus === "active";
+  const isStreamActive = Boolean(streamRef.current);
+  const showLivePreview = isActive || isStarting || isStreamActive;
   const hasFrame = Boolean(capturedFrame && capturedPreviewUrl);
 
   return (
@@ -239,8 +252,8 @@ export default function GlassesSimulator({
         Camera access works on localhost or HTTPS. No microphone is requested.
       </p>
 
-      <div className="camera-view" data-camera-active={isActive || isStarting}>
-        {isActive || isStarting ? (
+      <div className="camera-view" data-camera-active={showLivePreview}>
+        {showLivePreview ? (
           <video ref={videoRef} autoPlay muted playsInline aria-label="Live camera preview" />
         ) : (
           <div className="camera-placeholder">
@@ -248,8 +261,16 @@ export default function GlassesSimulator({
             <p>Camera preview will appear here.</p>
           </div>
         )}
+        <MemoryHudOverlay
+          state={hudState}
+          answer={hudAnswer}
+          error={hudError}
+          onDismiss={onDismissHud}
+        />
       </div>
       <canvas ref={canvasRef} className="camera-canvas" aria-hidden="true" />
+
+      <MemoryHudControls isCameraActive={isStreamActive} state={hudState} onQuery={onHudQuery} />
 
       <div className="camera-controls">
         {!streamRef.current && !hasFrame && (

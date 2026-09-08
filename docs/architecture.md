@@ -18,13 +18,13 @@ Review and edit
 Memory storage
         |
         v
-User question
+Normal question or manual HUD cue
         |
         v
 Retrieval
         |
         v
-Grounded answer
+Grounded answer / HUD overlay
 ```
 
 ## Hardware Abstraction
@@ -44,6 +44,25 @@ Future Meta frame ----┘          v
 ```
 
 The backend should eventually be independent of the device producing the image/audio input.
+
+## Contextual HUD Query Flow
+
+The live camera HUD is a presentation surface for the existing question-answering path. A manual quick cue or custom question is sent to `POST /api/query`, then the returned grounded answer is shown as a short overlay inside the live preview. The normal response panel continues to hold developer details such as source IDs; the wearer-facing HUD does not display them.
+
+```text
+Manual HUD trigger
+        |
+        v
+POST /api/query
+        |
+        v
+Existing retrieval and grounded answer
+        |
+        v
+Dismissible HUD cue
+```
+
+There is no continuous camera analysis, background querying, or face-recognition path in this prototype.
 
 ## Optional Vision Analysis
 

@@ -34,6 +34,12 @@ Stage 4 adds a browser-only webcam simulator. The user can start the camera, cap
 
 Camera access normally requires `localhost` or HTTPS. The simulator does not request microphone access, continuously analyze video, record in the background, or capture frames automatically. The user must trigger each capture and save.
 
+## Glasses-style Memory HUD
+
+Stage 5 adds a wearer-facing HUD to the live camera view. While the webcam is active, the user can manually ask a custom question or choose one of three quick cues: recent activity, last-seen keys, or today's schedule. The HUD reuses the existing `/api/query` endpoint and displays its grounded answer without exposing source IDs in the wearer view.
+
+The HUD supports idle, querying, result, unknown, and error states. A cue can be dismissed without stopping the camera. It does not perform continuous background analysis, face recognition, or automatic querying.
+
 ## Questions the MVP Must Answer
 
 ### 1. What was I doing?

@@ -1,8 +1,9 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 
 import GlassesSimulator from "./GlassesSimulator";
+import { MemoryHudState } from "./MemoryHud";
 
 type QueryResult = {
   answer: string;
@@ -71,6 +72,9 @@ async function errorMessage(response: Response, fallback: string): Promise<strin
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<QueryResult | null>(null);
+  const [hudState, setHudState] = useState<MemoryHudState>("idle");
+  const [hudAnswer, setHudAnswer] = useState<string | null>(null);
+  const [hudError, setHudError] = useState<string | null>(null);
   const [demoLoaded, setDemoLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
@@ -91,6 +95,7 @@ export default function Home() {
   const [cameraSaved, setCameraSaved] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [recentMemories, setRecentMemories] = useState<MemoryListItem[]>([]);
+  const hudRequestRef = useRef(0);
 
   useEffect(() => {
     setMemoryTimestamp(localDateTimeValue(new Date()));
@@ -134,15 +139,31 @@ export default function Home() {
     }
   }
 
-  async function askQuestion(value = question) {
+  function dismissHud() {
+    hudRequestRef.current += 1;
+    setHudState("idle");
+    setHudAnswer(null);
+    setHudError(null);
+  }
+
+  async function submitQuery(value: string, surface: "normal" | "hud") {
     const trimmedQuestion = value.trim();
     if (!trimmedQuestion) {
       return;
     }
+    const hudRequestId = surface === "hud" ? hudRequestRef.current + 1 : 0;
 
-    setQuestion(trimmedQuestion);
-    setIsLoading(true);
-    setError(null);
+    if (surface === "normal") {
+      setQuestion(trimmedQuestion);
+      setIsLoading(true);
+      setError(null);
+    } else {
+      hudRequestRef.current = hudRequestId;
+      setHudState("querying");
+      setHudAnswer(null);
+      setHudError(null);
+    }
+
     try {
       const response = await fetch(`${API_URL}/api/query`, {
         method: "POST",
@@ -152,12 +173,33 @@ export default function Home() {
       if (!response.ok) {
         throw new Error(await errorMessage(response, "The question could not be answered."));
       }
-      setResult((await response.json()) as QueryResult);
+      const queryResult = (await response.json()) as QueryResult;
+      setResult(queryResult);
+      if (surface === "hud" && hudRequestRef.current === hudRequestId) {
+        setHudAnswer(queryResult.answer);
+        setHudState(queryResult.intent === "unknown" ? "unknown" : "result");
+      }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+      const message = requestError instanceof Error ? requestError.message : "Something went wrong.";
+      if (surface === "hud" && hudRequestRef.current === hudRequestId) {
+        setHudError(message);
+        setHudState("error");
+      } else {
+        setError(message);
+      }
     } finally {
-      setIsLoading(false);
+      if (surface === "normal") {
+        setIsLoading(false);
+      }
     }
+  }
+
+  async function askQuestion(value = question) {
+    await submitQuery(value, "normal");
+  }
+
+  function askHudQuestion(value: string) {
+    void submitQuery(value, "hud");
   }
 
   async function saveMemory() {
@@ -271,6 +313,7 @@ export default function Home() {
     setVisionError(false);
     setCameraSaved(false);
     setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
+    dismissHud();
   }
 
   function handleCameraCapture(file: File) {
@@ -288,6 +331,7 @@ export default function Home() {
     setSaveMessage(null);
     setError(null);
     setPreviewUrl(URL.createObjectURL(file));
+    dismissHud();
   }
 
   function handleCameraRetake() {
@@ -304,6 +348,7 @@ export default function Home() {
     setSaveMessage(null);
     setError(null);
     setPreviewUrl(null);
+    dismissHud();
   }
 
   return (
@@ -383,6 +428,11 @@ export default function Home() {
           onCapture={handleCameraCapture}
           onRetake={handleCameraRetake}
           onAnalyze={() => void analyzeImage()}
+          hudState={hudState}
+          hudAnswer={hudAnswer}
+          hudError={hudError}
+          onHudQuery={askHudQuestion}
+          onDismissHud={dismissHud}
         />
 
         <section className="memory-panel" aria-labelledby="memory-heading">

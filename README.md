@@ -121,6 +121,12 @@ The browser-based Glasses Simulator uses the laptop webcam as a stand-in for a f
 
 Use **Retake** to replace the captured frame and **Stop camera** when finished. Capture and analysis are always user-triggered in this milestone. MemoryCue does not continuously record, analyze frames, or create memories in the background.
 
+### Glasses-style memory HUD
+
+While the webcam is active, the simulator also provides a compact glasses-style HUD over the live camera view. Choose one of the quick cues or type a question under **Ask MemoryCue**, then choose **Show cue**. The HUD sends that question to the same grounded `/api/query` endpoint used by the normal question panel.
+
+The cue shows the existing answer directly, including a clear unknown state when MemoryCue has no matching context. Choose **Dismiss** to clear it without stopping the camera. All cues are manually triggered: the simulator does not identify faces, continuously analyze video, or run background queries.
+
 ## Example
 
 A simulated day might contain:
