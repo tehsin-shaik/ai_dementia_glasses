@@ -154,25 +154,29 @@ MemoryCue responds:
 
 The distinction matters: the system reports what it remembers seeing rather than pretending it knows where the keys are now.
 
-## Future Caregiver Support
+## Caregiver Setup
 
-The project may later explore a caregiver interface where trusted people can provide useful context such as:
+The `/caregiver` page is a small development prototype for trusted patient context. Select a simulated caregiver, choose one of the patients explicitly linked to that caregiver, and manage:
 
-* names and relationships;
-* daily routines;
-* appointments;
-* important places;
-* reminders.
+* patient profile details and response preferences;
+* known people and relationships;
+* important object definitions;
+* schedule items; and
+* short caregiver notes.
 
-Example:
+Maya is linked to Alex, while Sam is linked to Jordan. The API checks that relationship and the requested permission on every caregiver operation, so the setup page does not expose unlinked patients. Important object definitions are separate from observed object history, and caregiver notes are stored for setup context but are not automatically sent to the vision provider or query prompt.
+
+The caregiver selector is development-only and not secure authentication. There is no caregiver invitation, consent workflow, password login, or production healthcare portal. Taylor is included as a read-only demo caregiver for permission testing.
+
+Example patient context:
 
 ```text
 Sarah
 Relationship: Daughter
-Visiting today at 3:30 PM
+Response style: Short, calm reminders
 ```
 
-The current app has no caregiver dashboard or profile-management flow; the example person and schedule are loaded by the deterministic demo seed.
+The example person and schedule are loaded by the deterministic demo seed, which resets Alex, Jordan, Maya, Sam, and Taylor. After a caregiver changes a person or schedule item, the wearer-facing patient experience reads the same stored record.
 
 ## Future Smart Glasses Integration
 
@@ -207,7 +211,7 @@ The software prototype allows the memory system to be developed and tested befor
 
 ## Project Status
 
-**Current stage:** MVP development
+**Current stage:** Stage 6B caregiver profile management prototype
 
 The project is currently focused on building the core memory loop:
 
@@ -246,7 +250,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), choose **Alex** or **Jordan** in the development profile selector, and load the demo data. Ask one of the four suggested questions to see profile-specific answers. To create a memory, use the **Add a memory** form below the question controls. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
+Open [http://localhost:3000](http://localhost:3000), choose **Alex** or **Jordan** in the development profile selector, and load the demo data. Ask one of the four suggested questions to see profile-specific answers. To create a memory, use the **Add a memory** form below the question controls. Open [http://localhost:3000/caregiver](http://localhost:3000/caregiver) for the development-only caregiver setup page, select Maya, Sam, or Taylor, and manage only the linked patient context. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
 
 The local prototype stores timestamps as naive local wall-clock values. The browser and backend use their local time for manual/camera entries and the demo schedule; timezone-aware API timestamps are converted to the backend's local time before storage.
 

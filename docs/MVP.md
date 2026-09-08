@@ -44,7 +44,15 @@ The HUD supports idle, querying, result, unknown, and error states. A cue can be
 
 Stage 6A adds two deterministic local demo profiles, Alex and Jordan. The browser's development profile selector sends the selected user ID in the `X-MemoryCue-User-Id` header. Query answers, memory creation and listing, people, schedules, object observations, vision analysis, and media access are scoped to that user. Switching profiles clears visible answers and unsaved camera/form state.
 
-This is explicit development identity only; it is not authentication or authorization. The demo seed resets both profiles and their data. Production identity, caregiver roles, consent, and permissions remain outside this MVP.
+This is explicit development identity only; it is not authentication or authorization. The demo seed resets both profiles and their data. Production identity, production caregiver authorization, consent, and permissions remain outside this MVP.
+
+## Caregiver Profile Management
+
+Stage 6B adds a small caregiver setup page at `/caregiver`. Development caregivers Maya, Sam, and Taylor are linked explicitly to patient users: Maya manages Alex, Sam manages Jordan, and Taylor can view Alex without modification permissions. The setup API supports patient profile preferences, text-only known people, important object definitions, schedule items, and short caregiver notes.
+
+Caregiver requests use a separate `X-MemoryCue-Caregiver-Id` header and a centralized link/permission check. Caregivers can only view or modify data for linked patients, and mutations require the matching management permission. These records are the same `Person` and `ScheduleItem` data used by the wearer-facing retrieval system, so caregiver edits are visible in patient queries.
+
+Important object definitions describe things a caregiver considers useful; they do not create `ObjectObservation` history. Caregiver notes are stored for setup context and are not automatically included in AI prompts. The caregiver identity mechanism is simulated and not production authentication; invitations, consent workflows, passwords, face recognition, and known-person photos remain out of scope.
 
 ## Questions the MVP Must Answer
 
@@ -64,7 +72,7 @@ rather than claiming the keys are definitely still there.
 
 ### 3. Who is Sarah?
 
-Retrieve the deterministic demo's stored person record. A caregiver-facing profile setup flow is not implemented yet.
+Retrieve the deterministic demo's stored person record. A linked caregiver can update that text-only relationship through the setup page.
 
 Example:
 

@@ -83,6 +83,33 @@ User-scoped query / memory / people / schedule / object / media access
 
 `GET /api/health` remains public, and `POST /api/demo/seed` is an intentionally unscoped local reset operation. Vision analysis requires a valid development identity even though it does not write a memory. Media access checks both the requested filename and ownership of the stored memory before returning a file. The header is a development boundary, not production authentication; caregiver permissions and consent are future work.
 
+## Caregiver Management Boundary
+
+Stage 6B adds a separate caregiver identity and authorization path. It never treats the patient identity header as caregiver identity:
+
+```text
+Development caregiver selector
+            |
+            v
+X-MemoryCue-Caregiver-Id
+            |
+            v
+Current caregiver dependency
+            |
+            v
+Explicit caregiver-patient link
+            |
+            v
+View or management permission
+            |
+            v
+Patient-scoped profile / people / objects / schedule / notes
+```
+
+The authorization helper returns a privacy-preserving 404 when a caregiver is not linked to a patient, and a 403 when a linked caregiver lacks the requested management permission. Primary caregivers can manage the profile and the seeded management flags; viewer access is read-only. `ImportantObject` stores caregiver-defined object definitions separately from `ObjectObservation`, which remains observed history for wearer queries. `CaregiverNote` records the authoring caregiver and patient owner but is not automatically injected into AI prompts.
+
+The `/caregiver` page is a development setup surface, not a healthcare portal. Production authentication, invitations, consent, and caregiver audit logging are not implemented.
+
 ## Timestamp Convention
 
 The local prototype stores timestamps as naive local wall-clock datetimes. Seed data and schedule queries use the backend's local date, while browser `datetime-local` and camera capture values represent the browser's local wall-clock time. If an API client sends a timezone-aware timestamp, the API converts it to the backend's local time before removing the timezone for SQLite storage. This is intentionally simple and is not a multi-timezone production model.

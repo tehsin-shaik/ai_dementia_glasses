@@ -928,6 +928,369 @@ h2 {
   border: 0;
 }
 
+.caregiver-page-shell {
+  min-height: 100vh;
+  padding: 36px 20px;
+}
+
+.caregiver-card {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: clamp(24px, 5vw, 48px);
+  border: 1px solid rgba(180, 207, 204, 0.7);
+  border-radius: 28px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.caregiver-header,
+.management-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.caregiver-identity {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 240px;
+}
+
+.caregiver-identity label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.caregiver-identity select {
+  min-width: 180px;
+  border: 1px solid #c8d7d8;
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+  font-size: 0.86rem;
+}
+
+.caregiver-identity small {
+  max-width: 240px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.caregiver-link {
+  display: inline-flex;
+  border-bottom: 1px solid #a9d2cb;
+  padding-bottom: 3px;
+  color: var(--teal-dark);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.caregiver-link:hover {
+  border-color: var(--teal-dark);
+}
+
+.caregiver-notice {
+  margin-top: 30px;
+  border: 1px solid #ead7b1;
+  border-radius: 12px;
+  padding: 13px 15px;
+  color: #6d5526;
+  background: #fff9e9;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.caregiver-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.32fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.patient-list-panel,
+.management-panel {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+}
+
+.patient-list-panel {
+  align-self: start;
+  background: #f8fbfa;
+}
+
+.patient-list-panel h2,
+.management-empty h2 {
+  margin-bottom: 18px;
+  font-size: 1.55rem;
+}
+
+.patient-list {
+  display: grid;
+  gap: 8px;
+}
+
+.patient-button {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--ink);
+  background: white;
+  text-align: left;
+}
+
+.patient-button:hover,
+.patient-button.is-selected {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.patient-button span {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.caregiver-muted,
+.management-empty p:not(.section-kicker) {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.management-panel {
+  min-width: 0;
+  background: white;
+}
+
+.management-heading h2 {
+  margin-bottom: 0;
+}
+
+.access-badge {
+  border: 1px solid #b8ddd4;
+  border-radius: 999px;
+  padding: 8px 10px;
+  color: var(--teal-dark);
+  background: var(--teal-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.management-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 22px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.management-tab {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 8px 11px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.management-tab:hover,
+.management-tab.is-active {
+  border-color: #b8ddd4;
+  color: var(--teal-dark);
+  background: var(--teal-soft);
+}
+
+.management-section {
+  padding-top: 22px;
+}
+
+.management-loading {
+  margin-top: 24px;
+}
+
+.caregiver-form,
+.caregiver-section-stack,
+.caregiver-note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.caregiver-form-grid,
+.caregiver-inline-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.caregiver-inline-form {
+  align-items: end;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+}
+
+.caregiver-form label,
+.caregiver-inline-form label,
+.caregiver-note-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.caregiver-form label em,
+.caregiver-inline-form label em {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.caregiver-form input,
+.caregiver-form textarea,
+.caregiver-inline-form input,
+.caregiver-note-form textarea,
+.caregiver-record input {
+  width: 100%;
+  border: 1px solid #c8d7d8;
+  border-radius: 9px;
+  padding: 10px 11px;
+  color: var(--ink);
+  background: white;
+  font-size: 0.86rem;
+  font-weight: 400;
+  outline: none;
+}
+
+.caregiver-form textarea,
+.caregiver-note-form textarea {
+  resize: vertical;
+}
+
+.caregiver-form input:focus,
+.caregiver-form textarea:focus,
+.caregiver-inline-form input:focus,
+.caregiver-note-form textarea:focus,
+.caregiver-record input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(29, 119, 112, 0.12);
+}
+
+.caregiver-record-list,
+.caregiver-note-list {
+  display: grid;
+  gap: 10px;
+}
+
+.caregiver-record {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.caregiver-record-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.caregiver-record-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.caregiver-record-actions .text-button {
+  padding: 7px 3px;
+  font-size: 0.77rem;
+}
+
+.danger-button {
+  border: 1px solid #efc0b3;
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: #8d3f2c;
+  background: #fff5f1;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: var(--coral);
+  background: #ffebe5;
+}
+
+.record-meta {
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.caregiver-note {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.caregiver-note p {
+  margin: 0;
+  font-size: 0.87rem;
+  line-height: 1.5;
+}
+
+.caregiver-note small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.caregiver-status,
+.caregiver-error {
+  margin: 18px 0 0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 0.84rem;
+}
+
+.caregiver-status {
+  color: var(--teal-dark);
+  background: var(--teal-soft);
+}
+
+.caregiver-error {
+  color: #8d3f2c;
+  background: #fff1ed;
+}
+
 @media (max-width: 720px) {
   .page-shell {
     padding: 18px 12px;
@@ -940,8 +1303,50 @@ h2 {
 
   .app-header,
   .answer-heading-row,
-  .camera-panel-heading {
+  .camera-panel-heading,
+  .caregiver-header,
+  .management-heading {
     flex-direction: column;
+  }
+
+  .caregiver-page-shell {
+    padding: 18px 12px;
+  }
+
+  .caregiver-card {
+    border-radius: 20px;
+    padding: 24px 18px;
+  }
+
+  .caregiver-identity {
+    align-items: flex-start;
+    min-width: 0;
+  }
+
+  .caregiver-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .caregiver-form-grid,
+  .caregiver-inline-form,
+  .caregiver-record-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .caregiver-inline-form .secondary-button {
+    width: 100%;
+  }
+
+  .caregiver-record {
+    grid-template-columns: 1fr;
+  }
+
+  .caregiver-record-actions {
+    justify-content: flex-start;
+  }
+
+  .access-badge {
+    white-space: normal;
   }
 
   .content-grid {

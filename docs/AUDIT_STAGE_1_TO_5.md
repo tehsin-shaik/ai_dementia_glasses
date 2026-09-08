@@ -170,3 +170,15 @@ Stage 6A addressed the audit's profile-readiness follow-up items that were in sc
 - added the browser development profile selector and reset behavior for unsaved camera/form state.
 
 The `X-MemoryCue-User-Id` header and profile selector are development conveniences, not production authentication. Caregiver roles, consent, and caregiver-specific permissions remain Stage 6B work.
+
+### Stage 6B Follow-Up
+
+Stage 6B builds the first caregiver/patient personalization layer on the Stage 6A boundary:
+
+- added patient profiles, caregiver identities, explicit caregiver-patient links, management permissions, important object definitions, and caregiver notes;
+- added centralized caregiver identity and authorization checks for linked-patient profile, people, object, schedule, and note management;
+- added the development-only `/caregiver` setup page with caregiver and linked-patient selectors plus five basic management sections;
+- connected caregiver edits to the existing patient-side `Person` and `ScheduleItem` records so wearer queries use updated trusted context; and
+- added relationship, permission, identity-separation, patient-query integration, and cross-patient isolation coverage.
+
+Caregiver identity remains simulated through `X-MemoryCue-Caregiver-Id`; production authentication, invitations, consent, and caregiver audit logging are not solved by this stage.

@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, SyntheticEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import GlassesSimulator from "./GlassesSimulator";
 import { MemoryHudState } from "./MemoryHud";
@@ -523,6 +524,9 @@ export default function Home() {
             <p className="subtitle">Software memory assistant prototype</p>
           </div>
           <div className="header-actions">
+            <Link className="caregiver-link" href="/caregiver">
+              Caregiver setup
+            </Link>
             <label className="profile-selector">
               <span>Development profile</span>
               <select value={activeUserId} onChange={handleProfileChange}>

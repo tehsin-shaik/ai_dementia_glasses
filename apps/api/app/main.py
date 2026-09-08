@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import models  # noqa: F401 - registers models before table creation
+from .caregiver import router as caregiver_router
 from .database import get_db, init_db
 from .identity import get_current_user
 from .media_storage import (
@@ -41,9 +42,10 @@ app = FastAPI(title="MemoryCue API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
+app.include_router(caregiver_router)
 
 
 @app.get("/api/health", response_model=HealthResponse)

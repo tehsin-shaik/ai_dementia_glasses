@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, create_database_engine, get_db
+from app.authorization import CAREGIVER_ID_HEADER
 from app.identity import USER_ID_HEADER
 from app.main import app
 from app.media_storage import MAX_UPLOAD_BYTES, safe_media_path
@@ -54,6 +55,10 @@ def seed(client: TestClient) -> None:
 
 def user_headers(user_id: int) -> dict[str, str]:
     return {USER_ID_HEADER: str(user_id)}
+
+
+def caregiver_headers(caregiver_id: int) -> dict[str, str]:
+    return {CAREGIVER_ID_HEADER: str(caregiver_id)}
 
 
 def upload_memory(
@@ -165,10 +170,16 @@ def test_seed_can_be_run_twice_without_duplicate_demo_state(client: TestClient) 
         "status": "ok",
         "user_ids": [1, 2],
         "user_count": 2,
+        "caregiver_ids": [1, 2, 3],
+        "caregiver_count": 3,
+        "access_count": 3,
+        "profile_count": 2,
         "memory_count": 8,
         "observation_count": 2,
         "person_count": 2,
         "schedule_count": 4,
+        "important_object_count": 4,
+        "note_count": 2,
     }
 
     response = client.post("/api/query", json={"question": "Where are my keys?"})
@@ -751,3 +762,252 @@ def test_media_is_only_available_to_its_owner(client: TestClient) -> None:
     assert unauthorized.json() == {"detail": "Media file not found."}
     assert authorized.status_code == 200
     assert authorized.content == b"fake-image-content"
+
+
+def test_caregiver_identity_is_required_and_separate_from_patient_identity(client: TestClient) -> None:
+    seed(client)
+    with TestClient(app) as anonymous_client:
+        missing = anonymous_client.get("/api/caregiver/patients")
+    patient_header_only = client.get("/api/caregiver/patients", headers=user_headers(1))
+
+    assert missing.status_code == 401
+    assert missing.json() == {"detail": "Caregiver identity is required."}
+    assert patient_header_only.status_code == 401
+    assert patient_header_only.json() == {"detail": "Caregiver identity is required."}
+
+
+def test_unknown_caregiver_identity_is_rejected(client: TestClient) -> None:
+    seed(client)
+    response = client.get(
+        "/api/caregiver/patients",
+        headers=caregiver_headers(999),
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Caregiver not found."}
+
+
+def test_caregivers_only_list_linked_patients(client: TestClient) -> None:
+    seed(client)
+    maya = client.get("/api/caregiver/patients", headers=caregiver_headers(1))
+    sam = client.get("/api/caregiver/patients", headers=caregiver_headers(2))
+    taylor = client.get("/api/caregiver/patients", headers=caregiver_headers(3))
+
+    assert maya.json() == [{"user_id": 1, "name": "Alex", "preferred_name": "Alex"}]
+    assert sam.json() == [{"user_id": 2, "name": "Jordan", "preferred_name": "Jordan"}]
+    assert taylor.json() == [{"user_id": 1, "name": "Alex", "preferred_name": "Alex"}]
+
+    maya_cannot_open_jordan = client.get(
+        "/api/caregiver/patients/2/profile",
+        headers=caregiver_headers(1),
+    )
+    sam_cannot_open_alex = client.get(
+        "/api/caregiver/patients/1/profile",
+        headers=caregiver_headers(2),
+    )
+    assert maya_cannot_open_jordan.status_code == 404
+    assert sam_cannot_open_alex.status_code == 404
+
+
+def test_patient_profile_permissions_and_persistence(client: TestClient) -> None:
+    seed(client)
+    profile_response = client.get(
+        "/api/caregiver/patients/1/profile",
+        headers=caregiver_headers(1),
+    )
+    assert profile_response.status_code == 200
+    assert profile_response.json()["response_style"] == "Short, calm reminders"
+
+    update_response = client.patch(
+        "/api/caregiver/patients/1/profile",
+        headers=caregiver_headers(1),
+        json={"home_context": "Lives at home with a quiet routine", "response_style": "calm"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["home_context"] == "Lives at home with a quiet routine"
+    assert update_response.json()["response_style"] == "calm"
+
+    viewer_update = client.patch(
+        "/api/caregiver/patients/1/profile",
+        headers=caregiver_headers(3),
+        json={"response_style": "factual"},
+    )
+    sam_update = client.patch(
+        "/api/caregiver/patients/1/profile",
+        headers=caregiver_headers(2),
+        json={"response_style": "factual"},
+    )
+    assert viewer_update.status_code == 403
+    assert sam_update.status_code == 404
+
+
+def test_people_crud_is_scoped_and_updates_patient_query(client: TestClient) -> None:
+    seed(client)
+    people = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1))
+    sarah = next(person for person in people.json() if person["name"] == "Sarah")
+    update = client.patch(
+        f"/api/caregiver/patients/1/people/{sarah['id']}",
+        headers=caregiver_headers(1),
+        json={"relationship": "Daughter and primary family contact"},
+    )
+    assert update.status_code == 200
+    assert update.json()["relationship"] == "Daughter and primary family contact"
+
+    query_response = client.post(
+        "/api/query",
+        headers=user_headers(1),
+        json={"question": "Who is Sarah?"},
+    )
+    assert query_response.json()["answer"] == (
+        "Sarah is your daughter and primary family contact."
+    )
+
+    created = client.post(
+        "/api/caregiver/patients/1/people",
+        headers=caregiver_headers(1),
+        json={"name": "Maya", "relationship": "Caregiver"},
+    )
+    assert created.status_code == 201
+    changed = client.patch(
+        f"/api/caregiver/patients/1/people/{created.json()['id']}",
+        headers=caregiver_headers(1),
+        json={"name": "Maya Patel"},
+    )
+    deleted = client.delete(
+        f"/api/caregiver/patients/1/people/{created.json()['id']}",
+        headers=caregiver_headers(1),
+    )
+    assert changed.status_code == 200
+    assert deleted.status_code == 204
+
+    jordan_person = client.get(
+        "/api/caregiver/patients/2/people",
+        headers=caregiver_headers(2),
+    ).json()[0]
+    unauthorized_edit = client.patch(
+        f"/api/caregiver/patients/2/people/{jordan_person['id']}",
+        headers=caregiver_headers(1),
+        json={"relationship": "Unauthorized"},
+    )
+    viewer_create = client.post(
+        "/api/caregiver/patients/1/people",
+        headers=caregiver_headers(3),
+        json={"name": "Viewer", "relationship": "Observer"},
+    )
+    assert unauthorized_edit.status_code == 404
+    assert viewer_create.status_code == 403
+
+
+def test_important_objects_are_definitions_separate_from_observations(client: TestClient) -> None:
+    seed(client)
+    created = client.post(
+        "/api/caregiver/patients/1/objects",
+        headers=caregiver_headers(1),
+        json={"name": "Glasses", "notes": "Usually kept by the reading chair"},
+    )
+    assert created.status_code == 201
+    object_id = created.json()["id"]
+    updated = client.patch(
+        f"/api/caregiver/patients/1/objects/{object_id}",
+        headers=caregiver_headers(1),
+        json={"notes": "Keep in the protective case"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["notes"] == "Keep in the protective case"
+
+    keys_answer = client.post(
+        "/api/query",
+        headers=user_headers(1),
+        json={"question": "Where are my keys?"},
+    )
+    assert keys_answer.json()["answer"] == "I last saw your keys on the kitchen counter at 10:18 AM."
+
+    deleted = client.delete(
+        f"/api/caregiver/patients/1/objects/{object_id}",
+        headers=caregiver_headers(1),
+    )
+    jordan_object = client.get(
+        "/api/caregiver/patients/2/objects",
+        headers=caregiver_headers(2),
+    ).json()[0]
+    unauthorized_edit = client.patch(
+        f"/api/caregiver/patients/2/objects/{jordan_object['id']}",
+        headers=caregiver_headers(1),
+        json={"notes": "Unauthorized"},
+    )
+    assert deleted.status_code == 204
+    assert unauthorized_edit.status_code == 404
+
+
+def test_schedule_crud_flows_into_patient_query(client: TestClient) -> None:
+    seed(client)
+    created = client.post(
+        "/api/caregiver/patients/1/schedule",
+        headers=caregiver_headers(1),
+        json={"title": "Family walk", "scheduled_at": timestamp_at(12, 1)},
+    )
+    assert created.status_code == 201
+    item_id = created.json()["id"]
+    updated = client.patch(
+        f"/api/caregiver/patients/1/schedule/{item_id}",
+        headers=caregiver_headers(1),
+        json={"title": "Walk with Maya"},
+    )
+    assert updated.status_code == 200
+
+    query_response = client.post(
+        "/api/query",
+        headers=user_headers(1),
+        json={"question": "What am I doing today?"},
+    )
+    assert query_response.json()["answer"].startswith("Walk with Maya at 12:01 PM.")
+
+    deleted = client.delete(
+        f"/api/caregiver/patients/1/schedule/{item_id}",
+        headers=caregiver_headers(1),
+    )
+    jordan_item = client.get(
+        "/api/caregiver/patients/2/schedule",
+        headers=caregiver_headers(2),
+    ).json()[0]
+    unauthorized_edit = client.patch(
+        f"/api/caregiver/patients/2/schedule/{jordan_item['id']}",
+        headers=caregiver_headers(1),
+        json={"title": "Unauthorized"},
+    )
+    assert deleted.status_code == 204
+    assert unauthorized_edit.status_code == 404
+
+
+def test_caregiver_notes_are_scoped_and_record_author(client: TestClient) -> None:
+    seed(client)
+    created = client.post(
+        "/api/caregiver/patients/1/notes",
+        headers=caregiver_headers(1),
+        json={"note": "Keep the front entrance clear before Sarah visits."},
+    )
+    assert created.status_code == 201
+    assert created.json()["caregiver_id"] == 1
+    note_id = created.json()["id"]
+
+    maya_notes = client.get(
+        "/api/caregiver/patients/1/notes",
+        headers=caregiver_headers(1),
+    ).json()
+    assert any(note["id"] == note_id for note in maya_notes)
+    maya_cannot_read_jordan = client.get(
+        "/api/caregiver/patients/2/notes",
+        headers=caregiver_headers(1),
+    )
+    sam_cannot_write_alex = client.post(
+        "/api/caregiver/patients/1/notes",
+        headers=caregiver_headers(2),
+        json={"note": "Unauthorized note"},
+    )
+    assert maya_cannot_read_jordan.status_code == 404
+    assert sam_cannot_write_alex.status_code == 404
+
+    deleted = client.delete(
+        f"/api/caregiver/patients/1/notes/{note_id}",
+        headers=caregiver_headers(1),
+    )
+    assert deleted.status_code == 204
