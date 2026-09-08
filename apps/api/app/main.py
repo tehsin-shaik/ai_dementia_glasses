@@ -1,6 +1,6 @@
 """FastAPI entry point for the MemoryCue vertical slice."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import Depends, File, Form, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -83,16 +83,23 @@ async def create_memory(
     location_value = location.strip()
     description_value = description.strip()
     activity_value = (activity or "").strip()
+    object_name_value = (object_name or "").strip()
     if not location_value:
         raise HTTPException(status_code=422, detail="Location cannot be empty.")
+    if len(location_value) > 120:
+        raise HTTPException(status_code=422, detail="Location cannot exceed 120 characters.")
     if not description_value:
         raise HTTPException(status_code=422, detail="Description cannot be empty.")
+    if len(description_value) > 500:
+        raise HTTPException(status_code=422, detail="Description cannot exceed 500 characters.")
     if len(activity_value) > 200:
         raise HTTPException(status_code=422, detail="Activity cannot exceed 200 characters.")
+    if len(object_name_value) > 120:
+        raise HTTPException(status_code=422, detail="Object name cannot exceed 120 characters.")
 
-    # Store timestamps consistently as naive local datetimes for SQLite.
+    # Store timestamps consistently as naive local wall-clock datetimes for SQLite.
     if timestamp.tzinfo is not None:
-        timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+        timestamp = timestamp.astimezone().replace(tzinfo=None)
 
     stored_filename = await save_uploaded_image(image)
     try:
@@ -115,7 +122,7 @@ async def create_memory(
         db.flush()
 
         observation = None
-        normalized_object_name = (object_name or "").strip().casefold()
+        normalized_object_name = object_name_value.casefold()
         if normalized_object_name:
             observation = ObjectObservation(
                 user_id=user.id,
@@ -127,8 +134,7 @@ async def create_memory(
             db.add(observation)
             db.flush()
 
-        db.commit()
-        return MemoryResponse(
+        response = MemoryResponse(
             id=memory.id,
             timestamp=memory.timestamp,
             location=memory.location,
@@ -137,6 +143,8 @@ async def create_memory(
             image_url=image_url(memory.image_path),
             object_observation_id=observation.id if observation else None,
         )
+        db.commit()
+        return response
     except Exception:
         db.rollback()
         remove_uploaded_image(stored_filename)

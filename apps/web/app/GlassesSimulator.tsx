@@ -31,6 +31,7 @@ type GlassesSimulatorProps = {
   hudError: string | null;
   onHudQuery: (question: string) => void;
   onDismissHud: () => void;
+  onImagePreviewError: () => void;
 };
 
 type BaseCameraStatus = "inactive" | "starting" | "active" | "captured" | "error";
@@ -110,6 +111,7 @@ export default function GlassesSimulator({
   hudError,
   onHudQuery,
   onDismissHud,
+  onImagePreviewError,
 }: GlassesSimulatorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -306,7 +308,14 @@ export default function GlassesSimulator({
             <p className="captured-frame-label">Captured frame</p>
             <p className="captured-frame-name">{capturedFrame?.name}</p>
           </div>
-          <img src={capturedPreviewUrl ?? undefined} alt="Captured camera frame" />
+          <img
+            src={capturedPreviewUrl ?? undefined}
+            alt="Captured camera frame"
+            onError={(event) => {
+              event.currentTarget.hidden = true;
+              onImagePreviewError();
+            }}
+          />
         </div>
       )}
 

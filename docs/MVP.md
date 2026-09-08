@@ -58,7 +58,7 @@ rather than claiming the keys are definitely still there.
 
 ### 3. Who is Sarah?
 
-Retrieve a caregiver-defined person profile.
+Retrieve the deterministic demo's stored person record. A caregiver-facing profile setup flow is not implemented yet.
 
 Example:
 

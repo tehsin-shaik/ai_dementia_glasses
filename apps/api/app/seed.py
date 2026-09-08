@@ -14,7 +14,6 @@ def seed_demo_data(db: Session) -> dict[str, int]:
     # Delete children first so this remains safe when foreign keys are enforced.
     for model in (ScheduleItem, Person, ObjectObservation, Memory, User):
         db.execute(delete(model))
-    db.commit()
 
     user = User(name="Demo User")
     db.add(user)

@@ -64,6 +64,10 @@ Dismissible HUD cue
 
 There is no continuous camera analysis, background querying, or face-recognition path in this prototype.
 
+## Timestamp Convention
+
+The local prototype stores timestamps as naive local wall-clock datetimes. Seed data and schedule queries use the backend's local date, while browser `datetime-local` and camera capture values represent the browser's local wall-clock time. If an API client sends a timezone-aware timestamp, the API converts it to the backend's local time before removing the timezone for SQLite storage. This is intentionally simple and is not a multi-timezone production model.
+
 ## Optional Vision Analysis
 
 Uploaded images and browser-captured frames can be sent to one configured vision provider through a provider-neutral interface:

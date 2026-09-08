@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, SyntheticEvent, useEffect, useRef, useState } from "react";
 
 import GlassesSimulator from "./GlassesSimulator";
 import { MemoryHudState } from "./MemoryHud";
@@ -66,7 +66,96 @@ function imageUrl(path: string): string {
 
 async function errorMessage(response: Response, fallback: string): Promise<string> {
   const payload = (await response.json().catch(() => null)) as ApiError | null;
-  return payload?.detail ?? fallback;
+  return typeof payload?.detail === "string" ? payload.detail : fallback;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function parseQueryResult(payload: unknown): QueryResult {
+  if (
+    !isRecord(payload) ||
+    typeof payload.answer !== "string" ||
+    typeof payload.intent !== "string" ||
+    !Array.isArray(payload.source_ids) ||
+    !payload.source_ids.every((sourceId) => typeof sourceId === "string")
+  ) {
+    throw new Error("The question returned an invalid response.");
+  }
+  return {
+    answer: payload.answer,
+    intent: payload.intent,
+    source_ids: payload.source_ids,
+  };
+}
+
+function parseVisionAnalysis(payload: unknown): VisionAnalysis {
+  if (!isRecord(payload) || typeof payload.description !== "string" || !Array.isArray(payload.objects)) {
+    throw new Error("The image analysis returned an invalid response.");
+  }
+
+  const objects = payload.objects;
+  if (
+    !objects.every(
+      (object) =>
+        isRecord(object) &&
+        typeof object.name === "string" &&
+        (object.location === null || typeof object.location === "string") &&
+        (object.confidence === null || typeof object.confidence === "number"),
+    )
+  ) {
+    throw new Error("The image analysis returned an invalid response.");
+  }
+
+  const { description, location, activity } = payload;
+  if (
+    (location !== null && typeof location !== "string") ||
+    (activity !== null && typeof activity !== "string")
+  ) {
+    throw new Error("The image analysis returned an invalid response.");
+  }
+
+  return {
+    description,
+    location: location as string | null,
+    activity: activity as string | null,
+    objects: objects as DetectedObject[],
+  };
+}
+
+function parseSavedMemory(payload: unknown): { location: string; object_observation_id: number | null } {
+  if (
+    !isRecord(payload) ||
+    typeof payload.location !== "string" ||
+    (payload.object_observation_id !== null && typeof payload.object_observation_id !== "number")
+  ) {
+    throw new Error("The memory save returned an invalid response.");
+  }
+  return {
+    location: payload.location,
+    object_observation_id: payload.object_observation_id,
+  };
+}
+
+function parseMemoryList(payload: unknown): MemoryListItem[] {
+  if (!Array.isArray(payload)) {
+    throw new Error("The memory list returned an invalid response.");
+  }
+  if (
+    !payload.every(
+      (memory) =>
+        isRecord(memory) &&
+        typeof memory.id === "number" &&
+        typeof memory.timestamp === "string" &&
+        typeof memory.location === "string" &&
+        typeof memory.description === "string" &&
+        (memory.image_url === null || typeof memory.image_url === "string"),
+    )
+  ) {
+    throw new Error("The memory list returned an invalid response.");
+  }
+  return payload as MemoryListItem[];
 }
 
 export default function Home() {
@@ -114,7 +203,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_URL}/api/memories`);
       if (response.ok) {
-        setRecentMemories((await response.json()) as MemoryListItem[]);
+        setRecentMemories(parseMemoryList(await response.json()));
       }
     } catch {
       // The page remains usable when the API has not been started yet.
@@ -173,7 +262,7 @@ export default function Home() {
       if (!response.ok) {
         throw new Error(await errorMessage(response, "The question could not be answered."));
       }
-      const queryResult = (await response.json()) as QueryResult;
+      const queryResult = parseQueryResult(await response.json());
       setResult(queryResult);
       if (surface === "hud" && hudRequestRef.current === hudRequestId) {
         setHudAnswer(queryResult.answer);
@@ -181,9 +270,11 @@ export default function Home() {
       }
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Something went wrong.";
-      if (surface === "hud" && hudRequestRef.current === hudRequestId) {
-        setHudError(message);
-        setHudState("error");
+      if (surface === "hud") {
+        if (hudRequestRef.current === hudRequestId) {
+          setHudError(message);
+          setHudState("error");
+        }
       } else {
         setError(message);
       }
@@ -235,10 +326,7 @@ export default function Home() {
       if (!response.ok) {
         throw new Error(await errorMessage(response, "The memory could not be saved."));
       }
-      const savedMemory = (await response.json()) as {
-        location: string;
-        object_observation_id: number | null;
-      };
+      const savedMemory = parseSavedMemory(await response.json());
       setSaveMessage(
         savedMemory.object_observation_id
           ? `Memory saved — ${memoryObjectName.trim()} observed at ${savedMemory.location}.`
@@ -279,7 +367,7 @@ export default function Home() {
         throw new Error(await errorMessage(response, "The image could not be analyzed."));
       }
 
-      const analysis = (await response.json()) as VisionAnalysis;
+      const analysis = parseVisionAnalysis(await response.json());
       setVisionAnalysis(analysis);
       setCameraSaved(false);
       setMemoryLocation(analysis.location ?? "");
@@ -300,6 +388,15 @@ export default function Home() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void askQuestion();
+  }
+
+  function handleImagePreviewError(event: SyntheticEvent<HTMLImageElement>) {
+    event.currentTarget.hidden = true;
+    setError("A memory image could not be displayed.");
+  }
+
+  function reportImagePreviewError() {
+    setError("A memory image could not be displayed.");
   }
 
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
@@ -371,8 +468,7 @@ export default function Home() {
             <p className="section-kicker">Start with the demo</p>
             <h2 id="demo-heading">Load a small, grounded memory set.</h2>
             <p>
-              This prototype uses deterministic example memories, a caregiver-provided profile,
-              and today&apos;s schedule.
+              This prototype uses deterministic example memories, a pre-seeded person record, and today&apos;s schedule.
             </p>
             <button className="secondary-button" type="button" onClick={loadDemo} disabled={isSeeding}>
               {isSeeding ? "Loading..." : "Load demo data"}
@@ -433,6 +529,7 @@ export default function Home() {
           hudError={hudError}
           onHudQuery={askHudQuestion}
           onDismissHud={dismissHud}
+          onImagePreviewError={reportImagePreviewError}
         />
 
         <section className="memory-panel" aria-labelledby="memory-heading">
@@ -455,7 +552,9 @@ export default function Home() {
             </label>
             {memoryImage && (
               <div className="selected-image">
-                {previewUrl && <img src={previewUrl} alt="Selected memory preview" />}
+                {previewUrl && (
+                  <img src={previewUrl} alt="Selected memory preview" onError={handleImagePreviewError} />
+                )}
                 <div>
                   <strong>{memoryImage.name}</strong>
                   <span>{Math.max(1, Math.round(memoryImage.size / 1024))} KB selected</span>
@@ -555,7 +654,7 @@ export default function Home() {
             <div className="recent-list">
               {recentMemories.slice(0, 5).map((memory) => (
                 <article className="recent-memory" key={memory.id}>
-                  {memory.image_url && <img src={imageUrl(memory.image_url)} alt="" />}
+                  {memory.image_url && <img src={imageUrl(memory.image_url)} alt="" onError={handleImagePreviewError} />}
                   <div>
                     <p className="recent-time">{displayTime(memory.timestamp)}</p>
                     <p className="recent-location">{memory.location}</p>

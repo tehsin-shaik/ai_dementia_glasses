@@ -13,7 +13,7 @@ For example, a user could ask:
 * **Who is Sarah?**
 * **What am I doing today?**
 
-Instead of relying on a general-purpose chatbot to guess, MemoryCue is designed to answer from information that was previously observed or provided by a caregiver.
+Instead of relying on a general-purpose chatbot to guess, MemoryCue is designed to answer from information that was previously observed or explicitly added to the memory system.
 
 ## The Idea
 
@@ -72,7 +72,7 @@ The user can ask:
 
 > Who is Sarah?
 
-The system retrieves caregiver-provided information about that person.
+The demo retrieves the stored profile record for that person. A caregiver-facing setup interface is not implemented yet.
 
 ### 4. Daily schedule support
 
@@ -148,9 +148,9 @@ MemoryCue responds:
 
 The distinction matters: the system reports what it remembers seeing rather than pretending it knows where the keys are now.
 
-## Caregiver Support
+## Future Caregiver Support
 
-The project also explores a caregiver interface where trusted people can provide useful context such as:
+The project may later explore a caregiver interface where trusted people can provide useful context such as:
 
 * names and relationships;
 * daily routines;
@@ -166,7 +166,7 @@ Relationship: Daughter
 Visiting today at 3:30 PM
 ```
 
-This information can then be used to answer simple questions in a familiar and consistent way.
+The current app has no caregiver dashboard or profile-management flow; the example person and schedule are loaded by the deterministic demo seed.
 
 ## Future Smart Glasses Integration
 
@@ -241,6 +241,8 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000), load the demo data, and ask one of the four suggested questions. To create a memory, use the **Add a memory** form below the question controls. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
+
+The local prototype stores timestamps as naive local wall-clock values. The browser and backend use their local time for manual/camera entries and the demo schedule; timezone-aware API timestamps are converted to the backend's local time before storage.
 
 ## Safety and Scope
 

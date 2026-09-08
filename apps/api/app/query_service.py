@@ -1,6 +1,6 @@
 """Deterministic intent matching and grounded answer generation."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 import re
 
 from sqlalchemy import select
@@ -92,6 +92,7 @@ def answer_question(db: Session, question: str) -> QueryResponse:
         person = db.scalar(
             select(Person)
             .where(Person.user_id == user.id, Person.name.ilike("sarah"))
+            .order_by(Person.id)
             .limit(1)
         )
         if person is None:
@@ -103,14 +104,14 @@ def answer_question(db: Session, question: str) -> QueryResponse:
         )
 
     today_start = datetime.combine(date.today(), time.min)
-    tomorrow_start = datetime.combine(date.today(), time.max)
+    tomorrow_start = datetime.combine(date.today() + timedelta(days=1), time.min)
     schedule_items = list(
         db.scalars(
             select(ScheduleItem)
             .where(
                 ScheduleItem.user_id == user.id,
                 ScheduleItem.scheduled_at >= today_start,
-                ScheduleItem.scheduled_at <= tomorrow_start,
+                ScheduleItem.scheduled_at < tomorrow_start,
             )
             .order_by(ScheduleItem.scheduled_at, ScheduleItem.id)
         )

@@ -6,14 +6,16 @@ import os
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.database import Base, get_db
+from app.database import Base, create_database_engine, get_db
 from app.main import app
+from app.media_storage import MAX_UPLOAD_BYTES, safe_media_path
 from app.vision import VisionAnalysis
 from app.vision import provider as vision_provider
+from app.vision.provider import VisionProviderError
 
 
 @pytest.fixture
@@ -23,9 +25,8 @@ def client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
     monkeypatch.delenv("VISION_PROVIDER", raising=False)
     monkeypatch.delenv("VISION_MODEL", raising=False)
     monkeypatch.delenv("VISION_API_KEY", raising=False)
-    engine = create_engine(
+    engine = create_database_engine(
         f"sqlite:///{tmp_path / 'test.db'}",
-        connect_args={"check_same_thread": False},
     )
     TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)
@@ -89,6 +90,15 @@ def test_health(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_sqlite_foreign_keys_are_enabled(tmp_path) -> None:
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'integrity.db'}")
+    try:
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+    finally:
+        engine.dispose()
 
 
 def test_recent_activity_query(client: TestClient) -> None:
@@ -184,6 +194,37 @@ def test_create_uploaded_memory(client: TestClient) -> None:
     assert media_response.content == b"fake-image-content"
 
 
+def test_timezone_aware_timestamp_uses_backend_local_time(client: TestClient) -> None:
+    aware_timestamp = datetime.now().astimezone().replace(second=0, microsecond=0)
+    response = upload_memory(
+        client,
+        timestamp=aware_timestamp.isoformat(),
+        location="Kitchen counter",
+        description="A timestamp with an explicit timezone.",
+    )
+
+    assert response.status_code == 201
+    assert response.json()["timestamp"] == aware_timestamp.replace(tzinfo=None).isoformat()
+
+
+def test_failed_memory_commit_removes_uploaded_image(client: TestClient, monkeypatch) -> None:
+    def fail_commit(_session) -> None:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    with TestClient(app, raise_server_exceptions=False) as failing_client:
+        response = upload_memory(
+            failing_client,
+            timestamp=timestamp_at(),
+            location="Kitchen counter",
+            description="The database write will fail.",
+        )
+
+    assert response.status_code == 500
+    media_directory = Path(os.environ["MEDIA_DIR"])
+    assert not media_directory.exists() or not list(media_directory.iterdir())
+
+
 def test_create_memory_with_object_observation(client: TestClient) -> None:
     seed(client)
     response = upload_memory(
@@ -232,6 +273,44 @@ def test_reject_unsupported_file_type(client: TestClient) -> None:
     assert "Unsupported image type" in response.json()["detail"]
 
 
+def test_reject_mismatched_image_content_type(client: TestClient) -> None:
+    response = client.post(
+        "/api/memories",
+        files={"image": ("memory.png", b"fake-image-content", "image/jpeg")},
+        data={
+            "timestamp": timestamp_at(),
+            "location": "Kitchen counter",
+            "description": "The image type is intentionally mismatched.",
+        },
+    )
+    assert response.status_code == 400
+    assert "content type" in response.json()["detail"]
+
+
+def test_reject_oversized_image(client: TestClient) -> None:
+    response = client.post(
+        "/api/memories",
+        files={"image": ("memory.jpg", b"x" * (MAX_UPLOAD_BYTES + 1), "image/jpeg")},
+        data={
+            "timestamp": timestamp_at(),
+            "location": "Kitchen counter",
+            "description": "The image is intentionally oversized.",
+        },
+    )
+    assert response.status_code == 413
+
+
+def test_reject_memory_field_overflow(client: TestClient) -> None:
+    response = upload_memory(
+        client,
+        timestamp=timestamp_at(),
+        location="k" * 121,
+        description="A valid description.",
+    )
+    assert response.status_code == 422
+    assert "Location cannot exceed" in response.json()["detail"]
+
+
 def test_reject_missing_required_fields(client: TestClient) -> None:
     missing_form_fields = client.post(
         "/api/memories",
@@ -252,8 +331,39 @@ def test_reject_missing_required_fields(client: TestClient) -> None:
     assert missing_image.status_code == 422
 
 
-def test_media_path_traversal_is_blocked(client: TestClient) -> None:
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "../secret.jpg",
+        "../../secret.jpg",
+        "..%2Fsecret.jpg",
+        "..\\secret.jpg",
+        "C:/secret.jpg",
+        "C:\\secret.jpg",
+        "/etc/passwd",
+        "notes.txt",
+    ],
+)
+def test_media_path_traversal_is_blocked(client: TestClient, tmp_path, monkeypatch, filename: str) -> None:
+    monkeypatch.setenv("MEDIA_DIR", str(tmp_path / "media"))
+    with pytest.raises(HTTPException) as error:
+        safe_media_path(filename)
+    assert error.value.status_code == 404
+
+
+def test_media_path_traversal_is_blocked_by_route(client: TestClient) -> None:
     response = client.get("/api/media/..%5Csecret.txt")
+    assert response.status_code == 404
+
+
+def test_unsupported_media_file_is_not_served(client: TestClient, tmp_path, monkeypatch) -> None:
+    media_directory = tmp_path / "media"
+    media_directory.mkdir()
+    (media_directory / "notes.txt").write_text("not an image", encoding="utf-8")
+    monkeypatch.setenv("MEDIA_DIR", str(media_directory))
+
+    response = client.get("/api/media/notes.txt")
+
     assert response.status_code == 404
 
 
@@ -337,6 +447,21 @@ def test_vision_analysis_handles_invalid_provider_response(client: TestClient, m
             return {"description": "This has an unexpected shape.", "unexpected": True}
 
     monkeypatch.setattr(vision_provider, "get_vision_analyzer", lambda: InvalidVisionAnalyzer())
+    response = client.post(
+        "/api/vision/analyze",
+        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+    )
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "The image could not be analyzed."}
+
+
+def test_vision_analysis_handles_provider_failure(client: TestClient, monkeypatch) -> None:
+    class FailingVisionAnalyzer:
+        async def analyze_image(self, image_bytes, filename, context=None):
+            raise VisionProviderError("provider failed")
+
+    monkeypatch.setattr(vision_provider, "get_vision_analyzer", lambda: FailingVisionAnalyzer())
     response = client.post(
         "/api/vision/analyze",
         files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
