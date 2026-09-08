@@ -2,6 +2,8 @@
 
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
+import GlassesSimulator from "./GlassesSimulator";
+
 type QueryResult = {
   answer: string;
   intent: string;
@@ -28,6 +30,8 @@ type VisionAnalysis = {
   activity: string | null;
   objects: DetectedObject[];
 };
+
+type MemoryImageSource = "upload" | "camera" | null;
 
 type ApiError = {
   detail?: string;
@@ -72,6 +76,7 @@ export default function Home() {
   const [isSeeding, setIsSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [memoryImage, setMemoryImage] = useState<File | null>(null);
+  const [memoryImageSource, setMemoryImageSource] = useState<MemoryImageSource>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [memoryTimestamp, setMemoryTimestamp] = useState("");
   const [memoryLocation, setMemoryLocation] = useState("");
@@ -83,6 +88,7 @@ export default function Home() {
   const [visionError, setVisionError] = useState(false);
   const [isAnalyzingVision, setIsAnalyzingVision] = useState(false);
   const [isSavingMemory, setIsSavingMemory] = useState(false);
+  const [cameraSaved, setCameraSaved] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [recentMemories, setRecentMemories] = useState<MemoryListItem[]>([]);
 
@@ -196,6 +202,9 @@ export default function Home() {
           ? `Memory saved — ${memoryObjectName.trim()} observed at ${savedMemory.location}.`
           : "Memory saved.",
       );
+      if (memoryImageSource === "camera") {
+        setCameraSaved(true);
+      }
       await refreshMemories();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
@@ -230,6 +239,7 @@ export default function Home() {
 
       const analysis = (await response.json()) as VisionAnalysis;
       setVisionAnalysis(analysis);
+      setCameraSaved(false);
       setMemoryLocation(analysis.location ?? "");
       setMemoryActivity(analysis.activity ?? "");
       setMemoryDescription(analysis.description);
@@ -251,14 +261,49 @@ export default function Home() {
   }
 
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
-    setMemoryImage(event.target.files?.[0] ?? null);
+    const nextFile = event.target.files?.[0] ?? null;
+    setMemoryImage(nextFile);
+    setMemoryImageSource(nextFile ? "upload" : null);
     setSaveMessage(null);
     setError(null);
     setVisionAnalysis(null);
     setVisionMessage(null);
     setVisionError(false);
-    const nextFile = event.target.files?.[0];
+    setCameraSaved(false);
     setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
+  }
+
+  function handleCameraCapture(file: File) {
+    setMemoryImage(file);
+    setMemoryImageSource("camera");
+    setMemoryTimestamp(localDateTimeValue(new Date()));
+    setMemoryLocation("");
+    setMemoryActivity("");
+    setMemoryDescription("");
+    setMemoryObjectName("");
+    setVisionAnalysis(null);
+    setVisionMessage(null);
+    setVisionError(false);
+    setCameraSaved(false);
+    setSaveMessage(null);
+    setError(null);
+    setPreviewUrl(URL.createObjectURL(file));
+  }
+
+  function handleCameraRetake() {
+    setMemoryImage(null);
+    setMemoryImageSource(null);
+    setMemoryLocation("");
+    setMemoryActivity("");
+    setMemoryDescription("");
+    setMemoryObjectName("");
+    setVisionAnalysis(null);
+    setVisionMessage(null);
+    setVisionError(false);
+    setCameraSaved(false);
+    setSaveMessage(null);
+    setError(null);
+    setPreviewUrl(null);
   }
 
   return (
@@ -327,6 +372,18 @@ export default function Home() {
             </div>
           </section>
         </div>
+
+        <GlassesSimulator
+          capturedFrame={memoryImageSource === "camera" ? memoryImage : null}
+          capturedPreviewUrl={memoryImageSource === "camera" ? previewUrl : null}
+          isAnalyzing={isAnalyzingVision && memoryImageSource === "camera"}
+          isSaving={isSavingMemory && memoryImageSource === "camera"}
+          analysisComplete={Boolean(visionAnalysis && memoryImageSource === "camera")}
+          saved={cameraSaved}
+          onCapture={handleCameraCapture}
+          onRetake={handleCameraRetake}
+          onAnalyze={() => void analyzeImage()}
+        />
 
         <section className="memory-panel" aria-labelledby="memory-heading">
           <div className="memory-panel-heading">

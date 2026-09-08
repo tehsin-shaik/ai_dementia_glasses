@@ -109,6 +109,18 @@ The API key is read only by the backend and must never be committed or exposed t
 
 AI-generated metadata is a suggestion, not a fact. Review and edit it before saving.
 
+## Glasses Simulator
+
+The browser-based Glasses Simulator uses the laptop webcam as a stand-in for a future wearable camera. Camera access normally requires `localhost` or HTTPS; no microphone permission is requested.
+
+1. Open the app locally and choose **Start camera**.
+2. Point the camera at a useful moment and choose **Capture what I see**.
+3. Choose **Analyze with AI**, then review or edit the suggested fields.
+4. Choose **Save memory** to store the captured frame through the normal memory flow.
+5. Ask a supported question such as **Where are my keys?** to retrieve the saved context.
+
+Use **Retake** to replace the captured frame and **Stop camera** when finished. Capture and analysis are always user-triggered in this milestone. MemoryCue does not continuously record, analyze frames, or create memories in the background.
+
 ## Example
 
 A simulated day might contain:
@@ -152,7 +164,7 @@ This information can then be used to answer simple questions in a familiar and c
 
 ## Future Smart Glasses Integration
 
-The initial prototype runs entirely as software using simulated camera input.
+The initial prototype runs entirely as software. The Glasses Simulator uses a laptop webcam to approximate a first-person wearable camera, while uploaded images remain supported as a separate input.
 
 The architecture is intended to later support wearable devices such as Meta AI glasses.
 

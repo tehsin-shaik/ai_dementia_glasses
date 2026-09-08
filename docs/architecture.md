@@ -9,7 +9,10 @@ Camera / Simulator
 Capture
         |
         v
-Memory extraction / image analysis
+Optional image analysis
+        |
+        v
+Review and edit
         |
         v
 Memory storage
@@ -26,23 +29,25 @@ Grounded answer
 
 ## Hardware Abstraction
 
-The input source should be replaceable without changing the memory and question-answering flow:
+The input source should be replaceable without changing the memory, analysis, and question-answering flow:
 
 ```text
-Browser simulator
-        |
-        |
-Meta simulator ------> Wearable interface
-        |
-        |
-Real Meta glasses
+Uploaded image --------┐
+                       |
+Browser webcam --------+--> same vision analysis
+                       |          |
+Future Meta frame ----┘          v
+                              review/edit
+                                  |
+                                  v
+                              memory save
 ```
 
 The backend should eventually be independent of the device producing the image/audio input.
 
 ## Optional Vision Analysis
 
-Uploaded images can be sent to one configured vision provider through a provider-neutral interface:
+Uploaded images and browser-captured frames can be sent to one configured vision provider through a provider-neutral interface:
 
 ```text
 Temporary image upload

@@ -28,6 +28,12 @@ When configured, the Stage 3 vision flow analyzes an uploaded image and proposes
 
 The current prototype accepts `.jpg`, `.jpeg`, `.png`, and `.webp` images up to 10 MB.
 
+## Glasses Simulator
+
+Stage 4 adds a browser-only webcam simulator. The user can start the camera, capture one frame, send that frame through the existing vision-analysis endpoint, review or edit the suggestions, and explicitly save it through the existing memory endpoint. Captured frames use the same image and retrieval flow as uploaded images.
+
+Camera access normally requires `localhost` or HTTPS. The simulator does not request microphone access, continuously analyze video, record in the background, or capture frames automatically. The user must trigger each capture and save.
+
 ## Questions the MVP Must Answer
 
 ### 1. What was I doing?
