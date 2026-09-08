@@ -15,6 +15,17 @@ For example, a user could ask:
 
 Instead of relying on a general-purpose chatbot to guess, MemoryCue is designed to answer from information that was previously observed or explicitly added to the memory system.
 
+## Explore MemoryCue
+
+The prototype has four focused surfaces:
+
+* [`/`](http://localhost:3000/) — the product and research overview;
+* [`/app`](http://localhost:3000/app) — the wearer-facing glasses simulator;
+* [`/caregiver`](http://localhost:3000/caregiver) — trusted patient context and setup; and
+* [`/demo`](http://localhost:3000/demo) — development tools for seeding data and inspecting responses.
+
+The product page is the natural starting point. The wearer app keeps the live camera, memory capture, AI review, everyday cues, and approved known-person recognition close at hand. The caregiver surface is intentionally form-oriented, while the demo workspace keeps profile switching and response diagnostics available for local development.
+
 ## The Idea
 
 Memory loss can make ordinary daily situations unexpectedly difficult.
@@ -118,7 +129,7 @@ AI-generated metadata is a suggestion, not a fact. Review and edit it before sav
 The browser-based Glasses Simulator uses the laptop webcam as a stand-in for a future wearable camera. Camera access normally requires `localhost` or HTTPS; no microphone permission is requested.
 
 1. Open the app locally and choose **Start camera**.
-2. Point the camera at a useful moment and choose **Capture what I see**.
+2. Point the camera at a useful moment and choose **Capture memory**.
 3. Choose **Analyze with AI**, then review or edit the suggested fields.
 4. Choose **Save memory** to store the captured frame through the normal memory flow.
 5. Ask a supported question such as **Where are my keys?** to retrieve the saved context.
@@ -277,7 +288,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), choose **Alex** or **Jordan** in the development profile selector, and load the demo data. Ask one of the four suggested questions to see profile-specific answers. To create a memory, use the **Add a memory** form below the question controls. Open [http://localhost:3000/caregiver](http://localhost:3000/caregiver) for the development-only caregiver setup page, select Maya, Sam, or Taylor, and manage only the linked patient context. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
+Open [http://localhost:3000](http://localhost:3000) for the product page. Choose **Try MemoryCue** or open [http://localhost:3000/app](http://localhost:3000/app) for the wearer experience. Use [http://localhost:3000/demo](http://localhost:3000/demo) to choose **Alex** or **Jordan**, seed deterministic data, and inspect grounded answers. Open [http://localhost:3000/caregiver](http://localhost:3000/caregiver) for the caregiver setup page, select Maya, Sam, or Taylor, and manage only the linked patient context. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
 
 The local prototype stores timestamps as naive local wall-clock values. The browser and backend use their local time for manual/camera entries and the demo schedule; timezone-aware API timestamps are converted to the backend's local time before storage.
 

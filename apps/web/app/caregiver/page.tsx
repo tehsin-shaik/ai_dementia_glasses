@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 
 import {
   caregiverFetch,
 } from "../api";
+import SiteNav from "../SiteNav";
 
 type Tab = "profile" | "people" | "objects" | "schedule" | "notes";
 
@@ -897,6 +897,7 @@ export default function CaregiverPage() {
 
   return (
     <main className="caregiver-page-shell">
+      <SiteNav />
       <section className="caregiver-card" aria-labelledby="caregiver-title">
         <header className="caregiver-header">
           <div>
@@ -916,9 +917,6 @@ export default function CaregiverPage() {
               </select>
               <small>Development prototype — identity is simulated and not secure authentication.</small>
             </label>
-            <Link className="caregiver-link" href="/">
-              Patient experience
-            </Link>
           </div>
         </header>
 

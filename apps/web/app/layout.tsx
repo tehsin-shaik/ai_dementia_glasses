@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MemoryCue",
-  description: "Software memory assistant prototype",
+  title: "MemoryCue — Memory, when you need it.",
+  description: "AI-assisted memory support for people experiencing memory loss and the caregivers who support them.",
 };
 
 export default function RootLayout({

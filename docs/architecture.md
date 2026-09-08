@@ -45,6 +45,22 @@ Future Meta frame ----┘          v
 
 The backend should eventually be independent of the device producing the image/audio input.
 
+## Frontend Surfaces
+
+The web client is organized around the different people and tasks in the prototype:
+
+```text
+Product overview (/)
+        |
+        +--> Wearer app (/app) ------> camera, cues, capture, AI review
+        |
+        +--> Caregiver setup (/caregiver) -> patient context and approvals
+        |
+        +--> Demo workspace (/demo) ------> seed data and inspect responses
+```
+
+The product page is a public-facing introduction. The wearer route is the glasses-style interaction surface and keeps development diagnostics out of the primary experience. Caregiver setup remains a calm, form-oriented management surface. The demo workspace exposes local profile switching, deterministic seed data, recent memories, and raw query details for development. These routes share the existing API contracts and identity headers; the route separation is a presentation change, not a new authorization boundary.
+
 ## Contextual HUD Query Flow
 
 The live camera HUD is a presentation surface for the existing question-answering path. A manual quick cue or custom question is sent to `POST /api/query`, then the returned grounded answer is shown as a short overlay inside the live preview. The normal response panel continues to hold developer details such as source IDs; the wearer-facing HUD does not display them.

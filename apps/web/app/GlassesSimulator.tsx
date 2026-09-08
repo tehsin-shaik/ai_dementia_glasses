@@ -260,8 +260,8 @@ export default function GlassesSimulator({
     <section className="camera-panel" aria-labelledby="camera-heading">
       <div className="camera-panel-heading">
         <div>
-          <p className="section-kicker">Browser hardware simulator</p>
-          <h2 id="camera-heading">Glasses Simulator</h2>
+          <p className="section-kicker">Live camera</p>
+          <h2 id="camera-heading">Live view</h2>
         </div>
         <span className={`camera-status camera-status-${status}`} role="status">
           <span className="status-dot" aria-hidden="true" />
@@ -269,9 +269,8 @@ export default function GlassesSimulator({
         </span>
       </div>
       <p className="camera-helper">
-        Point the laptop camera at a useful moment, capture one frame, then review the AI suggestions before saving.
-        Use <strong>Who is this?</strong> for one explicit check against caregiver-approved people. Camera access works on
-        localhost or HTTPS. No microphone is requested.
+        Capture a moment, then review the details before saving. Ask <strong>Who is this?</strong> for an explicit check
+        against caregiver-approved people.
       </p>
 
       <div className="camera-view" data-camera-active={showLivePreview}>
@@ -302,7 +301,7 @@ export default function GlassesSimulator({
         )}
         {isActive && (
           <button className="primary-button" type="button" onClick={() => void captureFrame()} disabled={isRecognizing}>
-            Capture what I see
+            Capture memory
           </button>
         )}
         {isActive && (
