@@ -62,7 +62,40 @@ Existing retrieval and grounded answer
 Dismissible HUD cue
 ```
 
-There is no continuous camera analysis, background querying, or face-recognition path in this prototype.
+There is no continuous camera analysis or background querying. Stage 7 adds a separate, explicit single-frame face-recognition path.
+
+## Approved Known-Person Recognition Flow
+
+Face recognition is deliberately bounded by the caregiver-managed patient profile:
+
+```text
+Existing Person record
+        +
+Caregiver-approved reference photo
+        |
+        v
+Local face-recognition embedding
+        |
+        v
+PersonFaceEnrollment(patient_user_id, person_id, embedding)
+        ^
+        |
+Current patient + explicit "Who is this?" frame
+        |
+        v
+Patient-scoped candidate comparison
+        |
+        v
+Conservative threshold + ambiguity margin
+        |
+        +--> stored Person name/relationship in short HUD cue
+        |
+        +--> unknown when weak, ambiguous, or not enrolled
+```
+
+The provider boundary lives under `app/face/`: `FaceRecognizer` exposes embedding extraction and similarity comparison, `provider.py` contains the local `dlib-bin` implementation, and `service.py` owns serialization plus threshold and margin decisions. Route handlers do not call a cloud service or perform a global search. The current provider uses dlib's HOG detector, five-point landmark predictor, and pretrained `face-recognition-models` 128-dimensional ResNet encoder on CPU; similarity is normalized to a larger-is-better value.
+
+Only the derived embedding is stored. The caregiver reference image is read temporarily for validation and embedding extraction, then discarded. The recognition response exposes only `recognized`, the matched stored person fields when safe, and a bounded confidence value; it never returns embeddings or candidate lists. Confidence is intentionally withheld from the wearer HUD. This remains an opt-in research prototype and is not biometric authentication or production biometric security.
 
 ## Development Identity Boundary
 

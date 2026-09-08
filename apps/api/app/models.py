@@ -83,6 +83,19 @@ class Person(Base):
     relationship: Mapped[str] = mapped_column(String(120), nullable=False)
 
 
+class PersonFaceEnrollment(Base):
+    """One caregiver-approved local face embedding for a patient person record."""
+
+    __tablename__ = "person_face_enrollments"
+    __table_args__ = (UniqueConstraint("person_id", name="uq_person_face_enrollment_person"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id"), nullable=False, index=True)
+    patient_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    embedding: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, index=True)
+
+
 class ScheduleItem(Base):
     __tablename__ = "schedule_items"
 

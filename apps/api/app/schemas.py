@@ -60,6 +60,7 @@ class PersonResponse(BaseModel):
     id: int
     name: str
     relationship: str
+    face_enrolled: bool = False
 
 
 class PersonCreate(BaseModel):
@@ -70,6 +71,20 @@ class PersonCreate(BaseModel):
 class PersonPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     relationship: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class FaceEnrollmentStatus(BaseModel):
+    person_id: int
+    enrolled: bool
+    created_at: datetime | None
+
+
+class FaceRecognitionResponse(BaseModel):
+    recognized: bool
+    person_id: int | None
+    name: str | None
+    relationship: str | None
+    confidence: float = Field(ge=0, le=1)
 
 
 class ImportantObjectResponse(BaseModel):

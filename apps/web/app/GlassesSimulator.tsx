@@ -26,6 +26,8 @@ type GlassesSimulatorProps = {
   onCapture: (file: File) => void;
   onRetake: () => void;
   onAnalyze: () => void;
+  onRecognize: (file: File) => void;
+  isRecognizing: boolean;
   hudState: MemoryHudState;
   hudAnswer: string | null;
   hudError: string | null;
@@ -106,6 +108,8 @@ export default function GlassesSimulator({
   onCapture,
   onRetake,
   onAnalyze,
+  onRecognize,
+  isRecognizing,
   hudState,
   hudAnswer,
   hudError,
@@ -224,6 +228,21 @@ export default function GlassesSimulator({
     }
   }
 
+  async function recognizeCurrentFrame() {
+    if (!videoRef.current || !canvasRef.current) {
+      setCameraError("The camera preview is unavailable.");
+      return;
+    }
+
+    try {
+      const frame = await captureVideoFrame(videoRef.current, canvasRef.current);
+      onRecognize(frame);
+      setCameraError(null);
+    } catch (error) {
+      setCameraError(error instanceof Error ? error.message : "The camera frame could not be captured.");
+    }
+  }
+
   function retakeFrame() {
     onRetake();
     setBaseStatus(streamRef.current ? "active" : "inactive");
@@ -251,7 +270,8 @@ export default function GlassesSimulator({
       </div>
       <p className="camera-helper">
         Point the laptop camera at a useful moment, capture one frame, then review the AI suggestions before saving.
-        Camera access works on localhost or HTTPS. No microphone is requested.
+        Use <strong>Who is this?</strong> for one explicit check against caregiver-approved people. Camera access works on
+        localhost or HTTPS. No microphone is requested.
       </p>
 
       <div className="camera-view" data-camera-active={showLivePreview}>
@@ -281,8 +301,18 @@ export default function GlassesSimulator({
           </button>
         )}
         {isActive && (
-          <button className="primary-button" type="button" onClick={() => void captureFrame()}>
+          <button className="primary-button" type="button" onClick={() => void captureFrame()} disabled={isRecognizing}>
             Capture what I see
+          </button>
+        )}
+        {isActive && (
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void recognizeCurrentFrame()}
+            disabled={isRecognizing}
+          >
+            {isRecognizing ? "Checking..." : "Who is this?"}
           </button>
         )}
         {hasFrame && (
@@ -296,7 +326,7 @@ export default function GlassesSimulator({
           </>
         )}
         {streamRef.current && (
-          <button className="text-button" type="button" onClick={stopCamera} disabled={isAnalyzing || isSaving}>
+          <button className="text-button" type="button" onClick={stopCamera} disabled={isAnalyzing || isSaving || isRecognizing}>
             Stop camera
           </button>
         )}

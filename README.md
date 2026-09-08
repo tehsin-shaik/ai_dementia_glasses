@@ -48,7 +48,7 @@ The first version is a software-only prototype.
 
 No physical smart glasses are required.
 
-The MVP focuses on four core experiences:
+The MVP focuses on five core experiences:
 
 ### 1. Recent activity recall
 
@@ -72,7 +72,7 @@ The user can ask:
 
 > Who is Sarah?
 
-The demo retrieves the stored profile record for that person. A caregiver-facing setup interface is not implemented yet.
+The demo retrieves the stored profile record for that person. The caregiver-facing setup page can maintain the trusted person record used by this lookup.
 
 ### 4. Daily schedule support
 
@@ -81,6 +81,10 @@ The user can ask:
 > What am I doing today?
 
 The system returns a simple schedule of upcoming activities.
+
+### 5. Approved known-person recognition
+
+Caregivers can optionally enroll a face for an existing person in a patient profile. When the patient chooses **Who is this?** in the live camera simulator, MemoryCue compares that single frame only with that patient's caregiver-approved enrollments. Strong, unambiguous matches show the stored person name and relationship; weak or ambiguous matches return an unknown response.
 
 ## Creating Memories
 
@@ -125,13 +129,34 @@ Use **Retake** to replace the captured frame and **Stop camera** when finished. 
 
 While the webcam is active, the simulator also provides a compact glasses-style HUD over the live camera view. Choose one of the quick cues or type a question under **Ask MemoryCue**, then choose **Show cue**. The HUD sends that question to the same grounded `/api/query` endpoint used by the normal question panel.
 
-The cue shows the existing answer directly, including a clear unknown state when MemoryCue has no matching context. Choose **Dismiss** to clear it without stopping the camera. All cues are manually triggered: the simulator does not identify faces, continuously analyze video, or run background queries.
+The cue shows the existing answer directly, including a clear unknown state when MemoryCue has no matching context. Choose **Dismiss** to clear it without stopping the camera. MemoryCue does not continuously analyze video or run background queries. Face recognition is a separate, manually triggered action described below.
+
+### Approved known-person recognition
+
+Known-person recognition is opt-in and begins in the existing caregiver **People** section. A caregiver chooses an existing person, uploads a reference photo containing exactly one face, and selects **Enroll face**. The upload does not create a person automatically. **Replace** updates the enrollment and **Remove** deletes it.
+
+The backend uses the local `dlib-bin` runtime with the pretrained `face-recognition-models` dlib ResNet encoder and five-point landmark predictor. Embeddings are generated on the local API process using CPU and only the derived 128-dimensional embedding is stored; the reference photo is not retained by this feature. The configurable similarity threshold defaults to `0.65` and `FACE_MATCH_MARGIN` defaults to `0.08`. Similarity is normalized so larger values are better. A match must clear the threshold and exceed the next candidate by the margin; otherwise the result is unknown.
+
+While the webcam is active, choose **Who is this?** to capture and send one current frame to `POST /api/face/recognize`. The wearer sees only a short cue such as:
+
+```text
+Sarah
+Your daughter
+```
+
+or:
+
+```text
+I don't recognize this person.
+```
+
+There is no global face database, public-figure or stranger search, internet identity lookup, automatic enrollment, continuous scanning, relationship inference, or biometric authentication. Names and relationships come from the caregiver-managed `Person` record. This is a research prototype, not production biometric security.
 
 ## Development Profiles
 
 The local prototype includes a clearly labeled **Development profile** selector for two deterministic demo users: Alex and Jordan. Choose a profile to view its isolated memories, people, schedule, object observations, and HUD answers. Changing profiles clears the current question result and any unsaved camera memory so captured information cannot be saved under the wrong profile.
 
-This selector is a development convenience, not authentication. The browser sends the selected profile ID in the `X-MemoryCue-User-Id` request header, and the API uses it to scope personal data. The demo seed is a local reset operation that recreates both profiles; caregiver permissions and production identity remain future work.
+This selector is a development convenience, not authentication. The browser sends the selected profile ID in the `X-MemoryCue-User-Id` request header, and the API uses it to scope personal data. The demo seed is a local reset operation that recreates both profiles. The caregiver page uses a separate simulated identity and explicit patient links for this prototype; production identity, consent, and audit controls remain future work.
 
 ## Example
 
@@ -164,7 +189,7 @@ The `/caregiver` page is a small development prototype for trusted patient conte
 * schedule items; and
 * short caregiver notes.
 
-Maya is linked to Alex, while Sam is linked to Jordan. The API checks that relationship and the requested permission on every caregiver operation, so the setup page does not expose unlinked patients. Important object definitions are separate from observed object history, and caregiver notes are stored for setup context but are not automatically sent to the vision provider or query prompt.
+Maya is linked to Alex, while Sam is linked to Jordan. The API checks that relationship and the requested permission on every caregiver operation, so the setup page does not expose unlinked patients. Important object definitions are separate from observed object history, and caregiver notes are stored for setup context but are not automatically sent to the vision provider or query prompt. Face enrollment uses the same `manage_people` permission.
 
 The caregiver selector is development-only and not secure authentication. There is no caregiver invitation, consent workflow, password login, or production healthcare portal. Taylor is included as a read-only demo caregiver for permission testing.
 
@@ -211,7 +236,7 @@ The software prototype allows the memory system to be developed and tested befor
 
 ## Project Status
 
-**Current stage:** Stage 6B caregiver profile management prototype
+**Current stage:** Stage 7 approved known-person recognition prototype
 
 The project is currently focused on building the core memory loop:
 
@@ -235,6 +260,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+The local face-recognition dependencies include a prebuilt `dlib-bin` runtime and roughly 100 MB of pretrained model data. It runs on CPU and avoids a Visual C++ build on supported Windows/Python combinations; no GPU or cloud face API is required. If it is not installed or cannot be configured, ordinary memory features still work and face enrollment reports a clear configuration error.
 
 On Windows PowerShell, activate the environment with:
 

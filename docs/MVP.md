@@ -38,7 +38,7 @@ Camera access normally requires `localhost` or HTTPS. The simulator does not req
 
 Stage 5 adds a wearer-facing HUD to the live camera view. While the webcam is active, the user can manually ask a custom question or choose one of three quick cues: recent activity, last-seen keys, or today's schedule. The HUD reuses the existing `/api/query` endpoint and displays its grounded answer without exposing source IDs in the wearer view.
 
-The HUD supports idle, querying, result, unknown, and error states. A cue can be dismissed without stopping the camera. It does not perform continuous background analysis, face recognition, or automatic querying.
+The HUD supports idle, querying, result, unknown, and error states. A cue can be dismissed without stopping the camera. It does not perform continuous background analysis or automatic querying. Stage 7 adds a separate explicit face-recognition action.
 
 ## Development Identity and User Scoping
 
@@ -52,7 +52,15 @@ Stage 6B adds a small caregiver setup page at `/caregiver`. Development caregive
 
 Caregiver requests use a separate `X-MemoryCue-Caregiver-Id` header and a centralized link/permission check. Caregivers can only view or modify data for linked patients, and mutations require the matching management permission. These records are the same `Person` and `ScheduleItem` data used by the wearer-facing retrieval system, so caregiver edits are visible in patient queries.
 
-Important object definitions describe things a caregiver considers useful; they do not create `ObjectObservation` history. Caregiver notes are stored for setup context and are not automatically included in AI prompts. The caregiver identity mechanism is simulated and not production authentication; invitations, consent workflows, passwords, face recognition, and known-person photos remain out of scope.
+Important object definitions describe things a caregiver considers useful; they do not create `ObjectObservation` history. Caregiver notes are stored for setup context and are not automatically included in AI prompts. The caregiver identity mechanism is simulated and not production authentication; invitations, consent workflows, passwords, and production biometric security remain out of scope.
+
+## Approved Known-Person Recognition
+
+Stage 7 adds opt-in recognition for people already present in a patient's caregiver-managed `Person` records. A caregiver with `manage_people` permission uploads a reference image containing exactly one face. The local API converts it to a pretrained dlib 128-dimensional ResNet embedding through the `dlib-bin` runtime and `face-recognition-models` package, then stores only that derived embedding in a patient-scoped enrollment row.
+
+The patient can then start the webcam and choose **Who is this?**. The simulator captures one frame and compares it only with enrolled people belonging to the selected patient. A configurable similarity threshold (`FACE_MATCH_THRESHOLD`, default `0.65`) and ambiguity margin (`FACE_MATCH_MARGIN`, default `0.08`) make larger-is-better scores conservative: weak or close matches return unknown. The name and relationship in a recognized cue are read from the stored `Person` record; they are never inferred from appearance.
+
+This prototype has no global search, stranger or public-figure identification, internet lookup, auto-enrollment, continuous scanning, raw embedding API, cloud face provider, biometric authentication, or production security guarantees. No reference image is retained by the enrollment feature.
 
 ## Questions the MVP Must Answer
 
@@ -81,7 +89,7 @@ Sarah
 Relationship: Daughter
 ```
 
-No automatic biometric face recognition is required for the MVP.
+Camera-based **Who is this?** recognition is a separate Stage 7 flow and does not replace this text lookup.
 
 ### 4. What am I doing today?
 
@@ -118,7 +126,7 @@ Example schedule:
 The first MVP does not include:
 
 - real Meta glasses integration;
-- automated face recognition;
+- global or continuous face recognition;
 - geofencing;
 - emergency dispatch;
 - medication confirmation;

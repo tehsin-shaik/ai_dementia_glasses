@@ -27,6 +27,7 @@ type Person = {
   id: number;
   name: string;
   relationship: string;
+  face_enrolled: boolean;
 };
 
 type ImportantObject = {
@@ -111,7 +112,8 @@ function parsePeople(payload: unknown): Person[] {
         isRecord(person) &&
         typeof person.id === "number" &&
         typeof person.name === "string" &&
-        typeof person.relationship === "string",
+        typeof person.relationship === "string" &&
+        typeof person.face_enrolled === "boolean",
     )
   ) {
     throw new Error("The people list returned an invalid response.");
@@ -203,6 +205,7 @@ export default function CaregiverPage() {
   const [objects, setObjects] = useState<ImportantObject[]>([]);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [notes, setNotes] = useState<CaregiverNote[]>([]);
+  const [faceFiles, setFaceFiles] = useState<Record<number, File | null>>({});
   const [personName, setPersonName] = useState("");
   const [personRelationship, setPersonRelationship] = useState("");
   const [objectName, setObjectName] = useState("");
@@ -260,8 +263,10 @@ export default function CaregiverPage() {
       setObjects([]);
       setSchedule([]);
       setNotes([]);
+      setFaceFiles({});
       return;
     }
+    setFaceFiles({});
     const requestVersion = requestVersionRef.current;
     setIsLoadingPatient(true);
     setError(null);
@@ -440,6 +445,44 @@ export default function CaregiverPage() {
       "Person deleted.",
     );
     if (deleted) await reloadPatient();
+  }
+
+  async function enrollFace(person: Person) {
+    const baseUrl = patientBaseUrl();
+    const file = faceFiles[person.id];
+    if (!baseUrl) return;
+    if (!file) {
+      clearFeedback();
+      setError("Choose a face photo before enrolling.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("image", file);
+    const saved = await sendMutation(
+      `face-${person.id}`,
+      `${baseUrl}/people/${person.id}/face`,
+      { method: "POST", body: formData },
+      person.face_enrolled ? "Face enrollment replaced." : "Face enrolled.",
+    );
+    if (saved) {
+      setFaceFiles((files) => ({ ...files, [person.id]: null }));
+      await reloadPatient();
+    }
+  }
+
+  async function removeFace(person: Person) {
+    const baseUrl = patientBaseUrl();
+    if (!baseUrl) return;
+    const deleted = await sendMutation(
+      `face-remove-${person.id}`,
+      `${baseUrl}/people/${person.id}/face`,
+      { method: "DELETE" },
+      "Face enrollment removed.",
+    );
+    if (deleted) {
+      setFaceFiles((files) => ({ ...files, [person.id]: null }));
+      await reloadPatient();
+    }
   }
 
   async function addObject(event: FormEvent<HTMLFormElement>) {
@@ -667,6 +710,40 @@ export default function CaregiverPage() {
                 <button className="danger-button" type="button" onClick={() => void deletePerson(person)} disabled={savingKey !== null}>
                   Delete
                 </button>
+              </div>
+              <div className="face-enrollment" aria-label={`${person.name} face enrollment`}>
+                <div>
+                  <span className="record-meta">Face enrollment</span>
+                  <strong>{person.face_enrolled ? "Enrolled" : "Not enrolled"}</strong>
+                </div>
+                <label className="face-file-picker">
+                  <span>{person.face_enrolled ? "Replace photo" : "Upload face photo"}</span>
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    onChange={(event) =>
+                      setFaceFiles((files) => ({ ...files, [person.id]: event.target.files?.[0] ?? null }))
+                    }
+                  />
+                </label>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void enrollFace(person)}
+                  disabled={savingKey !== null || !faceFiles[person.id]}
+                >
+                  {person.face_enrolled ? "Replace" : "Enroll face"}
+                </button>
+                {person.face_enrolled && (
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={() => void removeFace(person)}
+                    disabled={savingKey !== null}
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             </article>
           ))}

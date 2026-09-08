@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,12 +15,14 @@ from .models import (
     ImportantObject,
     PatientProfile,
     Person,
+    PersonFaceEnrollment,
     ScheduleItem,
     User,
 )
 from .schemas import (
     CaregiverNoteCreate,
     CaregiverNoteResponse,
+    FaceEnrollmentStatus,
     ImportantObjectCreate,
     ImportantObjectPatch,
     ImportantObjectResponse,
@@ -34,6 +36,10 @@ from .schemas import (
     SchedulePatch,
     ScheduleResponse,
 )
+from .face import provider as face_provider
+from .face.base import FaceRecognizerNotConfiguredError, MultipleFacesFoundError, NoFaceFoundError
+from .face.service import serialize_embedding
+from .media_storage import read_uploaded_image
 
 
 router = APIRouter(prefix="/api/caregiver", tags=["caregiver"])
@@ -125,6 +131,21 @@ def _get_note(db: Session, patient_user_id: int, note_id: int) -> CaregiverNote:
     return note
 
 
+def _face_enrollment(db: Session, person_id: int) -> PersonFaceEnrollment | None:
+    return db.scalar(
+        select(PersonFaceEnrollment).where(PersonFaceEnrollment.person_id == person_id)
+    )
+
+
+def _person_response(db: Session, person: Person) -> PersonResponse:
+    return PersonResponse(
+        id=person.id,
+        name=person.name,
+        relationship=person.relationship,
+        face_enrolled=_face_enrollment(db, person.id) is not None,
+    )
+
+
 def _schedule_response(item: ScheduleItem) -> ScheduleResponse:
     return ScheduleResponse(id=item.id, title=item.title, scheduled_at=item.scheduled_at)
 
@@ -206,7 +227,7 @@ def list_people(
 ) -> list[PersonResponse]:
     require_caregiver_access(db, current_caregiver, patient_user_id, "view")
     return [
-        PersonResponse(id=person.id, name=person.name, relationship=person.relationship)
+        _person_response(db, person)
         for person in db.scalars(
             select(Person)
             .where(Person.user_id == patient_user_id)
@@ -230,7 +251,7 @@ def create_person(
     )
     db.add(person)
     db.commit()
-    return PersonResponse(id=person.id, name=person.name, relationship=person.relationship)
+    return _person_response(db, person)
 
 
 @router.patch("/patients/{patient_user_id}/people/{person_id}", response_model=PersonResponse)
@@ -249,7 +270,7 @@ def update_person(
     if fields.get("relationship") is not None:
         person.relationship = _required_text(fields["relationship"], "Relationship", 120)
     db.commit()
-    return PersonResponse(id=person.id, name=person.name, relationship=person.relationship)
+    return _person_response(db, person)
 
 
 @router.delete("/patients/{patient_user_id}/people/{person_id}", status_code=204)
@@ -260,7 +281,98 @@ def delete_person(
     current_caregiver: Caregiver = Depends(get_current_caregiver),
 ) -> Response:
     require_caregiver_access(db, current_caregiver, patient_user_id, "manage_people")
-    db.delete(_get_person(db, patient_user_id, person_id))
+    person = _get_person(db, patient_user_id, person_id)
+    enrollment = _face_enrollment(db, person.id)
+    if enrollment is not None:
+        db.delete(enrollment)
+    db.delete(person)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.get(
+    "/patients/{patient_user_id}/people/{person_id}/face/status",
+    response_model=FaceEnrollmentStatus,
+)
+def get_face_enrollment_status(
+    patient_user_id: int,
+    person_id: int,
+    db: Session = Depends(get_db),
+    current_caregiver: Caregiver = Depends(get_current_caregiver),
+) -> FaceEnrollmentStatus:
+    require_caregiver_access(db, current_caregiver, patient_user_id, "view")
+    person = _get_person(db, patient_user_id, person_id)
+    enrollment = _face_enrollment(db, person.id)
+    return FaceEnrollmentStatus(
+        person_id=person.id,
+        enrolled=enrollment is not None,
+        created_at=enrollment.created_at if enrollment else None,
+    )
+
+
+@router.post(
+    "/patients/{patient_user_id}/people/{person_id}/face",
+    response_model=FaceEnrollmentStatus,
+)
+async def enroll_face(
+    patient_user_id: int,
+    person_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_caregiver: Caregiver = Depends(get_current_caregiver),
+) -> FaceEnrollmentStatus:
+    require_caregiver_access(db, current_caregiver, patient_user_id, "manage_people")
+    person = _get_person(db, patient_user_id, person_id)
+    _, image_bytes = await read_uploaded_image(image)
+
+    try:
+        recognizer = face_provider.get_face_recognizer()
+        embedding = recognizer.extract_embedding(image_bytes)
+    except FaceRecognizerNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail="Face recognition is not configured.") from exc
+    except NoFaceFoundError as exc:
+        raise HTTPException(status_code=422, detail="No usable face was found.") from exc
+    except MultipleFacesFoundError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Multiple faces were found. Please upload a photo containing one person.",
+        ) from exc
+
+    enrollment = _face_enrollment(db, person.id)
+    if enrollment is None:
+        enrollment = PersonFaceEnrollment(
+            person_id=person.id,
+            patient_user_id=patient_user_id,
+            embedding=serialize_embedding(embedding),
+        )
+        db.add(enrollment)
+    else:
+        enrollment.embedding = serialize_embedding(embedding)
+        enrollment.created_at = datetime.now()
+    db.commit()
+    return FaceEnrollmentStatus(
+        person_id=person.id,
+        enrolled=True,
+        created_at=enrollment.created_at,
+    )
+
+
+@router.delete(
+    "/patients/{patient_user_id}/people/{person_id}/face",
+    status_code=204,
+)
+def delete_face_enrollment(
+    patient_user_id: int,
+    person_id: int,
+    db: Session = Depends(get_db),
+    current_caregiver: Caregiver = Depends(get_current_caregiver),
+) -> Response:
+    require_caregiver_access(db, current_caregiver, patient_user_id, "manage_people")
+    person = _get_person(db, patient_user_id, person_id)
+    enrollment = _face_enrollment(db, person.id)
+    if enrollment is None:
+        raise HTTPException(status_code=404, detail="Face enrollment not found.")
+    db.delete(enrollment)
     db.commit()
     return Response(status_code=204)
 

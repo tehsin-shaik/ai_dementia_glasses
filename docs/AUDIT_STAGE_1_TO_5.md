@@ -182,3 +182,16 @@ Stage 6B builds the first caregiver/patient personalization layer on the Stage 6
 - added relationship, permission, identity-separation, patient-query integration, and cross-patient isolation coverage.
 
 Caregiver identity remains simulated through `X-MemoryCue-Caregiver-Id`; production authentication, invitations, consent, and caregiver audit logging are not solved by this stage.
+
+### Stage 7 Follow-Up
+
+Stage 7 adds a deliberately bounded known-person recognition prototype:
+
+- caregiver-approved `Person` records can opt into one local face enrollment, with exactly-one-face validation and replace/remove controls;
+- dlib's pretrained 128-dimensional face encoding runs locally on CPU through the wheel-based `dlib-bin` runtime and `face-recognition-models` package;
+- only the derived embedding is stored, and patient recognition queries filter by both the current patient and owned person records;
+- conservative threshold and ambiguity-margin decisions return unknown instead of forcing the closest candidate;
+- the live simulator exposes one explicit `Who is this?` action and keeps the camera stream running without continuous scanning; and
+- backend coverage proves caregiver authorization, validation failures, API redaction, replacement/deletion, weak/ambiguous handling, and cross-patient isolation.
+
+This remains a research prototype, not biometric authentication or production biometric security. It has no global search, stranger/public-figure identification, internet lookup, relationship inference, liveness checking, or cloud face provider.

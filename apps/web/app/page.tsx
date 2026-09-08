@@ -13,6 +13,14 @@ type QueryResult = {
   source_ids: string[];
 };
 
+type FaceRecognitionResult = {
+  recognized: boolean;
+  person_id: number | null;
+  name: string | null;
+  relationship: string | null;
+  confidence: number;
+};
+
 type MemoryListItem = {
   id: number;
   timestamp: string;
@@ -96,6 +104,22 @@ function parseQueryResult(payload: unknown): QueryResult {
   };
 }
 
+function parseFaceRecognitionResult(payload: unknown): FaceRecognitionResult {
+  if (
+    !isRecord(payload) ||
+    typeof payload.recognized !== "boolean" ||
+    (payload.person_id !== null && typeof payload.person_id !== "number") ||
+    (payload.name !== null && typeof payload.name !== "string") ||
+    (payload.relationship !== null && typeof payload.relationship !== "string") ||
+    typeof payload.confidence !== "number" ||
+    payload.confidence < 0 ||
+    payload.confidence > 1
+  ) {
+    throw new Error("Face recognition returned an invalid response.");
+  }
+  return payload as FaceRecognitionResult;
+}
+
 function parseVisionAnalysis(payload: unknown): VisionAnalysis {
   if (!isRecord(payload) || typeof payload.description !== "string" || !Array.isArray(payload.objects)) {
     throw new Error("The image analysis returned an invalid response.");
@@ -171,6 +195,7 @@ export default function Home() {
   const [hudState, setHudState] = useState<MemoryHudState>("idle");
   const [hudAnswer, setHudAnswer] = useState<string | null>(null);
   const [hudError, setHudError] = useState<string | null>(null);
+  const [isRecognizingFace, setIsRecognizingFace] = useState(false);
   const [demoLoaded, setDemoLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
@@ -322,6 +347,55 @@ export default function Home() {
 
   function askHudQuestion(value: string) {
     void submitQuery(value, "hud");
+  }
+
+  async function recognizePerson(file: File) {
+    const requestUserId = activeUserId;
+    const requestProfileVersion = profileVersionRef.current;
+    const hudRequestId = hudRequestRef.current + 1;
+    hudRequestRef.current = hudRequestId;
+    setIsRecognizingFace(true);
+    setHudState("querying");
+    setHudAnswer(null);
+    setHudError(null);
+
+    const formData = new FormData();
+    formData.append("image", file);
+    try {
+      const response = await memoryCueFetch(`${API_URL}/api/face/recognize`, requestUserId, {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response, "The person could not be checked."));
+      }
+      const recognition = parseFaceRecognitionResult(await response.json());
+      if (
+        profileVersionRef.current !== requestProfileVersion ||
+        hudRequestRef.current !== hudRequestId
+      ) {
+        return;
+      }
+      if (recognition.recognized && recognition.name && recognition.relationship) {
+        setHudAnswer(`${recognition.name}\nYour ${recognition.relationship.toLowerCase()}`);
+        setHudState("result");
+      } else {
+        setHudAnswer("I don't recognize this person.");
+        setHudState("unknown");
+      }
+    } catch (requestError) {
+      if (
+        profileVersionRef.current === requestProfileVersion &&
+        hudRequestRef.current === hudRequestId
+      ) {
+        setHudError(requestError instanceof Error ? requestError.message : "The person could not be checked.");
+        setHudState("error");
+      }
+    } finally {
+      if (profileVersionRef.current === requestProfileVersion) {
+        setIsRecognizingFace(false);
+      }
+    }
   }
 
   async function saveMemory() {
@@ -511,6 +585,7 @@ export default function Home() {
     setIsSeeding(false);
     setIsAnalyzingVision(false);
     setIsSavingMemory(false);
+    setIsRecognizingFace(false);
     handleCameraRetake();
   }
 
@@ -606,6 +681,8 @@ export default function Home() {
           onCapture={handleCameraCapture}
           onRetake={handleCameraRetake}
           onAnalyze={() => void analyzeImage()}
+          onRecognize={(file) => void recognizePerson(file)}
+          isRecognizing={isRecognizingFace}
           hudState={hudState}
           hudAnswer={hudAnswer}
           hudError={hudError}

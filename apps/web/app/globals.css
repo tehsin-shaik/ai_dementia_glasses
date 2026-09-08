@@ -325,6 +325,7 @@ h2 {
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.4;
+  white-space: pre-line;
 }
 
 .hud-overlay-message.is-unknown,
@@ -1223,6 +1224,38 @@ h2 {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.face-enrollment {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e0e9e8;
+}
+
+.face-enrollment > div {
+  display: grid;
+  gap: 2px;
+  min-width: 145px;
+}
+
+.face-file-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--teal-dark);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.face-file-picker input {
+  max-width: 190px;
+  padding: 5px;
+  font-size: 0.72rem;
 }
 
 .caregiver-record-actions .text-button {

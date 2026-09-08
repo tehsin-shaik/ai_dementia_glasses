@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, create_database_engine, get_db
 from app.authorization import CAREGIVER_ID_HEADER
+from app.face import provider as face_provider
+from app.face.base import MultipleFacesFoundError, NoFaceFoundError
 from app.identity import USER_ID_HEADER
 from app.main import app
 from app.media_storage import MAX_UPLOAD_BYTES, safe_media_path
@@ -96,6 +98,330 @@ def timestamp_at(hour: int = 10, minute: int = 42) -> str:
         second=0,
         microsecond=0,
     ).isoformat(timespec="seconds")
+
+
+class StubFaceRecognizer:
+    """Small deterministic stand-in so API tests do not need real face inference."""
+
+    EMBEDDINGS = {
+        b"sarah-reference": [1.0, 0.0],
+        b"sarah-camera": [1.0, 0.0],
+        b"emma-reference": [0.0, 1.0],
+        b"emma-camera": [0.0, 1.0],
+        b"jordan-reference": [0.0, 1.0],
+        b"weak-camera": [0.4, 0.0],
+        b"ambiguous-camera": [0.82, 0.78],
+    }
+
+    def extract_embedding(self, image_bytes: bytes) -> list[float]:
+        if image_bytes == b"no-face":
+            raise NoFaceFoundError("No usable face was found.")
+        if image_bytes == b"multiple-faces":
+            raise MultipleFacesFoundError("Multiple faces were found.")
+        return self.EMBEDDINGS.get(image_bytes, [0.0, 0.0])
+
+    def compare(self, embedding_a: list[float], embedding_b: list[float]) -> float:
+        if embedding_a == [0.82, 0.78]:
+            if embedding_b == [1.0, 0.0]:
+                return 0.82
+            if embedding_b == [0.0, 1.0]:
+                return 0.78
+        distance = sum((left - right) ** 2 for left, right in zip(embedding_a, embedding_b)) ** 0.5
+        return max(0.0, min(1.0, 1.0 - distance))
+
+
+def upload_face(
+    client: TestClient,
+    *,
+    patient_id: int,
+    person_id: int,
+    caregiver_id: int,
+    image_bytes: bytes,
+):
+    return client.post(
+        f"/api/caregiver/patients/{patient_id}/people/{person_id}/face",
+        files={"image": ("face.jpg", image_bytes, "image/jpeg")},
+        headers=caregiver_headers(caregiver_id),
+    )
+
+
+def recognize_face(client: TestClient, *, user_id: int, image_bytes: bytes):
+    return client.post(
+        "/api/face/recognize",
+        files={"image": ("camera.jpg", image_bytes, "image/jpeg")},
+        headers=user_headers(user_id),
+    )
+
+
+def test_face_enrollment_requires_manage_people(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+
+    response = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=3,
+        image_bytes=b"sarah-reference",
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Caregiver permission required."}
+
+
+def test_face_enrollment_rejects_no_face(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+
+    response = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"no-face",
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "No usable face was found."}
+
+
+def test_face_enrollment_rejects_multiple_faces(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+
+    response = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"multiple-faces",
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Multiple faces were found. Please upload a photo containing one person."
+    }
+
+
+def test_face_recognition_matches_enrolled_person(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    enrollment = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+
+    response = recognize_face(client, user_id=1, image_bytes=b"sarah-camera")
+
+    assert enrollment.status_code == 200
+    assert response.status_code == 200
+    assert response.json() == {
+        "recognized": True,
+        "person_id": sarah["id"],
+        "name": "Sarah",
+        "relationship": "Daughter",
+        "confidence": 1.0,
+    }
+
+
+def test_face_recognition_returns_unknown_below_threshold(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    monkeypatch.setenv("FACE_MATCH_THRESHOLD", "0.65")
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+
+    response = recognize_face(client, user_id=1, image_bytes=b"weak-camera")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "recognized": False,
+        "person_id": None,
+        "name": None,
+        "relationship": None,
+        "confidence": 0.4,
+    }
+
+
+def test_face_recognition_returns_unknown_when_ambiguous(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    people = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()
+    sarah = people[0]
+    emma = client.post(
+        "/api/caregiver/patients/1/people",
+        headers=caregiver_headers(1),
+        json={"name": "Emma", "relationship": "Friend"},
+    ).json()
+    upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+    upload_face(
+        client,
+        patient_id=1,
+        person_id=emma["id"],
+        caregiver_id=1,
+        image_bytes=b"emma-reference",
+    )
+
+    response = recognize_face(client, user_id=1, image_bytes=b"ambiguous-camera")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "recognized": False,
+        "person_id": None,
+        "name": None,
+        "relationship": None,
+        "confidence": 0.82,
+    }
+
+
+def test_face_recognition_is_patient_scoped(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+
+    response = recognize_face(client, user_id=2, image_bytes=b"sarah-camera")
+
+    assert response.status_code == 200
+    assert response.json()["recognized"] is False
+    assert response.json()["name"] is None
+
+
+def test_other_patient_enrollment_is_not_visible(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    alex_sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    jordan_sarah = client.get("/api/caregiver/patients/2/people", headers=caregiver_headers(2)).json()[0]
+    upload_face(
+        client,
+        patient_id=1,
+        person_id=alex_sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+    upload_face(
+        client,
+        patient_id=2,
+        person_id=jordan_sarah["id"],
+        caregiver_id=2,
+        image_bytes=b"jordan-reference",
+    )
+
+    alex_result = recognize_face(client, user_id=1, image_bytes=b"sarah-camera")
+    jordan_result = recognize_face(client, user_id=2, image_bytes=b"sarah-camera")
+
+    assert alex_result.json()["name"] == "Sarah"
+    assert alex_result.json()["relationship"] == "Daughter"
+    assert jordan_result.json()["recognized"] is False
+    assert jordan_result.json()["name"] is None
+
+
+def test_face_embedding_not_returned_by_api(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    enrollment = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+    status = client.get(
+        f"/api/caregiver/patients/1/people/{sarah['id']}/face/status",
+        headers=caregiver_headers(3),
+    )
+    people = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(3))
+
+    assert enrollment.status_code == 200
+    assert status.status_code == 200
+    assert "embedding" not in enrollment.json()
+    assert "embedding" not in status.json()
+    assert all("embedding" not in person for person in people.json())
+
+
+def test_delete_face_enrollment(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+
+    deleted = client.delete(
+        f"/api/caregiver/patients/1/people/{sarah['id']}/face",
+        headers=caregiver_headers(1),
+    )
+    status = client.get(
+        f"/api/caregiver/patients/1/people/{sarah['id']}/face/status",
+        headers=caregiver_headers(1),
+    )
+    result = recognize_face(client, user_id=1, image_bytes=b"sarah-camera")
+
+    assert deleted.status_code == 204
+    assert status.json() == {"person_id": sarah["id"], "enrolled": False, "created_at": None}
+    assert result.json()["recognized"] is False
+
+
+def test_replace_face_enrollment(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    first = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+    replaced = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"emma-reference",
+    )
+
+    old_status = first.json()
+    new_status = replaced.json()
+    old_result = recognize_face(client, user_id=1, image_bytes=b"sarah-camera")
+    new_result = recognize_face(client, user_id=1, image_bytes=b"emma-camera")
+
+    assert first.status_code == 200
+    assert replaced.status_code == 200
+    assert new_status["enrolled"] is True
+    assert new_status["person_id"] == old_status["person_id"]
+    assert old_result.json()["recognized"] is False
+    assert new_result.json()["name"] == "Sarah"
 
 
 def test_health(client: TestClient) -> None:

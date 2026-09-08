@@ -14,6 +14,7 @@ from .models import (
     ObjectObservation,
     PatientProfile,
     Person,
+    PersonFaceEnrollment,
     ScheduleItem,
     User,
 )
@@ -28,6 +29,7 @@ def seed_demo_data(db: Session) -> dict[str, int | list[int]]:
         CaregiverPatientAccess,
         ImportantObject,
         ScheduleItem,
+        PersonFaceEnrollment,
         Person,
         ObjectObservation,
         Memory,
