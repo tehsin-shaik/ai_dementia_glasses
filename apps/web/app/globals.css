@@ -245,16 +245,6 @@
   .demo-footer { flex-direction: column; gap: 12px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-  }
-}
-
 /* Product surfaces */
 :root {
   --ink: #172321;
@@ -3186,4 +3176,325 @@ h2 {
   .demo-card { padding: 22px 18px; }
   .config-row { align-items: flex-start; flex-direction: column; gap: 8px; }
   .demo-footer { flex-direction: column; gap: 12px; }
+}
+/* Responsive and visual maturity pass */
+:root {
+  --editorial-font: "Apple Garamond", "EB Garamond", Garamond, "Times New Roman", serif;
+  --ui-font: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --surface: #f7f6f1;
+  --surface-muted: #eeefea;
+  --radius-control: 8px;
+  --radius-surface: 16px;
+  --shadow-quiet: 0 12px 28px rgba(29, 47, 43, 0.07);
+}
+
+html,
+body { overflow-x: clip; }
+
+body,
+button,
+input,
+select,
+textarea { font-family: var(--ui-font); }
+
+body { background: var(--surface-muted); }
+h1,
+h2,
+h3 { text-wrap: balance; }
+
+.product-page { background: var(--surface); font-family: var(--ui-font); }
+.product-page h1,
+.product-page h2,
+.product-page h3,
+.about-project-heading h2 {
+  font-family: var(--editorial-font);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+}
+
+.product-hero-copy h1 { max-width: 600px; font-size: clamp(3.8rem, 7.8vw, 7.2rem); line-height: 0.9; }
+.product-button,
+.outline-button,
+.site-nav-links .site-nav-cta { border-radius: var(--radius-control); box-shadow: none; }
+.product-button,
+.outline-button { min-height: 48px; }
+.product-button:hover,
+.outline-button:hover { transform: translateY(-1px); }
+.product-button { background: var(--teal-dark); }
+.product-button:hover { background: #123f3b; }
+.product-button-dark { background: var(--ink); }
+
+.hero-mockup {
+  border-radius: 28px;
+  background: linear-gradient(145deg, rgba(206, 229, 220, 0.68), rgba(64, 116, 105, 0.76) 55%, #1d514b), #397f75;
+  box-shadow: 14px 18px 0 rgba(207, 175, 108, 0.22), 0 24px 48px rgba(29, 81, 75, 0.14);
+  animation: none;
+}
+.hero-mockup::before,
+.hero-mockup::after { opacity: 0.5; }
+.hero-cue { border-radius: 12px; box-shadow: 0 14px 28px rgba(22, 53, 49, 0.2); transform: rotate(1deg); }
+.hero-spark { opacity: 0.62; }
+
+.story-section {
+  width: min(1240px, calc(100% - 48px));
+  min-height: 560px;
+  margin-bottom: 24px;
+  padding: 9%;
+  border-radius: 22px;
+}
+.story-section-remember,
+.story-section-find,
+.story-section-people,
+.story-section-today { background: #e9efea; }
+.story-section-find { background: #eeeae0; }
+.story-section-today { background: #e6ece9; }
+.story-copy h2,
+.caregiver-story h2,
+.product-final-cta h2 { font-size: clamp(2.9rem, 5.4vw, 5.5rem); font-weight: 400; line-height: 0.94; }
+.story-copy > p:last-child,
+.caregiver-story-side p { max-width: 340px; line-height: 1.55; }
+.story-visual { min-height: 300px; border-radius: 18px; box-shadow: var(--shadow-quiet); }
+.story-visual-remember { padding: 48px 42px; border-radius: 22px; transform: rotate(1.5deg); box-shadow: 10px 12px 0 rgba(29, 81, 75, 0.1); }
+.story-visual-find { min-height: 290px; border: 1px solid rgba(23, 35, 33, 0.48); border-radius: 18px; background: #f3eee2; transform: rotate(-1.5deg); }
+.story-visual-find strong { color: var(--teal-dark); font-size: clamp(2.2rem, 4.2vw, 4.2rem); }
+.story-visual-people { min-height: 280px; border-radius: 18px; box-shadow: 10px 12px 0 rgba(86, 115, 104, 0.1); transform: rotate(1deg); }
+.story-visual-today { border-radius: 18px; box-shadow: 10px 12px 0 rgba(49, 81, 76, 0.12); transform: rotate(-1deg); }
+.caregiver-story { width: min(1240px, calc(100% - 48px)); margin: 96px auto; }
+.product-final-cta { padding: 112px 24px 124px; background: #e0eae5; }
+
+.about-project { width: min(1320px, calc(100% - 48px)); padding: 102px 0 112px; font-family: var(--ui-font); }
+.about-project-heading { padding-bottom: 44px; }
+.about-project-heading h2 { max-width: 700px; font-size: clamp(3.8rem, 7.3vw, 6.7rem); line-height: 0.9; }
+.about-desktop { height: 600px; border-radius: 24px; background-color: #f0f0eb; box-shadow: inset 0 0 22px rgba(41, 54, 52, 0.06), 0 14px 32px rgba(34, 56, 52, 0.06); }
+.about-desktop::before { inset: 8px; border-radius: 18px; }
+.about-desktop-label,
+.about-desktop-footer,
+.draggable-window,
+.window-title-bar { font-family: var(--ui-font); }
+.draggable-window { border-radius: 3px; box-shadow: 6px 9px 16px rgba(33, 44, 42, 0.14); }
+.draggable-window:hover { box-shadow: 8px 12px 19px rgba(33, 44, 42, 0.18); }
+.window-origin { background: rgba(250, 250, 247, 0.84); box-shadow: 4px 7px 14px rgba(33, 44, 42, 0.07); }
+.window-disclaimer { border-color: #c6bba3; background: #e9e2d0; box-shadow: 7px 10px 16px rgba(80, 70, 43, 0.15); }
+.window-disclaimer .window-title-bar { border-color: rgba(96, 82, 46, 0.2); background: #d8cdb3; color: #716346; }
+.window-capabilities { border-color: #a7bbae; background: #dbe7df; box-shadow: 7px 10px 16px rgba(44, 80, 58, 0.14); }
+.window-capabilities .window-title-bar { border-color: rgba(58, 98, 70, 0.18); background: #c9d9ce; color: #4d6956; }
+.window-disclaimer h3 { color: #28312f; }
+.window-disclaimer p,
+.window-capabilities ul { color: #4d5752; }
+.window-note-label,
+.creator-credit,
+.window-origin .origin-signoff { color: var(--teal-dark); }
+.about-github-link { min-height: 44px; border-radius: var(--radius-control); border-color: var(--teal-dark); color: #fff; background: var(--teal-dark); box-shadow: none; }
+.about-github-link:hover { color: #fff; background: #123f3b; transform: translateY(-1px); }
+
+.wearer-shell.wearer-experience,
+.caregiver-page-shell.caregiver-experience,
+.demo-shell { font-family: var(--ui-font); }
+.wearer-shell.wearer-experience { background: radial-gradient(circle at 78% 8%, rgba(78, 142, 131, 0.14), transparent 25rem), #0e2725; }
+.wearer-shell.wearer-experience h1,
+.wearer-shell.wearer-experience h2,
+.wearer-shell.wearer-experience h3,
+.caregiver-page-shell.caregiver-experience h1,
+.caregiver-page-shell.caregiver-experience h2,
+.caregiver-page-shell.caregiver-experience h3,
+.demo-shell h1,
+.demo-shell h2,
+.demo-shell h3 { font-family: var(--ui-font); font-weight: 600; letter-spacing: -0.035em; }
+.wearer-shell.wearer-experience .site-nav,
+.caregiver-page-shell.caregiver-experience .site-nav,
+.demo-shell .site-nav { width: min(1320px, calc(100% - 48px)); padding-top: 22px; padding-bottom: 22px; }
+.wearer-shell.wearer-experience .app-card.wearer-card,
+.caregiver-page-shell.caregiver-experience .caregiver-card,
+.demo-shell .demo-page { width: min(1240px, calc(100% - 48px)); }
+.wearer-shell.wearer-experience .app-header,
+.caregiver-page-shell.caregiver-experience .caregiver-header,
+.demo-shell .demo-page-header { padding-bottom: 22px; border-color: rgba(236, 247, 242, 0.12); }
+.wearer-shell.wearer-experience .app-header h1 { font-size: clamp(2.35rem, 5vw, 4.7rem); font-weight: 600; }
+.wearer-shell.wearer-experience .profile-selector select { min-height: 44px; border-radius: var(--radius-control); }
+.wearer-shell.wearer-experience .camera-view { height: clamp(420px, 67vh, 680px); border-radius: 20px; box-shadow: 0 22px 52px rgba(3, 17, 16, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.04); }
+.wearer-shell.wearer-experience .camera-view::before { inset: 16px; border-radius: 12px; }
+.wearer-shell.wearer-experience .camera-view::after { top: 25px; }
+.wearer-shell.wearer-experience .hud-overlay { right: 20px; bottom: 20px; width: min(330px, calc(100% - 40px)); border-radius: 12px; padding: 15px; background: rgba(7, 27, 26, 0.84); box-shadow: 0 14px 30px rgba(3, 17, 16, 0.22); }
+.wearer-shell.wearer-experience .hud-overlay-message { font-size: 1.05rem; font-weight: 600; }
+.wearer-shell.wearer-experience .camera-controls button,
+.wearer-shell.wearer-experience .question-form button,
+.wearer-shell.wearer-experience .hud-query-input-row button { min-height: 44px; border-radius: var(--radius-control); }
+.wearer-shell.wearer-experience .camera-controls .primary-button,
+.wearer-shell.wearer-experience .camera-controls .secondary-button { min-height: 48px; border-radius: var(--radius-control); }
+.wearer-shell.wearer-experience .hud-controls { padding-top: 18px; border-top-color: rgba(236, 247, 242, 0.12); }
+.wearer-shell.wearer-experience .hud-controls h3 { font-size: 1.22rem; }
+.wearer-shell.wearer-experience .hud-quick-button,
+.wearer-shell.wearer-experience .suggestion-button { min-height: 42px; border-radius: var(--radius-control); }
+.wearer-shell.wearer-experience .question-panel { margin-top: 48px; padding-top: 26px; }
+.wearer-shell.wearer-experience .question-panel h2 { font-size: clamp(1.9rem, 4vw, 2.8rem); }
+.wearer-shell.wearer-experience .memory-review,
+.wearer-shell.wearer-experience .answer-panel { border-radius: 14px; }
+.wearer-shell.wearer-experience .answer-panel { box-shadow: 0 16px 32px rgba(3, 17, 16, 0.18); }
+.wearer-shell.wearer-experience .answer-text { font-family: var(--ui-font); }
+
+.caregiver-page-shell.caregiver-experience { background: #f4f3ee; }
+.caregiver-page-shell.caregiver-experience .caregiver-header h1,
+.demo-shell .demo-page-header h1 { font-size: clamp(2.15rem, 4.5vw, 3.8rem); font-weight: 600; }
+.caregiver-page-shell.caregiver-experience .management-panel,
+.demo-shell .demo-card,
+.demo-shell .demo-status-card { border-radius: var(--radius-surface); box-shadow: var(--shadow-quiet); }
+.caregiver-page-shell.caregiver-experience .access-badge { border-radius: var(--radius-control); }
+.caregiver-page-shell.caregiver-experience .management-tabs { gap: 12px; padding-bottom: 0; }
+.caregiver-page-shell.caregiver-experience .management-tab { min-height: 42px; padding: 8px 2px 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; }
+.caregiver-page-shell.caregiver-experience .management-tab:hover,
+.caregiver-page-shell.caregiver-experience .management-tab.is-active { border-color: var(--teal); color: var(--teal-dark); background: transparent; }
+.caregiver-page-shell.caregiver-experience .caregiver-form,
+.caregiver-page-shell.caregiver-experience .caregiver-section-stack,
+.caregiver-page-shell.caregiver-experience .caregiver-note-form { gap: 18px; }
+.caregiver-page-shell.caregiver-experience .caregiver-form input,
+.caregiver-page-shell.caregiver-experience .caregiver-form textarea,
+.caregiver-page-shell.caregiver-experience .caregiver-inline-form input,
+.caregiver-page-shell.caregiver-experience .caregiver-note-form textarea,
+.caregiver-page-shell.caregiver-experience .caregiver-record input,
+.caregiver-page-shell.caregiver-experience .caregiver-identity select { min-height: 44px; border-radius: var(--radius-control); }
+.caregiver-page-shell.caregiver-experience .caregiver-form textarea,
+.caregiver-page-shell.caregiver-experience .caregiver-note-form textarea { min-height: 96px; }
+.caregiver-page-shell.caregiver-experience .primary-button,
+.caregiver-page-shell.caregiver-experience .secondary-button,
+.caregiver-page-shell.caregiver-experience .danger-button { min-height: 44px; border-radius: var(--radius-control); }
+
+.demo-shell { background: #f2f2ed; }
+.demo-shell .demo-card { padding: 26px; }
+.demo-shell .demo-card h2 { font-size: 1.5rem; font-weight: 600; }
+.demo-shell .primary-button,
+.demo-shell .secondary-button,
+.demo-shell .suggestion-button,
+.demo-shell .profile-selector select { min-height: 44px; border-radius: var(--radius-control); }
+
+.site-nav-menu-button,
+.site-mobile-menu { display: none; }
+
+@media (max-width: 900px) {
+  .product-hero,
+  .story-section,
+  .caregiver-story { width: min(calc(100% - 36px), 1240px); }
+  .product-hero { min-height: auto; padding: 64px 6% 84px; grid-template-columns: 1fr; gap: 46px; }
+  .hero-mockup { min-height: 400px; }
+  .story-section { min-height: auto; padding: 72px 8%; grid-template-columns: 1fr; gap: 42px; }
+  .caregiver-story { padding: 0 7%; grid-template-columns: 1fr; gap: 32px; }
+  .about-desktop { height: 1040px; }
+  .caregiver-page-shell.caregiver-experience .caregiver-layout { grid-template-columns: 1fr; gap: 22px; }
+  .caregiver-page-shell.caregiver-experience .patient-list-panel { padding: 0; }
+  .caregiver-page-shell.caregiver-experience .patient-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .site-nav,
+  .wearer-shell.wearer-experience .site-nav,
+  .caregiver-page-shell.caregiver-experience .site-nav,
+  .demo-shell .site-nav { width: calc(100% - 32px); padding: 16px 0; }
+  .site-nav-links { display: none; }
+  .site-nav-menu-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 78px; min-height: 44px; border: 1px solid currentColor; border-radius: var(--radius-control); padding: 0 11px; color: var(--ink); background: transparent; font-size: 0.76rem; font-weight: 700; }
+  .site-nav-menu-button > span:not(.site-nav-menu-label) { display: block; width: 14px; height: 1px; background: currentColor; transition: transform 160ms ease; }
+  .site-nav-menu-button.is-open > span:first-child { transform: translateY(2px) rotate(45deg); }
+  .site-nav-menu-button.is-open > span:nth-child(2) { transform: translateY(-7px) rotate(-45deg); }
+  .site-mobile-menu { position: absolute; top: calc(100% - 4px); right: 0; left: 0; z-index: 5; display: grid; gap: 2px; padding: 7px; border: 1px solid var(--line); border-radius: var(--radius-surface); background: rgba(250, 250, 247, 0.98); box-shadow: 0 14px 26px rgba(29, 47, 43, 0.12); }
+  .site-mobile-menu[hidden] { display: none; }
+  .site-mobile-menu a { display: flex; align-items: center; min-height: 44px; border-radius: var(--radius-control); padding: 0 12px; color: var(--ink); font-size: 0.86rem; font-weight: 700; text-decoration: none; }
+  .site-mobile-menu a:hover,
+  .site-mobile-menu a[aria-current="page"] { color: var(--teal-dark); background: var(--teal-soft); }
+  .wearer-shell.wearer-experience .site-nav-menu-button { border-color: rgba(236, 247, 242, 0.4); color: #ecf7f2; }
+  .wearer-shell.wearer-experience .site-mobile-menu { border-color: rgba(158, 211, 201, 0.22); background: rgba(14, 39, 37, 0.98); }
+  .wearer-shell.wearer-experience .site-mobile-menu a { color: #ecf7f2; }
+  .wearer-shell.wearer-experience .site-mobile-menu a:hover,
+  .wearer-shell.wearer-experience .site-mobile-menu a[aria-current="page"] { color: #ecf7f2; background: rgba(158, 211, 201, 0.12); }
+
+  .product-hero,
+  .story-section,
+  .caregiver-story,
+  .about-project { width: calc(100% - 32px); }
+  .product-hero { padding: 56px 6% 72px; gap: 36px; }
+  .product-hero-copy h1 { font-size: clamp(3.45rem, 15vw, 5.2rem); }
+  .product-hero-intro { max-width: 310px; margin: 24px 0 28px; font-size: 0.98rem; }
+  .hero-mockup { min-height: 350px; border-radius: 22px; }
+  .hero-glasses { top: 31%; left: 5%; width: 90%; transform: rotate(-5deg) scale(0.82); }
+  .hero-cue { right: 8%; bottom: 15%; width: 190px; padding: 16px; }
+  .hero-spark { display: none; }
+  .hero-time { right: 8%; bottom: 7%; }
+  .hero-note { right: 3%; bottom: 20px; font-size: 0.58rem; }
+  .story-section { padding: 56px 7%; gap: 32px; border-radius: 18px; }
+  .story-copy h2,
+  .caregiver-story h2,
+  .product-final-cta h2 { font-size: clamp(2.7rem, 12vw, 4.3rem); }
+  .story-visual { min-height: 250px; }
+  .story-visual-remember,
+  .story-visual-find,
+  .story-visual-people,
+  .story-visual-today { transform: none; }
+  .story-visual-remember { padding: 38px 30px; }
+  .story-visual-find { min-height: 240px; padding: 30px 24px; }
+  .story-visual-people { min-height: 240px; padding: 32px 26px; }
+  .story-visual-today { padding: 28px 30px; }
+  .caregiver-story { margin: 72px auto; padding: 0 6%; gap: 26px; }
+  .product-final-cta { padding: 84px 20px 96px; }
+  .product-footer { width: calc(100% - 32px); padding: 22px 0 28px; }
+
+  .about-project { padding: 76px 0 84px; }
+  .about-project-heading { padding-bottom: 34px; }
+  .about-project-heading h2 { font-size: clamp(3.45rem, 15vw, 5.5rem); }
+  .about-desktop { height: 1160px; border-radius: 18px; }
+  .about-desktop-label { top: 18px; right: 18px; max-width: 130px; font-size: 0.54rem; line-height: 1.3; text-align: right; }
+  .about-desktop-footer { bottom: 14px; left: 18px; max-width: 220px; font-size: 0.6rem; line-height: 1.35; }
+  .window-origin,
+  .window-disclaimer,
+  .window-capabilities,
+  .window-snapshot { transform: none; }
+  .window-origin p { font-size: 0.94rem; }
+  .window-disclaimer p { font-size: 0.86rem; }
+  .window-capabilities .window-body { padding: 20px; }
+  .capability-lead { font-size: 1.04rem; }
+  .about-photo-art { height: 230px; }
+
+  .wearer-shell.wearer-experience .app-card.wearer-card,
+  .caregiver-page-shell.caregiver-experience .caregiver-card,
+  .demo-shell .demo-page { width: calc(100% - 32px); }
+  .wearer-shell.wearer-experience .app-header,
+  .caregiver-page-shell.caregiver-experience .caregiver-header,
+  .demo-shell .demo-page-header { gap: 20px; }
+  .wearer-shell.wearer-experience .header-actions,
+  .caregiver-page-shell.caregiver-experience .caregiver-identity,
+  .demo-shell .demo-toolbar { width: 100%; align-items: stretch; }
+  .wearer-shell.wearer-experience .profile-selector { width: 100%; }
+  .wearer-shell.wearer-experience .camera-view { height: clamp(360px, 64vh, 540px); min-height: 360px; border-width: 5px; border-radius: 16px; }
+  .wearer-shell.wearer-experience .camera-view::before { inset: 10px; border-radius: 9px; }
+  .wearer-shell.wearer-experience .camera-view::after { top: 17px; }
+  .wearer-shell.wearer-experience .hud-overlay { right: 12px; bottom: 12px; width: calc(100% - 24px); padding: 13px; }
+  .wearer-shell.wearer-experience .camera-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .wearer-shell.wearer-experience .camera-controls button { width: 100%; min-width: 0; }
+  .wearer-shell.wearer-experience .camera-controls .text-button { grid-column: 1 / -1; justify-self: start; width: auto; }
+  .wearer-shell.wearer-experience .hud-control-mode-row { align-items: flex-start; justify-content: flex-start; }
+  .wearer-shell.wearer-experience .hud-query-input-row { flex-direction: row; }
+  .wearer-shell.wearer-experience .hud-query-input-row .primary-button { width: auto; }
+  .wearer-shell.wearer-experience .hud-quick-button { flex: 1 1 46%; min-height: 44px; }
+  .wearer-shell.wearer-experience .memory-review-summary { padding: 17px 18px; }
+  .wearer-shell.wearer-experience .memory-panel-heading,
+  .wearer-shell.wearer-experience .memory-form { padding-right: 18px; padding-left: 18px; }
+
+  .caregiver-page-shell.caregiver-experience .caregiver-header,
+  .demo-shell .demo-page-header { align-items: flex-start; flex-direction: column; }
+  .caregiver-page-shell.caregiver-experience .caregiver-identity select,
+  .demo-shell .profile-selector select,
+  .demo-shell .demo-toolbar .primary-button { width: 100%; }
+  .caregiver-page-shell.caregiver-experience .management-panel { padding: 22px 18px 26px; }
+  .caregiver-page-shell.caregiver-experience .management-tabs { width: calc(100% + 36px); margin-left: -18px; flex-wrap: nowrap; gap: 18px; overflow-x: auto; padding: 0 18px; scrollbar-width: thin; }
+  .caregiver-page-shell.caregiver-experience .management-tab { flex: 0 0 auto; white-space: nowrap; }
+  .caregiver-page-shell.caregiver-experience .patient-list { grid-template-columns: 1fr; }
+  .caregiver-page-shell.caregiver-experience .caregiver-form-grid,
+  .caregiver-page-shell.caregiver-experience .caregiver-inline-form,
+  .caregiver-page-shell.caregiver-experience .caregiver-record-fields { grid-template-columns: 1fr; }
+  .caregiver-page-shell.caregiver-experience .caregiver-inline-form .secondary-button { width: 100%; }
+  .caregiver-page-shell.caregiver-experience .caregiver-record { grid-template-columns: 1fr; }
+  .caregiver-page-shell.caregiver-experience .caregiver-record-actions { justify-content: flex-start; }
+  .demo-shell .demo-card { padding: 22px 18px; }
+  .demo-shell .demo-grid { gap: 16px; }
+  .demo-shell .config-row { align-items: flex-start; flex-direction: column; gap: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-mockup { animation: none; }
 }

@@ -52,9 +52,9 @@ This is a maintainability risk rather than a current route failure. A dedicated 
 
 ### Low
 
-#### Primary route links are hidden on small screens
+#### Visual QA remains manual
 
-At the mobile breakpoint, the shared navigation hides the non-CTA Product and Caregiver links. The brand still returns home and the main action remains available, but there is no compact menu or visible direct path to the other primary surface from the navigation. The content and footer provide alternate paths.
+The responsive layout is covered by route source, CSS breakpoints, production builds, and route smoke checks, but the repository does not include a browser screenshot or interaction harness. Pixel-level review and physical touch testing remain manual.
 
 #### The caregiver surface remains intrinsically data-dense
 
@@ -74,18 +74,19 @@ The refactor substantially reduces visual weight and separates setup tasks into 
 - Reset demo-loaded state, query text, result, loading state, error state, and memory list when changing the active demo profile.
 - Added profile-version guards so late memory, seed, or query responses cannot overwrite the newly selected profile’s state.
 - Added `aria-current="page"` and matching visual treatment to the shared navigation so the current route is understandable visually and to assistive technology.
+- Added an explicit, keyboard-accessible mobile navigation menu with labeled links, Escape-to-close behavior, and focus return to the menu trigger.
 - Prevented keyboard activation of the draggable About window title bar from scrolling the page while bringing that window to the front.
 - Verified the reusable About drag implementation against the requested interaction requirements: pointer/mouse and touch input through pointer events, grab/grabbing feedback, front-most stacking, pointer-offset tracking without a grab jump, selection suppression, resize-aware bounds clamping, and responsive compact positions.
 
 ## Remaining UX Limitations
 
-The current prototype is ready for continued frontend work, but it should not be presented as a production care or medical product. It still has simulated identity, browser camera input, no physical glasses integration, and no production authentication or consent workflow. Viewer-specific caregiver affordances will remain optimistic until the API exposes the relevant capabilities. The mobile navigation and stylesheet consolidation are worthwhile follow-up polish items.
+The current prototype is ready for continued frontend work, but it should not be presented as a production care or medical product. It still has simulated identity, browser camera input, no physical glasses integration, and no production authentication or consent workflow. Viewer-specific caregiver affordances will remain optimistic until the API exposes the relevant capabilities. The stylesheet consolidation remains a worthwhile maintainability follow-up.
 
 Because this repository does not include browser automation, final confidence in pixel-level responsive composition, contrast under every rendered font/platform combination, keyboard-only traversal, touch behavior on physical devices, and reduced-motion playback still requires a manual browser QA pass or a future visual/accessibility test harness.
 
 ## Readiness
 
-**Stage 8 frontend integration is complete and ready for manual product verification.**
+**Stage 8 frontend integration and the responsive visual maturity pass are complete and ready for manual product verification.**
 
 The current surfaces form a coherent product experience, the requested frontend audit is documented, and the remaining findings are known and bounded. Before a production-oriented release, address caregiver capability affordances, add browser-level accessibility/visual checks, and complete the CSS consolidation pass.
 

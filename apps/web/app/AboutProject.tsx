@@ -22,7 +22,7 @@ export default function AboutProject() {
             title="origin.txt"
             boundsRef={desktopRef}
             initialPosition={{ x: 38, y: 44 }}
-            compactPosition={{ x: 16, y: 24 }}
+            compactPosition={{ x: 16, y: 34 }}
             initialZIndex={2}
             className="about-window window-origin"
           >
@@ -45,7 +45,7 @@ export default function AboutProject() {
             title="a gentle note.txt"
             boundsRef={desktopRef}
             initialPosition={{ x: 470, y: 38 }}
-            compactPosition={{ x: 102, y: 218 }}
+            compactPosition={{ x: 28, y: 330 }}
             initialZIndex={5}
             className="about-window window-disclaimer"
           >
@@ -62,7 +62,7 @@ export default function AboutProject() {
             title="prototype.log"
             boundsRef={desktopRef}
             initialPosition={{ x: 635, y: 312 }}
-            compactPosition={{ x: 28, y: 464 }}
+            compactPosition={{ x: 18, y: 560 }}
             initialZIndex={4}
             className="about-window window-capabilities"
           >
@@ -81,7 +81,7 @@ export default function AboutProject() {
             title="memorycue.jpg"
             boundsRef={desktopRef}
             initialPosition={{ x: 1000, y: 78 }}
-            compactPosition={{ x: 178, y: 606 }}
+            compactPosition={{ x: 84, y: 810 }}
             initialZIndex={3}
             className="about-window window-snapshot"
           >
