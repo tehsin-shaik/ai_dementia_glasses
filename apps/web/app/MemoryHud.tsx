@@ -66,8 +66,8 @@ export function MemoryHudControls({ isCameraActive, state, onQuery }: MemoryHudC
     <div className="hud-controls" aria-label="MemoryCue glasses HUD controls">
       <div className="hud-controls-heading">
         <div>
-          <p className="section-kicker">Wearer view</p>
-          <h3>Memory HUD</h3>
+          <p className="section-kicker">In your view</p>
+          <h3>Need a cue?</h3>
         </div>
         <span className="hud-mode-label">Manual cue</span>
       </div>
@@ -83,7 +83,7 @@ export function MemoryHudControls({ isCameraActive, state, onQuery }: MemoryHudC
             disabled={isDisabled}
           />
           <button className="primary-button" type="submit" disabled={isDisabled || !question.trim()}>
-            {isQuerying ? "Checking..." : "Show cue"}
+            {isQuerying ? "Checking..." : "Ask"}
           </button>
         </div>
       </form>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import SiteNav from "../SiteNav";
 import { memoryCueFetch } from "../api";
@@ -86,22 +86,38 @@ export default function DemoPage() {
   const [result, setResult] = useState<QueryResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const profileVersionRef = useRef(0);
 
-  async function refreshMemories(userId = activeUserId) {
+  async function refreshMemories(userId = activeUserId, version = profileVersionRef.current) {
     try {
       const response = await memoryCueFetch(`${API_URL}/api/memories`, userId);
       if (!response.ok) return;
-      setMemories(parseMemoryList(await response.json()));
+      const nextMemories = parseMemoryList(await response.json());
+      if (profileVersionRef.current === version) {
+        setMemories(nextMemories);
+      }
     } catch {
-      setMemories([]);
+      if (profileVersionRef.current === version) {
+        setMemories([]);
+      }
     }
   }
 
   useEffect(() => {
-    void refreshMemories(activeUserId);
+    const version = profileVersionRef.current + 1;
+    profileVersionRef.current = version;
+    setDemoLoaded(false);
+    setMemories([]);
+    setQuestion("");
+    setResult(null);
+    setIsLoading(false);
+    setIsSeeding(false);
+    setError(null);
+    void refreshMemories(activeUserId, version);
   }, [activeUserId]);
 
   async function loadDemo() {
+    const version = profileVersionRef.current;
     setIsSeeding(true);
     setError(null);
     try {
@@ -109,18 +125,24 @@ export default function DemoPage() {
       if (!response.ok) {
         throw new Error(await errorMessage(response, "The demo data could not be loaded."));
       }
+      if (profileVersionRef.current !== version) return;
       setDemoLoaded(true);
-      await refreshMemories(activeUserId);
+      await refreshMemories(activeUserId, version);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "The demo data could not be loaded.");
+      if (profileVersionRef.current === version) {
+        setError(requestError instanceof Error ? requestError.message : "The demo data could not be loaded.");
+      }
     } finally {
-      setIsSeeding(false);
+      if (profileVersionRef.current === version) {
+        setIsSeeding(false);
+      }
     }
   }
 
   async function askQuestion(value = question) {
     const trimmedQuestion = value.trim();
     if (!trimmedQuestion) return;
+    const version = profileVersionRef.current;
     setQuestion(trimmedQuestion);
     setIsLoading(true);
     setError(null);
@@ -133,11 +155,18 @@ export default function DemoPage() {
       if (!response.ok) {
         throw new Error(await errorMessage(response, "The question could not be answered."));
       }
-      setResult(parseQueryResult(await response.json()));
+      const nextResult = parseQueryResult(await response.json());
+      if (profileVersionRef.current === version) {
+        setResult(nextResult);
+      }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "The question could not be answered.");
+      if (profileVersionRef.current === version) {
+        setError(requestError instanceof Error ? requestError.message : "The question could not be answered.");
+      }
     } finally {
-      setIsLoading(false);
+      if (profileVersionRef.current === version) {
+        setIsLoading(false);
+      }
     }
   }
 

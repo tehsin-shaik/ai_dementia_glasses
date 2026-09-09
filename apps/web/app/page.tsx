@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import AboutProject from "./AboutProject";
 import SiteNav from "./SiteNav";
 
 function MemoryCueMockup() {
@@ -136,6 +137,8 @@ export default function ProductPage() {
         <h2>See what MemoryCue<br /><em>remembers.</em></h2>
         <Link className="product-button product-button-dark" href="/app">Launch simulator <span aria-hidden="true">↗</span></Link>
       </section>
+
+      <AboutProject />
 
       <footer className="product-footer">
         <span>MemoryCue · experimental memory support</span>

@@ -896,14 +896,14 @@ export default function CaregiverPage() {
   }
 
   return (
-    <main className="caregiver-page-shell">
+    <main className="caregiver-page-shell caregiver-experience">
       <SiteNav />
       <section className="caregiver-card" aria-labelledby="caregiver-title">
         <header className="caregiver-header">
           <div>
-            <p className="eyebrow">MemoryCue</p>
-            <h1 id="caregiver-title">Caregiver Setup</h1>
-            <p className="subtitle">Development prototype for trusted patient context</p>
+            <p className="eyebrow">Caregiver space</p>
+            <h1 id="caregiver-title">Caregiver setup</h1>
+            <p className="subtitle">Keep the right context close for someone you support.</p>
           </div>
           <div className="caregiver-identity">
             <label>
@@ -921,7 +921,7 @@ export default function CaregiverPage() {
         </header>
 
         <div className="caregiver-notice" role="note">
-          Caregiver changes are limited to explicitly linked patients. This prototype stores setup data locally and does not implement production authentication, invitations, consent workflows, or medical records.
+          Only explicitly linked patient profiles are available here. This local prototype does not provide production authentication, invitations, consent workflows, or medical records.
         </div>
 
         <div className="caregiver-layout">

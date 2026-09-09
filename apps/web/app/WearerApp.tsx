@@ -501,8 +501,8 @@ export default function WearerApp() {
   }
 
   return (
-    <main className="wearer-shell page-shell">
-      <SiteNav />
+    <main className="wearer-shell wearer-experience page-shell">
+      <SiteNav tone="dark" />
       <section className="app-card wearer-card" aria-labelledby="page-title">
         <header className="app-header">
           <div>
