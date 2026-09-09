@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from .authorization import get_current_caregiver, require_caregiver_access
@@ -16,6 +16,7 @@ from .models import (
     PatientProfile,
     Person,
     PersonFaceEnrollment,
+    RecognitionEvent,
     ScheduleItem,
     User,
 )
@@ -285,6 +286,7 @@ def delete_person(
     enrollment = _face_enrollment(db, person.id)
     if enrollment is not None:
         db.delete(enrollment)
+    db.execute(delete(RecognitionEvent).where(RecognitionEvent.person_id == person.id))
     db.delete(person)
     db.commit()
     return Response(status_code=204)

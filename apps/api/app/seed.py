@@ -15,8 +15,10 @@ from .models import (
     PatientProfile,
     Person,
     PersonFaceEnrollment,
+    RecognitionEvent,
     ScheduleItem,
     User,
+    CueState,
 )
 
 
@@ -25,6 +27,8 @@ def seed_demo_data(db: Session) -> dict[str, int | list[int]]:
 
     # Delete children first so this remains safe when foreign keys are enforced.
     for model in (
+        CueState,
+        RecognitionEvent,
         CaregiverNote,
         CaregiverPatientAccess,
         ImportantObject,

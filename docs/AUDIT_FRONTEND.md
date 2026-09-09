@@ -8,7 +8,7 @@ MemoryCue now reads as one coherent product across its public product page, wear
 
 The About section also fits the product direction. Its layered field-note composition includes the project origin, current capabilities, prototype and medical disclaimer, creator credit, and GitHub link. The reusable draggable-window implementation supports pointer and touch dragging, grab/grabbing cursors, front-most stacking, selection suppression, no-jump offsets, bounds clamping, and compact responsive positions.
 
-No backend product behavior, API contract, model behavior, identity logic, media handling, or permissions enforcement was changed for this audit. The remaining issues are primarily polish and future-product limitations rather than blockers for continuing frontend work.
+The original frontend audit did not change backend product behavior, API contracts, model behavior, identity logic, media handling, or permissions enforcement. The remaining frontend issues are primarily polish and future-product limitations rather than blockers for continuing product work.
 
 ## What Was Reviewed
 
@@ -85,9 +85,15 @@ Because this repository does not include browser automation, final confidence in
 
 ## Readiness
 
-**Ready to continue to Stage 8 from the frontend perspective.**
+**Stage 8 frontend integration is complete and ready for manual product verification.**
 
-The current surfaces form a coherent product experience, the requested frontend audit is documented, and the remaining findings are known and bounded. This audit did not add Stage 8 functionality or change backend behavior. Before a production-oriented release, address caregiver capability affordances, add browser-level accessibility/visual checks, and complete the CSS consolidation pass.
+The current surfaces form a coherent product experience, the requested frontend audit is documented, and the remaining findings are known and bounded. Before a production-oriented release, address caregiver capability affordances, add browser-level accessibility/visual checks, and complete the CSS consolidation pass.
+
+## Stage 8 Follow-up
+
+The wearer app now polls patient-scoped proactive cues every 45 seconds while the **Proactive cues** toggle is on. The active profile and request generation protect against late responses rendering another patient’s cue. A proactive cue uses the existing HUD with a subtle `MemoryCue · Proactive cue` label, one cue at a time, and the same dismiss action used for manual HUD output. Manual query, camera, and explicit recognition flows remain separate. The `/demo` route exposes the current patient-scoped cue and a dismiss action for local verification.
+
+The browser build verifies the integration, but there is still no automated browser harness for polling, toggle, touch/camera interaction, or profile-switch rendering. Those behaviors remain part of the manual verification checklist for this stage. The Stage 8 backend suite covers 74 tests, including cue rules, cooldown, dismissal, recognition-event context, patient scoping, and the identity requirement.
 
 ## Validation
 

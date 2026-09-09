@@ -205,6 +205,12 @@
 .demo-result .intent-badge { align-self: start; }
 .debug-details pre { max-width: 100%; overflow: auto; }
 .demo-card .recent-list { max-height: 540px; overflow: auto; }
+.demo-cue-card { margin-top: 24px; }
+.demo-cue-preview { display: grid; gap: 10px; max-width: 700px; padding: 18px; border: 1px solid #c9e0d9; border-radius: 16px; background: var(--teal-soft); }
+.demo-cue-preview p { margin: 0; }
+.demo-cue-preview-title { color: var(--teal-dark); font-family: var(--display); font-size: 1.5rem; font-weight: 800; }
+.demo-cue-preview small { color: var(--muted); font-size: 0.75rem; }
+.demo-cue-preview .secondary-button { justify-self: start; }
 .demo-config-card { margin-top: 24px; }
 .config-row { padding: 15px 0; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
 .config-row:last-child { border-bottom: 0; }
@@ -1356,6 +1362,39 @@ h2 {
   font-size: 0.7rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.hud-control-mode-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hud-proactive-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hud-proactive-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--teal);
+}
+
+.hud-overlay-cue-title {
+  display: block;
+  margin-top: 12px;
+  color: #f5fffd;
+  font-size: 1.1rem;
+  line-height: 1.2;
 }
 
 .hud-query-form {
@@ -2779,6 +2818,7 @@ h2 {
 }
 
 .wearer-shell.wearer-experience .hud-overlay-message { font-size: 1.18rem; line-height: 1.35; }
+.wearer-shell.wearer-experience .hud-overlay-cue-title { color: #b7e1d8; }
 .wearer-shell.wearer-experience .camera-controls { margin-top: 18px; }
 .wearer-shell.wearer-experience .camera-controls .primary-button { min-height: 54px; padding: 13px 20px; }
 .wearer-shell.wearer-experience .camera-controls .secondary-button { min-height: 54px; border-color: rgba(236, 247, 242, 0.28); color: #ecf7f2; background: rgba(236, 247, 242, 0.08); }
@@ -2795,6 +2835,8 @@ h2 {
 
 .wearer-shell.wearer-experience .hud-controls h3 { color: #f7fbf7; font-family: var(--display); font-size: 1.45rem; font-weight: 800; }
 .wearer-shell.wearer-experience .hud-mode-label { border-color: rgba(158, 211, 201, 0.25); color: #b7e1d8; background: rgba(158, 211, 201, 0.1); }
+.wearer-shell.wearer-experience .hud-proactive-toggle { color: rgba(236, 247, 242, 0.72); }
+.wearer-shell.wearer-experience .hud-proactive-toggle input { accent-color: #9ed3c9; }
 .wearer-shell.wearer-experience .hud-query-form > label,
 .wearer-shell.wearer-experience .hud-quick-actions > span { color: rgba(236, 247, 242, 0.72); }
 .wearer-shell.wearer-experience .hud-query-input-row input { border-color: rgba(236, 247, 242, 0.22); color: #f7fbf7; background: rgba(236, 247, 242, 0.08); }

@@ -59,7 +59,7 @@ The first version is a software-only prototype.
 
 No physical smart glasses are required.
 
-The MVP focuses on five core experiences:
+The MVP focuses on six core experiences:
 
 ### 1. Recent activity recall
 
@@ -95,7 +95,21 @@ The system returns a simple schedule of upcoming activities.
 
 ### 5. Approved known-person recognition
 
-Caregivers can optionally enroll a face for an existing person in a patient profile. When the patient chooses **Who is this?** in the live camera simulator, MemoryCue compares that single frame only with that patient's caregiver-approved enrollments. Strong, unambiguous matches show the stored person name and relationship; weak or ambiguous matches return an unknown response.
+Caregivers can optionally enroll a face for an existing person in a patient profile. When the patient chooses **Who is this?** in the live camera simulator, MemoryCue compares that single frame only with that patient's caregiver-approved enrollments. Strong, unambiguous matches show the stored person name and relationship; weak or ambiguous matches return an unknown response. A successful explicit recognition records only the latest patient-scoped recognition event so the cue engine can optionally provide relationship context.
+
+### 6. Proactive context cues
+
+Stage 8 adds a small rule-based cue engine that can surface one useful reminder without waiting for a typed question. The wearer app polls the patient-scoped `/api/cues` endpoint every 45 seconds while **Proactive cues** is turned on.
+
+The cue engine currently considers only:
+
+* same-day schedule items within a configurable lookahead window, defaulting to 30 minutes;
+* a stored relationship after the wearer explicitly uses **Who is this?**; and
+* an important object with a recent observation and an explicitly recorded leaving-related activity.
+
+Recognition cues take priority over schedule cues, which take priority over object cues. Only one cue is shown at a time. A presented cue has a 20-minute cooldown by default, and the wearer can dismiss it or turn proactive cues off. Manual questions, camera capture, and explicit recognition continue to work independently.
+
+These are conservative, explainable reminders based on stored patient context. MemoryCue does not continuously analyze video, scan faces in the background, infer emotion or confusion, or create medical or medication reminders.
 
 ## Creating Memories
 
@@ -138,7 +152,7 @@ Use **Retake** to replace the captured frame and **Stop camera** when finished. 
 
 ### Glasses-style memory HUD
 
-While the webcam is active, the simulator also provides a compact glasses-style HUD over the live camera view. Choose one of the quick cues or type a question under **Ask MemoryCue**, then choose **Show cue**. The HUD sends that question to the same grounded `/api/query` endpoint used by the normal question panel.
+While the webcam is active, the simulator also provides a compact glasses-style HUD over the live camera view. Choose one of the quick cues or type a question under **Ask MemoryCue**, then choose **Ask**. The HUD sends that question to the same grounded `/api/query` endpoint used by the normal question panel.
 
 The cue shows the existing answer directly, including a clear unknown state when MemoryCue has no matching context. Choose **Dismiss** to clear it without stopping the camera. MemoryCue does not continuously analyze video or run background queries. Face recognition is a separate, manually triggered action described below.
 
@@ -247,7 +261,7 @@ The software prototype allows the memory system to be developed and tested befor
 
 ## Project Status
 
-**Current stage:** Stage 7 approved known-person recognition prototype
+**Current stage:** Stage 8 proactive context cues prototype
 
 The project is currently focused on building the core memory loop:
 
@@ -259,6 +273,7 @@ See:
 
 * [MVP definition](docs/MVP.md)
 * [Architecture](docs/architecture.md)
+* [Frontend audit](docs/AUDIT_FRONTEND.md)
 
 ## Run Locally
 
@@ -292,6 +307,8 @@ Open [http://localhost:3000](http://localhost:3000) for the product page. Choose
 
 The local prototype stores timestamps as naive local wall-clock values. The browser and backend use their local time for manual/camera entries and the demo schedule; timezone-aware API timestamps are converted to the backend's local time before storage.
 
+To try proactive cues locally, seed the demo data, then use `/caregiver` to add a schedule item within the next 30 minutes for Alex or Jordan. Open `/app`, select the same profile, start the camera, and leave **Proactive cues** turned on. The cue appears in the glasses-style HUD, can be dismissed, and will not immediately repeat. `/demo` includes a **Current cue** panel for inspecting the patient-scoped result without using the camera.
+
 ## Safety and Scope
 
 MemoryCue is an experimental assistive technology prototype.
@@ -301,7 +318,8 @@ It is **not**:
 * a medical device;
 * a diagnostic system;
 * a replacement for caregivers;
-* a replacement for medical professionals.
+* a replacement for medical professionals; or
+* a medical or medication reminder system.
 
 The project focuses on memory retrieval and everyday support rather than diagnosis or treatment.
 

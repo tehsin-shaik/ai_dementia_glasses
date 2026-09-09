@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 
 import SiteNav from "../SiteNav";
 import { memoryCueFetch } from "../api";
+import type { ProactiveCue } from "../MemoryHud";
 
 type QueryResult = {
   answer: string;
@@ -69,6 +70,29 @@ function parseMemoryList(payload: unknown): MemoryListItem[] {
   return payload as MemoryListItem[];
 }
 
+function parseProactiveCues(payload: unknown): ProactiveCue[] {
+  if (!isRecord(payload) || !Array.isArray(payload.cues)) {
+    throw new Error("The proactive cue response was invalid.");
+  }
+  if (
+    !payload.cues.every(
+      (cue) =>
+        isRecord(cue) &&
+        typeof cue.id === "string" &&
+        ["schedule_upcoming", "recognized_person", "important_object"].includes(String(cue.type)) &&
+        typeof cue.title === "string" &&
+        typeof cue.message === "string" &&
+        typeof cue.priority === "number" &&
+        Array.isArray(cue.source_ids) &&
+        cue.source_ids.every((sourceId) => typeof sourceId === "string") &&
+        (cue.expires_at === null || typeof cue.expires_at === "string"),
+    )
+  ) {
+    throw new Error("The proactive cue response was invalid.");
+  }
+  return payload.cues as ProactiveCue[];
+}
+
 function imageUrl(path: string): string {
   return path.startsWith("http") ? path : `${API_URL}${path}`;
 }
@@ -86,6 +110,9 @@ export default function DemoPage() {
   const [result, setResult] = useState<QueryResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [proactiveCue, setProactiveCue] = useState<ProactiveCue | null>(null);
+  const [isLoadingCues, setIsLoadingCues] = useState(false);
+  const [cueError, setCueError] = useState<string | null>(null);
   const profileVersionRef = useRef(0);
 
   async function refreshMemories(userId = activeUserId, version = profileVersionRef.current) {
@@ -103,6 +130,31 @@ export default function DemoPage() {
     }
   }
 
+  async function refreshCues(userId = activeUserId, version = profileVersionRef.current) {
+    if (profileVersionRef.current === version) {
+      setIsLoadingCues(true);
+      setProactiveCue(null);
+      setCueError(null);
+    }
+    try {
+      const response = await memoryCueFetch(`${API_URL}/api/cues`, userId);
+      if (!response.ok) return;
+      const nextCue = parseProactiveCues(await response.json())[0] ?? null;
+      if (profileVersionRef.current === version) {
+        setProactiveCue(nextCue);
+      }
+    } catch (requestError) {
+      if (profileVersionRef.current === version) {
+        setProactiveCue(null);
+        setCueError(requestError instanceof Error ? requestError.message : "The proactive cues could not be loaded.");
+      }
+    } finally {
+      if (profileVersionRef.current === version) {
+        setIsLoadingCues(false);
+      }
+    }
+  }
+
   useEffect(() => {
     const version = profileVersionRef.current + 1;
     profileVersionRef.current = version;
@@ -112,8 +164,12 @@ export default function DemoPage() {
     setResult(null);
     setIsLoading(false);
     setIsSeeding(false);
+    setProactiveCue(null);
+    setIsLoadingCues(false);
+    setCueError(null);
     setError(null);
     void refreshMemories(activeUserId, version);
+    void refreshCues(activeUserId, version);
   }, [activeUserId]);
 
   async function loadDemo() {
@@ -128,6 +184,7 @@ export default function DemoPage() {
       if (profileVersionRef.current !== version) return;
       setDemoLoaded(true);
       await refreshMemories(activeUserId, version);
+      await refreshCues(activeUserId, version);
     } catch (requestError) {
       if (profileVersionRef.current === version) {
         setError(requestError instanceof Error ? requestError.message : "The demo data could not be loaded.");
@@ -135,6 +192,28 @@ export default function DemoPage() {
     } finally {
       if (profileVersionRef.current === version) {
         setIsSeeding(false);
+      }
+    }
+  }
+
+  async function dismissCue() {
+    if (!proactiveCue) return;
+    const cue = proactiveCue;
+    const version = profileVersionRef.current;
+    setProactiveCue(null);
+    setCueError(null);
+    try {
+      const response = await memoryCueFetch(
+        `${API_URL}/api/cues/${encodeURIComponent(cue.id)}/dismiss`,
+        activeUserId,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        throw new Error("The proactive cue could not be dismissed.");
+      }
+    } catch (requestError) {
+      if (profileVersionRef.current === version) {
+        setCueError(requestError instanceof Error ? requestError.message : "The proactive cue could not be dismissed.");
       }
     }
   }
@@ -259,6 +338,26 @@ export default function DemoPage() {
             ) : <p className="empty-answer">No memories loaded for this profile.</p>}
           </section>
         </div>
+
+        <section className="demo-card demo-cue-card" aria-labelledby="proactive-cue-heading">
+          <div className="recent-heading-row">
+            <div><p className="section-kicker">Proactive context</p><h2 id="proactive-cue-heading">Current cue</h2></div>
+            <button className="text-button" type="button" onClick={() => void refreshCues()} disabled={isLoadingCues}>
+              {isLoadingCues ? "Checking..." : "Refresh"}
+            </button>
+          </div>
+          {proactiveCue ? (
+            <div className="demo-cue-preview">
+              <p className="demo-cue-preview-title">{proactiveCue.title}</p>
+              <p>{proactiveCue.message}</p>
+              <small>Priority {proactiveCue.priority} · {proactiveCue.source_ids.join(", ")}</small>
+              <button className="secondary-button" type="button" onClick={() => void dismissCue()}>Dismiss cue</button>
+            </div>
+          ) : (
+            <p className="empty-answer">No current cue for this profile.</p>
+          )}
+          {cueError && <p className="error-message" role="alert">{cueError}</p>}
+        </section>
 
         <section className="demo-card demo-config-card" aria-labelledby="config-heading">
           <p className="section-kicker">Environment</p>

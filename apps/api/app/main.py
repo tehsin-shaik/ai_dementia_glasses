@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from . import models  # noqa: F401 - registers models before table creation
 from .caregiver import router as caregiver_router
+from .cues.routes import router as cues_router
 from .database import get_db, init_db
 from .face.routes import router as face_router
 from .identity import get_current_user
@@ -48,6 +49,7 @@ app.add_middleware(
 )
 app.include_router(caregiver_router)
 app.include_router(face_router)
+app.include_router(cues_router)
 
 
 @app.get("/api/health", response_model=HealthResponse)

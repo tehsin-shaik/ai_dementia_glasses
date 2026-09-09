@@ -4,10 +4,21 @@ import { FormEvent, useState } from "react";
 
 export type MemoryHudState = "idle" | "querying" | "result" | "unknown" | "error";
 
+export type ProactiveCue = {
+  id: string;
+  type: "schedule_upcoming" | "recognized_person" | "important_object";
+  title: string;
+  message: string;
+  priority: number;
+  source_ids: string[];
+  expires_at: string | null;
+};
+
 type MemoryHudOverlayProps = {
   state: MemoryHudState;
   answer: string | null;
   error: string | null;
+  proactiveCue: ProactiveCue | null;
   onDismiss: () => void;
 };
 
@@ -15,6 +26,8 @@ type MemoryHudControlsProps = {
   isCameraActive: boolean;
   state: MemoryHudState;
   onQuery: (question: string) => void;
+  proactiveCuesEnabled: boolean;
+  onProactiveCuesChange: (enabled: boolean) => void;
 };
 
 const QUICK_ACTIONS = [
@@ -23,15 +36,22 @@ const QUICK_ACTIONS = [
   "What am I doing today?",
 ];
 
-export function MemoryHudOverlay({ state, answer, error, onDismiss }: MemoryHudOverlayProps) {
-  if (state === "idle") {
+export function MemoryHudOverlay({ state, answer, error, proactiveCue, onDismiss }: MemoryHudOverlayProps) {
+  if (state === "idle" && !proactiveCue) {
     return null;
   }
 
-  const isError = state === "error";
-  const isUnknown = state === "unknown";
-  const heading = state === "querying" ? "Checking memory" : isError ? "MemoryCue unavailable" : "MemoryCue cue";
-  const message = state === "querying" ? "Looking that up..." : isError ? error : answer;
+  const isProactive = state !== "querying" && proactiveCue !== null;
+  const isError = state === "error" && !isProactive;
+  const isUnknown = state === "unknown" && !isProactive;
+  const heading = state === "querying"
+    ? "Checking memory"
+    : isProactive
+      ? "MemoryCue · Proactive cue"
+      : isError
+        ? "MemoryCue unavailable"
+        : "MemoryCue cue";
+  const message = state === "querying" ? "Looking that up..." : isProactive ? proactiveCue.message : isError ? error : answer;
 
   return (
     <aside className={`hud-overlay hud-overlay-${state}`} aria-live="polite" aria-label="MemoryCue HUD cue">
@@ -41,6 +61,7 @@ export function MemoryHudOverlay({ state, answer, error, onDismiss }: MemoryHudO
           Dismiss
         </button>
       </div>
+      {isProactive && <strong className="hud-overlay-cue-title">{proactiveCue.title}</strong>}
       <p className={`hud-overlay-message ${isUnknown ? "is-unknown" : ""}`}>
         {message ?? "MemoryCue does not have an answer for that yet."}
       </p>
@@ -48,7 +69,13 @@ export function MemoryHudOverlay({ state, answer, error, onDismiss }: MemoryHudO
   );
 }
 
-export function MemoryHudControls({ isCameraActive, state, onQuery }: MemoryHudControlsProps) {
+export function MemoryHudControls({
+  isCameraActive,
+  state,
+  onQuery,
+  proactiveCuesEnabled,
+  onProactiveCuesChange,
+}: MemoryHudControlsProps) {
   const [question, setQuestion] = useState("");
   const isQuerying = state === "querying";
   const isDisabled = !isCameraActive || isQuerying;
@@ -69,7 +96,18 @@ export function MemoryHudControls({ isCameraActive, state, onQuery }: MemoryHudC
           <p className="section-kicker">In your view</p>
           <h3>Need a cue?</h3>
         </div>
-        <span className="hud-mode-label">Manual cue</span>
+        <div className="hud-control-mode-row">
+          <span className="hud-mode-label">Manual cue</span>
+          <label className="hud-proactive-toggle">
+            <span>Proactive cues</span>
+            <input
+              type="checkbox"
+              checked={proactiveCuesEnabled}
+              onChange={(event) => onProactiveCuesChange(event.target.checked)}
+            />
+            <span aria-hidden="true">{proactiveCuesEnabled ? "On" : "Off"}</span>
+          </label>
+        </div>
       </div>
       <form className="hud-query-form" onSubmit={submitQuestion}>
         <label htmlFor="hud-question">Ask MemoryCue</label>

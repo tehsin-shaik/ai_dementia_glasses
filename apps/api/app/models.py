@@ -96,6 +96,18 @@ class PersonFaceEnrollment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, index=True)
 
 
+class RecognitionEvent(Base):
+    """The latest explicit recognition event for one patient person."""
+
+    __tablename__ = "recognition_events"
+    __table_args__ = (UniqueConstraint("user_id", "person_id", name="uq_recognition_event_person"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id"), nullable=False, index=True)
+    recognized_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+
 class ScheduleItem(Base):
     __tablename__ = "schedule_items"
 
@@ -123,3 +135,16 @@ class CaregiverNote(Base):
     caregiver_id: Mapped[int] = mapped_column(ForeignKey("caregivers.id"), nullable=False, index=True)
     note: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, index=True)
+
+
+class CueState(Base):
+    """Patient-scoped presentation and dismissal state for one cue key."""
+
+    __tablename__ = "cue_states"
+    __table_args__ = (UniqueConstraint("user_id", "cue_key", name="uq_cue_state_user_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    cue_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_shown_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

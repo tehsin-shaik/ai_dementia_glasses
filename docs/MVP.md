@@ -18,6 +18,15 @@ Observe something
 
 The system should retrieve information that has been observed or explicitly provided. It should not invent personal information.
 
+Stage 8 extends the reactive memory loop with a limited proactive loop:
+
+```text
+Evaluate stored patient context
+    -> select one explainable cue
+    -> show it calmly
+    -> let the wearer dismiss or disable it
+```
+
 ## Memory Creation
 
 The prototype supports manual memory creation from an uploaded image and metadata. A user can provide an image, timestamp, location, description, optional activity, and optional object name such as `keys`.
@@ -38,7 +47,21 @@ Camera access normally requires `localhost` or HTTPS. The simulator does not req
 
 Stage 5 adds a wearer-facing HUD to the live camera view. While the webcam is active, the user can manually ask a custom question or choose one of three quick cues: recent activity, last-seen keys, or today's schedule. The HUD reuses the existing `/api/query` endpoint and displays its grounded answer without exposing source IDs in the wearer view.
 
-The HUD supports idle, querying, result, unknown, and error states. A cue can be dismissed without stopping the camera. It does not perform continuous background analysis or automatic querying. Stage 7 adds a separate explicit face-recognition action.
+The HUD supports idle, querying, result, unknown, and error states. A cue can be dismissed without stopping the camera. The manual HUD does not analyze video; Stage 8 adds a separate, low-frequency poll of stored context for proactive cues. Stage 7 adds a separate explicit face-recognition action.
+
+## Proactive Context Cues
+
+Stage 8 adds a small rule-based `CueEngine` behind `GET /api/cues`. The endpoint uses the current `X-MemoryCue-User-Id` and returns at most one current cue for that patient. Cues are normalized, explainable records with a source ID, priority, and optional expiration.
+
+The current rules are deliberately narrow:
+
+* `schedule_upcoming`: a same-day schedule item in the next 30 minutes by default;
+* `recognized_person`: the latest successful explicit **Who is this?** event within a short window, using the stored `Person` name and relationship; and
+* `important_object`: a caregiver-marked important object with a recent last-seen observation and a recent activity explicitly matching a leaving-related phrase.
+
+Recognition cues have the highest priority, followed by schedule cues and then important-object cues. The endpoint presents one cue at a time. A patient-scoped cue state prevents the same cue from repeating during the configurable 20-minute cooldown, and a dismissal prevents that cue key from returning. The wearer can turn proactive polling off; manual questions, camera capture, and explicit face recognition remain available.
+
+The cue engine never infers medical needs, medication compliance, emotion, confusion, distress, wandering, falls, or behavioral anomalies. It does not continuously inspect video or perform background face recognition. It evaluates stored context only.
 
 ## Development Identity and User Scoping
 
@@ -140,4 +163,4 @@ The first MVP does not include:
 - multiple AI providers; or
 - a mobile application.
 
-These may be considered later.
+These may be considered later. Stage 8 also does not include continuous autonomous monitoring, medical or medication reminders, push notifications, WebSockets, routine-learning models, or behavioral inference.

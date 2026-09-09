@@ -1,7 +1,7 @@
 """Tests for the deterministic MemoryCue API vertical slice."""
 
 from collections.abc import Generator
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from pathlib import Path
 
@@ -55,6 +55,20 @@ def seed(client: TestClient) -> None:
     assert response.status_code == 200
 
 
+def clear_schedule(client: TestClient, patient_id: int) -> None:
+    response = client.get(
+        f"/api/caregiver/patients/{patient_id}/schedule",
+        headers=caregiver_headers(patient_id),
+    )
+    assert response.status_code == 200
+    for item in response.json():
+        deleted = client.delete(
+            f"/api/caregiver/patients/{patient_id}/schedule/{item['id']}",
+            headers=caregiver_headers(patient_id),
+        )
+        assert deleted.status_code == 204
+
+
 def user_headers(user_id: int) -> dict[str, str]:
     return {USER_ID_HEADER: str(user_id)}
 
@@ -98,6 +112,10 @@ def timestamp_at(hour: int = 10, minute: int = 42) -> str:
         second=0,
         microsecond=0,
     ).isoformat(timespec="seconds")
+
+
+def timestamp_in(minutes: int) -> str:
+    return (datetime.now() + timedelta(minutes=minutes)).replace(second=0, microsecond=0).isoformat(timespec="seconds")
 
 
 class StubFaceRecognizer:
@@ -1337,3 +1355,198 @@ def test_caregiver_notes_are_scoped_and_record_author(client: TestClient) -> Non
         headers=caregiver_headers(1),
     )
     assert deleted.status_code == 204
+
+
+def test_schedule_cue_within_lookahead(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    monkeypatch.setenv("CUE_SCHEDULE_LOOKAHEAD_MINUTES", "30")
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+
+    created = client.post(
+        "/api/caregiver/patients/1/schedule",
+        headers=caregiver_headers(1),
+        json={"title": "Sarah visits", "scheduled_at": timestamp_in(10)},
+    )
+    assert created.status_code == 201
+
+    response = client.get("/api/cues", headers=user_headers(1))
+
+    assert response.status_code == 200
+    assert response.json()["cues"][0]["type"] == "schedule_upcoming"
+    assert response.json()["cues"][0]["title"] == "Coming up"
+    assert response.json()["cues"][0]["message"].startswith("Sarah visits at")
+    assert response.json()["cues"][0]["source_ids"] == [f"schedule:{created.json()['id']}"]
+
+
+def test_schedule_cue_not_returned_outside_window(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    monkeypatch.setenv("CUE_SCHEDULE_LOOKAHEAD_MINUTES", "30")
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+
+    created = client.post(
+        "/api/caregiver/patients/1/schedule",
+        headers=caregiver_headers(1),
+        json={"title": "Later visit", "scheduled_at": timestamp_in(31)},
+    )
+    assert created.status_code == 201
+
+    response = client.get("/api/cues", headers=user_headers(1))
+
+    assert response.status_code == 200
+    assert response.json() == {"cues": []}
+
+
+def test_schedule_cue_is_user_scoped(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    clear_schedule(client, 2)
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+
+    created = client.post(
+        "/api/caregiver/patients/1/schedule",
+        headers=caregiver_headers(1),
+        json={"title": "Alex visit", "scheduled_at": timestamp_in(10)},
+    )
+    assert created.status_code == 201
+
+    response = client.get("/api/cues", headers=user_headers(2))
+
+    assert response.status_code == 200
+    assert response.json() == {"cues": []}
+
+
+def test_cue_cooldown_prevents_repeat(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    monkeypatch.setenv("CUE_COOLDOWN_MINUTES", "20")
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+    created = client.post(
+        "/api/caregiver/patients/1/schedule",
+        headers=caregiver_headers(1),
+        json={"title": "A near-term appointment", "scheduled_at": timestamp_in(10)},
+    )
+    assert created.status_code == 201
+
+    first = client.get("/api/cues", headers=user_headers(1))
+    second = client.get("/api/cues", headers=user_headers(1))
+
+    assert len(first.json()["cues"]) == 1
+    assert second.json() == {"cues": []}
+
+
+def test_dismissed_cue_does_not_reappear(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+    created = client.post(
+        "/api/caregiver/patients/1/schedule",
+        headers=caregiver_headers(1),
+        json={"title": "A visit to dismiss", "scheduled_at": timestamp_in(10)},
+    )
+    assert created.status_code == 201
+    first = client.get("/api/cues", headers=user_headers(1))
+    cue_id = first.json()["cues"][0]["id"]
+
+    dismissed = client.post(f"/api/cues/{cue_id}/dismiss", headers=user_headers(1))
+    again = client.get("/api/cues", headers=user_headers(1))
+
+    assert dismissed.status_code == 200
+    assert dismissed.json() == {"status": "dismissed", "cue_id": cue_id}
+    assert again.json() == {"cues": []}
+
+
+def test_recognized_person_cue_uses_stored_relationship(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    enrollment = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+    assert enrollment.status_code == 200
+
+    recognition = recognize_face(client, user_id=1, image_bytes=b"sarah-camera")
+    response = client.get("/api/cues", headers=user_headers(1))
+
+    assert recognition.status_code == 200
+    assert response.status_code == 200
+    cue = response.json()["cues"][0]
+    assert cue["type"] == "recognized_person"
+    assert cue["title"] == "Sarah"
+    assert cue["message"] == "Your daughter."
+    assert f"person:{sarah['id']}" in cue["source_ids"]
+
+
+def test_recognized_person_cue_is_patient_scoped(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    clear_schedule(client, 2)
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+    monkeypatch.setattr(face_provider, "get_face_recognizer", lambda: StubFaceRecognizer())
+    sarah = client.get("/api/caregiver/patients/1/people", headers=caregiver_headers(1)).json()[0]
+    enrollment = upload_face(
+        client,
+        patient_id=1,
+        person_id=sarah["id"],
+        caregiver_id=1,
+        image_bytes=b"sarah-reference",
+    )
+    assert enrollment.status_code == 200
+    assert recognize_face(client, user_id=1, image_bytes=b"sarah-camera").status_code == 200
+
+    response = client.get("/api/cues", headers=user_headers(2))
+
+    assert response.status_code == 200
+    assert response.json() == {"cues": []}
+
+
+def test_no_cue_when_context_is_insufficient(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+
+    response = client.get("/api/cues", headers=user_headers(1))
+
+    assert response.status_code == 200
+    assert response.json() == {"cues": []}
+
+
+def test_important_object_cue_uses_last_seen_language(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "30")
+    recent_timestamp = datetime.now().replace(second=0, microsecond=0).isoformat(timespec="seconds")
+    created = upload_memory(
+        client,
+        timestamp=recent_timestamp,
+        location="hallway table",
+        description="Keys were placed on the hallway table before leaving.",
+        activity="preparing to leave",
+        object_name="keys",
+        filename="recent-keys.jpg",
+    )
+    assert created.status_code == 201
+
+    response = client.get("/api/cues", headers=user_headers(1))
+
+    assert response.status_code == 200
+    cue = response.json()["cues"][0]
+    assert cue["type"] == "important_object"
+    assert cue["title"] == "keys"
+    assert cue["message"] == "Last seen at hallway table."
+    assert f"object_observation:{created.json()['object_observation_id']}" in cue["source_ids"]
+
+
+def test_cues_endpoint_requires_identity(client: TestClient) -> None:
+    with TestClient(app) as anonymous_client:
+        response = anonymous_client.get("/api/cues")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "User identity is required."}

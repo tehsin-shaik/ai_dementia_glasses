@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { captureVideoFrame } from "./camera";
-import { MemoryHudControls, MemoryHudOverlay, MemoryHudState } from "./MemoryHud";
+import { MemoryHudControls, MemoryHudOverlay, MemoryHudState, ProactiveCue } from "./MemoryHud";
 
 export type CameraStatus =
   | "inactive"
@@ -31,6 +31,9 @@ type GlassesSimulatorProps = {
   hudState: MemoryHudState;
   hudAnswer: string | null;
   hudError: string | null;
+  proactiveCue: ProactiveCue | null;
+  proactiveCuesEnabled: boolean;
+  onProactiveCuesChange: (enabled: boolean) => void;
   onHudQuery: (question: string) => void;
   onDismissHud: () => void;
   onImagePreviewError: () => void;
@@ -113,6 +116,9 @@ export default function GlassesSimulator({
   hudState,
   hudAnswer,
   hudError,
+  proactiveCue,
+  proactiveCuesEnabled,
+  onProactiveCuesChange,
   onHudQuery,
   onDismissHud,
   onImagePreviewError,
@@ -255,6 +261,10 @@ export default function GlassesSimulator({
   const isStreamActive = Boolean(streamRef.current);
   const showLivePreview = isActive || isStarting || isStreamActive;
   const hasFrame = Boolean(capturedFrame && capturedPreviewUrl);
+  const visibleProactiveCue = isStreamActive && proactiveCue &&
+    (!proactiveCue.expires_at || new Date(proactiveCue.expires_at).getTime() > Date.now())
+    ? proactiveCue
+    : null;
 
   return (
     <section className="camera-panel" aria-labelledby="camera-heading">
@@ -286,12 +296,19 @@ export default function GlassesSimulator({
           state={hudState}
           answer={hudAnswer}
           error={hudError}
+          proactiveCue={visibleProactiveCue}
           onDismiss={onDismissHud}
         />
       </div>
       <canvas ref={canvasRef} className="camera-canvas" aria-hidden="true" />
 
-      <MemoryHudControls isCameraActive={isStreamActive} state={hudState} onQuery={onHudQuery} />
+      <MemoryHudControls
+        isCameraActive={isStreamActive}
+        state={hudState}
+        onQuery={onHudQuery}
+        proactiveCuesEnabled={proactiveCuesEnabled}
+        onProactiveCuesChange={onProactiveCuesChange}
+      />
 
       <div className="camera-controls">
         {!streamRef.current && !hasFrame && (

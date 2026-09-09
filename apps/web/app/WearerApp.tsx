@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, SyntheticEvent, useEffect, useRef, useState } from "react";
 import GlassesSimulator from "./GlassesSimulator";
-import { MemoryHudState } from "./MemoryHud";
+import { MemoryHudState, ProactiveCue } from "./MemoryHud";
 import { memoryCueFetch } from "./api";
 import SiteNav from "./SiteNav";
 
@@ -148,6 +148,29 @@ function parseSavedMemory(payload: unknown): { location: string; object_observat
   };
 }
 
+function parseProactiveCues(payload: unknown): ProactiveCue[] {
+  if (!isRecord(payload) || !Array.isArray(payload.cues)) {
+    throw new Error("The proactive cue response was invalid.");
+  }
+  if (
+    !payload.cues.every(
+      (cue) =>
+        isRecord(cue) &&
+        typeof cue.id === "string" &&
+        ["schedule_upcoming", "recognized_person", "important_object"].includes(String(cue.type)) &&
+        typeof cue.title === "string" &&
+        typeof cue.message === "string" &&
+        typeof cue.priority === "number" &&
+        Array.isArray(cue.source_ids) &&
+        cue.source_ids.every((sourceId) => typeof sourceId === "string") &&
+        (cue.expires_at === null || typeof cue.expires_at === "string"),
+    )
+  ) {
+    throw new Error("The proactive cue response was invalid.");
+  }
+  return payload.cues as ProactiveCue[];
+}
+
 export default function WearerApp() {
   const [activeUserId, setActiveUserId] = useState<number>(DEMO_PROFILES[0].id);
   const [question, setQuestion] = useState("");
@@ -173,8 +196,13 @@ export default function WearerApp() {
   const [isSavingMemory, setIsSavingMemory] = useState(false);
   const [cameraSaved, setCameraSaved] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [proactiveCuesEnabled, setProactiveCuesEnabled] = useState(true);
+  const [proactiveCue, setProactiveCue] = useState<ProactiveCue | null>(null);
+  const [proactiveRefreshToken, setProactiveRefreshToken] = useState(0);
   const hudRequestRef = useRef(0);
   const profileVersionRef = useRef(0);
+  const proactiveRequestRef = useRef(0);
+  const dismissedCueKeysRef = useRef<Set<string>>(new Set());
 
   const activeProfile = DEMO_PROFILES.find((profile) => profile.id === activeUserId) ?? DEMO_PROFILES[0];
 
@@ -190,11 +218,85 @@ export default function WearerApp() {
     };
   }, [previewUrl]);
 
-  function dismissHud() {
+  useEffect(() => {
+    const requestGeneration = proactiveRequestRef.current + 1;
+    proactiveRequestRef.current = requestGeneration;
+    const requestUserId = activeUserId;
+    const requestProfileVersion = profileVersionRef.current;
+
+    if (!proactiveCuesEnabled) {
+      setProactiveCue(null);
+      return () => {
+        proactiveRequestRef.current += 1;
+      };
+    }
+
+    async function pollForCue() {
+      try {
+        const response = await memoryCueFetch(`${API_URL}/api/cues`, requestUserId);
+        if (!response.ok) return;
+        const nextCue = parseProactiveCues(await response.json())[0] ?? null;
+        if (
+          proactiveRequestRef.current !== requestGeneration ||
+          profileVersionRef.current !== requestProfileVersion
+        ) {
+          return;
+        }
+        const cueKey = nextCue ? `${requestUserId}:${nextCue.id}` : null;
+        setProactiveCue(cueKey && dismissedCueKeysRef.current.has(cueKey) ? null : nextCue);
+      } catch {
+        // Proactive polling is best-effort and should not interrupt manual cues.
+      }
+    }
+
+    void pollForCue();
+    const intervalId = window.setInterval(() => void pollForCue(), 45_000);
+    return () => {
+      window.clearInterval(intervalId);
+      proactiveRequestRef.current += 1;
+    };
+  }, [activeUserId, proactiveCuesEnabled, proactiveRefreshToken]);
+
+  function clearProactiveCue() {
+    setProactiveCue(null);
+  }
+
+  async function dismissProactiveCue(cue: ProactiveCue) {
+    const requestUserId = activeUserId;
+    const requestProfileVersion = profileVersionRef.current;
+    const cueKey = `${requestUserId}:${cue.id}`;
+    dismissedCueKeysRef.current.add(cueKey);
+    try {
+      const response = await memoryCueFetch(
+        `${API_URL}/api/cues/${encodeURIComponent(cue.id)}/dismiss`,
+        requestUserId,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        throw new Error("The proactive cue could not be dismissed.");
+      }
+    } catch (requestError) {
+      dismissedCueKeysRef.current.delete(cueKey);
+      if (profileVersionRef.current === requestProfileVersion) {
+        setError(requestError instanceof Error ? requestError.message : "The proactive cue could not be dismissed.");
+      }
+    }
+  }
+
+  function clearHud() {
     hudRequestRef.current += 1;
     setHudState("idle");
     setHudAnswer(null);
     setHudError(null);
+    clearProactiveCue();
+  }
+
+  function dismissHud() {
+    const cue = proactiveCue;
+    clearHud();
+    if (cue) {
+      void dismissProactiveCue(cue);
+    }
   }
 
   async function submitQuery(value: string, surface: "normal" | "hud") {
@@ -205,6 +307,7 @@ export default function WearerApp() {
     const requestUserId = activeUserId;
     const requestProfileVersion = profileVersionRef.current;
     const hudRequestId = surface === "hud" ? hudRequestRef.current + 1 : 0;
+    clearProactiveCue();
 
     if (surface === "normal") {
       setQuestion(trimmedQuestion);
@@ -293,6 +396,7 @@ export default function WearerApp() {
       if (recognition.recognized && recognition.name && recognition.relationship) {
         setHudAnswer(`${recognition.name}\nYour ${recognition.relationship.toLowerCase()}`);
         setHudState("result");
+        setProactiveRefreshToken((token) => token + 1);
       } else {
         setHudAnswer("I don't recognize this person.");
         setHudState("unknown");
@@ -446,7 +550,7 @@ export default function WearerApp() {
     setVisionError(false);
     setCameraSaved(false);
     setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
-    dismissHud();
+    clearHud();
   }
 
   function handleCameraCapture(file: File) {
@@ -464,7 +568,7 @@ export default function WearerApp() {
     setSaveMessage(null);
     setError(null);
     setPreviewUrl(URL.createObjectURL(file));
-    dismissHud();
+    clearHud();
   }
 
   function handleCameraRetake() {
@@ -481,7 +585,7 @@ export default function WearerApp() {
     setSaveMessage(null);
     setError(null);
     setPreviewUrl(null);
-    dismissHud();
+    clearHud();
   }
 
   function handleProfileChange(event: ChangeEvent<HTMLSelectElement>) {
@@ -490,6 +594,8 @@ export default function WearerApp() {
       return;
     }
     profileVersionRef.current += 1;
+    proactiveRequestRef.current += 1;
+    dismissedCueKeysRef.current.clear();
     setActiveUserId(nextUserId);
     setQuestion("");
     setResult(null);
@@ -497,6 +603,7 @@ export default function WearerApp() {
     setIsAnalyzingVision(false);
     setIsSavingMemory(false);
     setIsRecognizingFace(false);
+    setProactiveCue(null);
     handleCameraRetake();
   }
 
@@ -540,6 +647,15 @@ export default function WearerApp() {
           hudState={hudState}
           hudAnswer={hudAnswer}
           hudError={hudError}
+          proactiveCue={proactiveCue}
+          proactiveCuesEnabled={proactiveCuesEnabled}
+          onProactiveCuesChange={(enabled) => {
+            setProactiveCuesEnabled(enabled);
+            if (!enabled) {
+              proactiveRequestRef.current += 1;
+              clearProactiveCue();
+            }
+          }}
           onHudQuery={askHudQuestion}
           onDismissHud={dismissHud}
           onImagePreviewError={reportImagePreviewError}

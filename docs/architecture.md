@@ -27,6 +27,21 @@ Retrieval
 Grounded answer / HUD overlay
 ```
 
+Stored patient context also feeds a separate conservative path:
+
+```text
+Schedule / explicit recognition event / recent memory + important object
+        |
+        v
+Patient-scoped CueEngine
+        |
+        v
+GET /api/cues
+        |
+        v
+One prioritized, dismissible HUD cue
+```
+
 ## Hardware Abstraction
 
 The input source should be replaceable without changing the memory, analysis, and question-answering flow:
@@ -78,7 +93,7 @@ Existing retrieval and grounded answer
 Dismissible HUD cue
 ```
 
-There is no continuous camera analysis or background querying. Stage 7 adds a separate, explicit single-frame face-recognition path.
+There is no continuous camera analysis. Manual HUD queries still use `POST /api/query`; proactive polling checks only stored schedule, recognition-event, and memory/object context. Stage 7 adds a separate, explicit single-frame face-recognition path.
 
 ## Approved Known-Person Recognition Flow
 
@@ -109,6 +124,8 @@ Conservative threshold + ambiguity margin
         +--> unknown when weak, ambiguous, or not enrolled
 ```
 
+A successful explicit match updates the latest patient-scoped `RecognitionEvent`. The proactive cue engine may use that event for a short-lived relationship cue; no raw frame is stored and no continuous recognition loop is introduced.
+
 The provider boundary lives under `app/face/`: `FaceRecognizer` exposes embedding extraction and similarity comparison, `provider.py` contains the local `dlib-bin` implementation, and `service.py` owns serialization plus threshold and margin decisions. Route handlers do not call a cloud service or perform a global search. The current provider uses dlib's HOG detector, five-point landmark predictor, and pretrained `face-recognition-models` 128-dimensional ResNet encoder on CPU; similarity is normalized to a larger-is-better value.
 
 Only the derived embedding is stored. The caregiver reference image is read temporarily for validation and embedding extraction, then discarded. The recognition response exposes only `recognized`, the matched stored person fields when safe, and a bounded confidence value; it never returns embeddings or candidate lists. Confidence is intentionally withheld from the wearer HUD. This remains an opt-in research prototype and is not biometric authentication or production biometric security.
@@ -127,10 +144,18 @@ X-MemoryCue-User-Id
 Current-user dependency
             |
             v
-User-scoped query / memory / people / schedule / object / media access
+User-scoped query / memory / people / schedule / object / media / cue access
 ```
 
 `GET /api/health` remains public, and `POST /api/demo/seed` is an intentionally unscoped local reset operation. Vision analysis requires a valid development identity even though it does not write a memory. Media access checks both the requested filename and ownership of the stored memory before returning a file. The header is a development boundary, not production authentication; caregiver permissions and consent are future work.
+
+## Proactive Cue Engine
+
+The cue engine lives under `app/cues/` and keeps rule evaluation out of route handlers. It evaluates three stored-context rules: same-day schedule items within the configurable lookahead window, the latest successful explicit recognition event, and an important object whose recent observation is paired with an explicitly recorded leaving-related activity.
+
+Candidates are sorted by priority (`recognized_person`, `schedule_upcoming`, then `important_object`). `GET /api/cues` returns at most one candidate, records its presentation time, and applies the patient-scoped cooldown. `POST /api/cues/{cue_id}/dismiss` records dismissal for the same patient-scoped cue key. The wearer polls at a low frequency only while proactive cues are enabled.
+
+The current defaults are `CUE_SCHEDULE_LOOKAHEAD_MINUTES=30`, `CUE_COOLDOWN_MINUTES=20`, `CUE_RECOGNITION_WINDOW_MINUTES=10`, and `CUE_OBJECT_LOOKBACK_MINUTES=30`. The rules prefer no cue when the stored context is insufficient. They do not infer emotion, confusion, medical needs, medication compliance, wandering, falls, or behavioral anomalies.
 
 ## Caregiver Management Boundary
 

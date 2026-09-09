@@ -1,5 +1,7 @@
 """Patient-facing, single-frame known-person recognition endpoint."""
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -7,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..identity import get_current_user
 from ..media_storage import read_uploaded_image
-from ..models import Person, PersonFaceEnrollment, User
+from ..models import Person, PersonFaceEnrollment, RecognitionEvent, User
 from ..schemas import FaceRecognitionResponse
 from . import provider as face_provider
 from .base import FaceRecognizerNotConfiguredError, MultipleFacesFoundError, NoFaceFoundError
@@ -74,6 +76,23 @@ async def recognize_face(
         return unknown_response(decision.confidence)
 
     person = people_by_id[decision.person_id]
+    recognition_event = db.scalar(
+        select(RecognitionEvent).where(
+            RecognitionEvent.user_id == current_user.id,
+            RecognitionEvent.person_id == person.id,
+        )
+    )
+    if recognition_event is None:
+        db.add(
+            RecognitionEvent(
+                user_id=current_user.id,
+                person_id=person.id,
+                recognized_at=datetime.now(),
+            )
+        )
+    else:
+        recognition_event.recognized_at = datetime.now()
+    db.commit()
     return FaceRecognitionResponse(
         recognized=True,
         person_id=person.id,
