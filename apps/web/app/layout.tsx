@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "MemoryCue — Memory, when you need it.",
-  description: "AI-assisted memory support for people experiencing memory loss and the caregivers who support them.",
+  description: "A browser-based prototype exploring how saved everyday context could support people experiencing memory loss and their caregivers.",
 };
 
 export default function RootLayout({

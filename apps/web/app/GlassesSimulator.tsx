@@ -91,11 +91,11 @@ function statusLabel(status: CameraStatus): string {
     inactive: "Camera inactive",
     starting: "Starting camera...",
     active: "Camera active",
-    captured: "Frame captured",
-    "analysis-running": "Analyzing captured frame...",
+    captured: "Image captured",
+    "analysis-running": "Analyzing captured image...",
     "analysis-complete": "Analysis ready for review",
-    saving: "Saving camera memory...",
-    saved: "Camera memory saved",
+    saving: "Saving memory...",
+    saved: "Memory saved",
     error: "Camera error",
   };
   return labels[status];
@@ -230,7 +230,7 @@ export default function GlassesSimulator({
       setCameraError(null);
     } catch (error) {
       setBaseStatus("error");
-      setCameraError(error instanceof Error ? error.message : "The camera frame could not be captured.");
+      setCameraError(error instanceof Error ? error.message : "The camera image could not be captured.");
     }
   }
 
@@ -245,7 +245,7 @@ export default function GlassesSimulator({
       onRecognize(frame);
       setCameraError(null);
     } catch (error) {
-      setCameraError(error instanceof Error ? error.message : "The camera frame could not be captured.");
+      setCameraError(error instanceof Error ? error.message : "The camera image could not be captured.");
     }
   }
 
@@ -279,8 +279,8 @@ export default function GlassesSimulator({
         </span>
       </div>
       <p className="camera-helper">
-        Capture a moment, then review the details before saving. Ask <strong>Who is this?</strong> for an explicit check
-        against caregiver-approved people.
+        Capture an image. AI analysis is optional; review or edit the details before saving. <strong>Who is this?</strong>
+        checks one image against reference faces enrolled for this demo profile.
       </p>
 
       <div className="camera-view" data-camera-active={showLivePreview}>
@@ -318,7 +318,7 @@ export default function GlassesSimulator({
         )}
         {isActive && (
           <button className="primary-button" type="button" onClick={() => void captureFrame()} disabled={isRecognizing}>
-            Capture memory
+            Capture image
           </button>
         )}
         {isActive && (
@@ -351,12 +351,12 @@ export default function GlassesSimulator({
       {hasFrame && (
         <div className="captured-frame">
           <div>
-            <p className="captured-frame-label">Captured frame</p>
+            <p className="captured-frame-label">Captured image</p>
             <p className="captured-frame-name">{capturedFrame?.name}</p>
           </div>
           <img
             src={capturedPreviewUrl ?? undefined}
-            alt="Captured camera frame"
+            alt="Captured camera image"
             onError={(event) => {
               event.currentTarget.hidden = true;
               onImagePreviewError();

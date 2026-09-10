@@ -47,14 +47,14 @@ export function MemoryHudOverlay({ state, answer, error, proactiveCue, onDismiss
   const heading = state === "querying"
     ? "Checking memory"
     : isProactive
-      ? "MemoryCue · Proactive cue"
+      ? "MemoryCue · Optional cue"
       : isError
         ? "MemoryCue unavailable"
-        : "MemoryCue cue";
+        : "MemoryCue";
   const message = state === "querying" ? "Looking that up..." : isProactive ? proactiveCue.message : isError ? error : answer;
 
   return (
-    <aside className={`hud-overlay hud-overlay-${state}`} aria-live="polite" aria-label="MemoryCue HUD cue">
+    <aside className={`hud-overlay hud-overlay-${state}`} aria-live="polite" aria-label="MemoryCue camera cue">
       <div className="hud-overlay-heading">
         <span className="hud-overlay-label">{heading}</span>
         <button className="hud-dismiss-button" type="button" onClick={onDismiss}>
@@ -63,7 +63,7 @@ export function MemoryHudOverlay({ state, answer, error, proactiveCue, onDismiss
       </div>
       {isProactive && <strong className="hud-overlay-cue-title">{proactiveCue.title}</strong>}
       <p className={`hud-overlay-message ${isUnknown ? "is-unknown" : ""}`}>
-        {message ?? "MemoryCue does not have an answer for that yet."}
+        {message ?? "I couldn't find matching saved information."}
       </p>
     </aside>
   );
@@ -90,16 +90,16 @@ export function MemoryHudControls({
   }
 
   return (
-    <div className="hud-controls" aria-label="MemoryCue glasses HUD controls">
+    <div className="hud-controls" aria-label="MemoryCue camera cue controls">
       <div className="hud-controls-heading">
         <div>
-          <p className="section-kicker">In your view</p>
-          <h3>Need a cue?</h3>
+          <p className="section-kicker">Camera cues</p>
+          <h3>Ask for a cue</h3>
         </div>
         <div className="hud-control-mode-row">
-          <span className="hud-mode-label">Manual cue</span>
+          <span className="hud-mode-label">Questions</span>
           <label className="hud-proactive-toggle">
-            <span>Proactive cues</span>
+            <span>Optional cues</span>
             <input
               type="checkbox"
               checked={proactiveCuesEnabled}
@@ -117,7 +117,7 @@ export function MemoryHudControls({
             type="text"
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Ask about something you remember"
+            placeholder="Where are my keys?"
             disabled={isDisabled}
           />
           <button className="primary-button" type="submit" disabled={isDisabled || !question.trim()}>
@@ -142,7 +142,9 @@ export function MemoryHudControls({
         </div>
       </div>
       <p className="hud-controls-helper">
-        {isCameraActive ? "Ask when you need a short contextual reminder." : "Start the camera to enable HUD cues."}
+        {isCameraActive
+          ? "Questions run only when you choose Ask. Optional cues use saved context and can be turned off."
+          : "Start the camera to use cues in the preview."}
       </p>
     </div>
   );

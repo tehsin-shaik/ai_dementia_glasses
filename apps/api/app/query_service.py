@@ -31,7 +31,11 @@ def detect_intent(question: str) -> Intent:
 
 
 def unknown_response() -> QueryResponse:
-    return QueryResponse(answer="I don't know that yet.", intent="unknown", source_ids=[])
+    return QueryResponse(
+        answer="I couldn't find matching saved information for that.",
+        intent="unknown",
+        source_ids=[],
+    )
 
 
 def format_time(value: datetime) -> str:

@@ -137,7 +137,7 @@ Only the derived embedding is stored. The caregiver reference image is read temp
 Personal API operations resolve the selected local demo user from the `X-MemoryCue-User-Id` request header before reading or writing user data:
 
 ```text
-Development profile selector
+Demo profile selector
             |
             v
 X-MemoryCue-User-Id

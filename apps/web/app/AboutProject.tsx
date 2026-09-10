@@ -27,14 +27,14 @@ export default function AboutProject() {
             className="about-window window-origin"
           >
             <p>
-              I started MemoryCue with a small question: what if a pair of glasses could quietly give someone back the
-              thread of an ordinary day?
+              I started MemoryCue with a practical question: could saved everyday context help someone recover the
+              thread of a moment when they need it?
             </p>
             <p>
-              This project is my way of following that question into the messy, hopeful middle — one grounded moment,
-              one calm cue, and a laptop camera standing in for the glasses.
+              I am exploring that question through a browser prototype. A laptop camera stands in for future glasses,
+              and each image can be reviewed before it becomes a saved record.
             </p>
-            <p className="origin-signoff">Still early. Still curious.</p>
+            <p className="origin-signoff">An early prototype, built to learn.</p>
             <a className="about-github-link" href="https://github.com/tehsin-shaik/ai_dementia_glasses" target="_blank" rel="noreferrer">
               View the project on GitHub <span aria-hidden="true">↗</span>
             </a>
@@ -42,7 +42,7 @@ export default function AboutProject() {
 
           <DraggableWindow
             id="disclaimer"
-            title="a gentle note.txt"
+            title="prototype-note.txt"
             boundsRef={desktopRef}
             initialPosition={{ x: 470, y: 38 }}
             compactPosition={{ x: 28, y: 330 }}
@@ -54,7 +54,7 @@ export default function AboutProject() {
               MemoryCue is an experimental software prototype — not a medical device, diagnosis, treatment, or
               replacement for caregivers or medical professionals.
             </p>
-            <p>AI suggestions are suggestions. Review them before they become part of someone&apos;s memory.</p>
+            <p>AI can suggest image details, but no MemoryCue record is saved until a person reviews the fields and chooses Save memory.</p>
           </DraggableWindow>
 
           <DraggableWindow
@@ -67,11 +67,11 @@ export default function AboutProject() {
             className="about-window window-capabilities"
           >
             <p className="window-note-label">What it can do today</p>
-            <p className="capability-lead">Capture moments. Find what was misplaced. Keep today close.</p>
+            <p className="capability-lead">Save reviewed moments and retrieve short cues from them later.</p>
             <ul>
-              <li>Reviewable memories from images</li>
-              <li>Last-seen objects and recent activity</li>
-              <li>Schedules and caregiver-approved people</li>
+              <li>Image upload and browser-camera capture</li>
+              <li>Recent activity and last-seen retrieval</li>
+              <li>Saved schedules and opt-in person checks</li>
             </ul>
             <p className="creator-credit">A small research project by Tehsin Shaik.</p>
           </DraggableWindow>
@@ -91,12 +91,12 @@ export default function AboutProject() {
               <span className="photo-head" />
               <span className="photo-shoulders" />
               <span className="photo-glasses" />
-              <span className="photo-caption">a moment worth keeping</span>
+              <span className="photo-caption">example memory cue</span>
             </div>
             <p className="snapshot-credit">Built by Tehsin Shaik · 2026</p>
           </DraggableWindow>
         </DraggableWindowGroup>
-        <span className="about-desktop-footer">Drag the notes around · they&apos;re still finding their place</span>
+        <span className="about-desktop-footer">Drag the windows to explore the project notes</span>
       </div>
     </section>
   );

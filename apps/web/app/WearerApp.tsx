@@ -95,7 +95,7 @@ function parseFaceRecognitionResult(payload: unknown): FaceRecognitionResult {
     payload.confidence < 0 ||
     payload.confidence > 1
   ) {
-    throw new Error("Face recognition returned an invalid response.");
+    throw new Error("The person check returned an invalid response.");
   }
   return payload as FaceRecognitionResult;
 }
@@ -398,7 +398,7 @@ export default function WearerApp() {
         setHudState("result");
         setProactiveRefreshToken((token) => token + 1);
       } else {
-        setHudAnswer("I don't recognize this person.");
+        setHudAnswer("I couldn't match this person to an enrolled face.");
         setHudState("unknown");
       }
     } catch (requestError) {
@@ -418,7 +418,7 @@ export default function WearerApp() {
 
   async function saveMemory() {
     if (!memoryImage) {
-      setError("Choose an image before saving the memory.");
+      setError("Upload or capture an image before saving a memory.");
       return;
     }
     if (!memoryTimestamp || !memoryLocation.trim() || !memoryDescription.trim()) {
@@ -457,7 +457,7 @@ export default function WearerApp() {
       }
       setSaveMessage(
         savedMemory.object_observation_id
-          ? `Memory saved — ${memoryObjectName.trim()} observed at ${savedMemory.location}.`
+          ? `Memory saved. ${memoryObjectName.trim()} was recorded at ${savedMemory.location}.`
           : "Memory saved.",
       );
       if (memoryImageSource === "camera") {
@@ -465,7 +465,7 @@ export default function WearerApp() {
       }
     } catch (requestError) {
       if (profileVersionRef.current === requestProfileVersion) {
-        setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+        setError(requestError instanceof Error ? requestError.message : "The memory could not be saved.");
       }
     } finally {
       if (profileVersionRef.current === requestProfileVersion) {
@@ -615,11 +615,11 @@ export default function WearerApp() {
           <div>
             <p className="eyebrow">Wearer app</p>
             <h1 id="page-title">MemoryCue</h1>
-            <p className="subtitle">Memory, when you need it.</p>
+            <p className="subtitle">A browser prototype for saved everyday context.</p>
           </div>
           <div className="header-actions">
             <label className="profile-selector">
-              <span>Profile</span>
+              <span>Demo profile</span>
               <select value={activeUserId} onChange={handleProfileChange}>
                 {DEMO_PROFILES.map((profile) => (
                   <option key={profile.id} value={profile.id}>
@@ -627,7 +627,7 @@ export default function WearerApp() {
                   </option>
                 ))}
               </select>
-              <small>{activeProfile.name}&apos;s private context</small>
+              <small>Simulated profile — not a secure account</small>
             </label>
           </div>
         </header>
@@ -666,14 +666,14 @@ export default function WearerApp() {
           <h2 id="question-heading">Ask MemoryCue</h2>
           <form className="question-form" onSubmit={handleSubmit}>
             <label className="sr-only" htmlFor="question">
-              Ask MemoryCue something...
+              Ask a supported memory question
             </label>
             <input
               id="question"
               type="text"
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Ask MemoryCue something..."
+              placeholder="Where are my keys?"
               autoComplete="off"
             />
             <button className="primary-button" type="submit" disabled={isLoading || !question.trim()}>
@@ -681,8 +681,8 @@ export default function WearerApp() {
             </button>
           </form>
 
-          <div className="suggestions" aria-label="Suggested questions">
-            <p>Try one of these:</p>
+          <div className="suggestions" aria-label="Supported example questions">
+            <p>Supported examples</p>
             <div className="suggestion-list">
               {SUGGESTED_QUESTIONS.map((suggestion) => (
                 <button
@@ -705,20 +705,23 @@ export default function WearerApp() {
           aria-labelledby="memory-heading"
         >
           <summary className="memory-review-summary">
-            <span>Capture memory</span>
+            <span>Add a memory</span>
             <small>Review before saving</small>
           </summary>
           <div className="memory-panel-heading">
             <div>
               <p className="section-kicker">Review memory</p>
-              <h2 id="memory-heading">Keep what matters</h2>
+              <h2 id="memory-heading">Review before saving</h2>
             </div>
-            <p className="memory-helper">Use AI to suggest details, then review them. You can always enter the memory manually.</p>
+            <p className="memory-helper">
+              If an external vision provider is configured, AI can suggest details. Review or edit every field before
+              saving, or complete the form manually.
+            </p>
           </div>
 
           <div className="memory-form">
             <label className="file-picker">
-              <span>Image</span>
+              <span>Upload an image</span>
               <input
                 type="file"
                 accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
@@ -822,8 +825,8 @@ export default function WearerApp() {
         <section className="answer-panel" aria-live="polite" aria-labelledby="answer-heading">
           <div className="answer-heading-row">
             <div>
-              <p className="section-kicker">Your cue</p>
-              <h2 id="answer-heading">MemoryCue says</h2>
+              <p className="section-kicker">Answer</p>
+              <h2 id="answer-heading">From saved information</h2>
             </div>
             {result && <span className="intent-badge">{result.intent}</span>}
           </div>
@@ -836,7 +839,7 @@ export default function WearerApp() {
               </details>
             </>
           ) : (
-            <p className="empty-answer">Ask a question when you need a little context.</p>
+            <p className="empty-answer">Choose a supported question to retrieve saved information.</p>
           )}
         </section>
       </section>

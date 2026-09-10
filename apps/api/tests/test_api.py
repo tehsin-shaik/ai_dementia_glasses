@@ -498,7 +498,7 @@ def test_unknown_query(client: TestClient) -> None:
     seed(client)
     response = client.post("/api/query", json={"question": "What is the weather?"})
     assert response.json() == {
-        "answer": "I don't know that yet.",
+        "answer": "I couldn't find matching saved information for that.",
         "intent": "unknown",
         "source_ids": [],
     }

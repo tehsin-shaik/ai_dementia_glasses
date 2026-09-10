@@ -179,7 +179,7 @@ export default function DemoPage() {
     try {
       const response = await memoryCueFetch(`${API_URL}/api/demo/seed`, activeUserId, { method: "POST" });
       if (!response.ok) {
-        throw new Error(await errorMessage(response, "The demo data could not be loaded."));
+        throw new Error(await errorMessage(response, "The demo data could not be reset and loaded."));
       }
       if (profileVersionRef.current !== version) return;
       setDemoLoaded(true);
@@ -187,7 +187,7 @@ export default function DemoPage() {
       await refreshCues(activeUserId, version);
     } catch (requestError) {
       if (profileVersionRef.current === version) {
-        setError(requestError instanceof Error ? requestError.message : "The demo data could not be loaded.");
+        setError(requestError instanceof Error ? requestError.message : "The demo data could not be reset and loaded.");
       }
     } finally {
       if (profileVersionRef.current === version) {
@@ -264,17 +264,17 @@ export default function DemoPage() {
           <div>
             <p className="eyebrow">Development tools</p>
             <h1 id="demo-page-title">Demo workspace</h1>
-            <p className="subtitle">Seed a profile, exercise the memory loop, and inspect grounded responses.</p>
+            <p className="subtitle">Reset local sample data, test supported questions, and inspect API responses.</p>
           </div>
           <div className="demo-toolbar">
             <label className="profile-selector">
-              <span>Active profile</span>
+              <span>Profile to inspect</span>
               <select value={activeUserId} onChange={(event) => setActiveUserId(Number(event.target.value))}>
                 {DEMO_PROFILES.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
               </select>
             </label>
             <button className="primary-button" type="button" onClick={() => void loadDemo()} disabled={isSeeding}>
-              {isSeeding ? "Seeding..." : "Load demo data"}
+              {isSeeding ? "Resetting and loading..." : "Reset all data and load demo"}
             </button>
           </div>
         </header>
@@ -282,8 +282,12 @@ export default function DemoPage() {
         <div className="demo-status-card" role="status">
           <span className={`status-dot ${demoLoaded ? "is-loaded" : ""}`} aria-hidden="true" />
           <div>
-            <strong>{demoLoaded ? `${activeProfile.name} demo is ready` : "Demo data has not been loaded"}</strong>
-            <span>{demoLoaded ? "The wearer app can now answer from seeded context." : "Load deterministic sample context before testing queries."}</span>
+            <strong>{demoLoaded ? "All demo data reset and loaded" : "Demo reset is ready"}</strong>
+            <span>
+              {demoLoaded
+                ? `Sample data for Alex and Jordan was replaced. You are viewing ${activeProfile.name}.`
+                : "This action replaces all prototype data, then loads samples for Alex and Jordan."}
+            </span>
           </div>
         </div>
 
@@ -335,7 +339,7 @@ export default function DemoPage() {
                   </article>
                 ))}
               </div>
-            ) : <p className="empty-answer">No memories loaded for this profile.</p>}
+            ) : <p className="empty-answer">No memories returned for this profile.</p>}
           </section>
         </div>
 
@@ -354,16 +358,16 @@ export default function DemoPage() {
               <button className="secondary-button" type="button" onClick={() => void dismissCue()}>Dismiss cue</button>
             </div>
           ) : (
-            <p className="empty-answer">No current cue for this profile.</p>
+            <p className="empty-answer">No eligible cue returned for this profile.</p>
           )}
           {cueError && <p className="error-message" role="alert">{cueError}</p>}
         </section>
 
         <section className="demo-card demo-config-card" aria-labelledby="config-heading">
           <p className="section-kicker">Environment</p>
-          <h2 id="config-heading">AI and API status</h2>
+          <h2 id="config-heading">API configuration</h2>
           <div className="config-row"><span>API base URL</span><code>{API_URL}</code></div>
-          <div className="config-row"><span>Vision analysis</span><strong>Available through the wearer app</strong></div>
+          <div className="config-row"><span>Vision analysis</span><strong>Not verified here; requires a configured backend provider</strong></div>
           <div className="config-row"><span>Identity header</span><code>X-MemoryCue-User-Id: {activeUserId}</code></div>
         </section>
 

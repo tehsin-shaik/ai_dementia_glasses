@@ -1,17 +1,17 @@
-# AI Dementia Glasses MVP
+# MemoryCue MVP
 
 ## MVP Goal
 
-Build a software-only prototype of AI-assisted memory glasses.
+Build a browser-based software prototype that explores how reviewed, saved context could support a future smart-glasses experience.
 
 No physical glasses are required.
 
 The MVP proves this loop:
 
 ```text
-Observe something
-    -> turn it into a memory
-    -> store it
+Capture an image
+    -> review or edit the details
+    -> save a structured record
     -> ask about it later
     -> return a grounded answer
 ```
@@ -65,7 +65,7 @@ The cue engine never infers medical needs, medication compliance, emotion, confu
 
 ## Development Identity and User Scoping
 
-Stage 6A adds two deterministic local demo profiles, Alex and Jordan. The browser's development profile selector sends the selected user ID in the `X-MemoryCue-User-Id` header. Query answers, memory creation and listing, people, schedules, object observations, vision analysis, and media access are scoped to that user. Switching profiles clears visible answers and unsaved camera/form state.
+Stage 6A adds two deterministic local demo profiles, Alex and Jordan. The browser's **Demo profile** selector sends the selected user ID in the `X-MemoryCue-User-Id` header. Query answers, memory creation and listing, people, schedules, object observations, vision analysis, and media access are scoped to that user. Switching profiles clears visible answers and unsaved camera/form state.
 
 This is explicit development identity only; it is not authentication or authorization. The demo seed resets both profiles and their data. Production identity, production caregiver authorization, consent, and permissions remain outside this MVP.
 
@@ -75,7 +75,7 @@ Stage 6B adds a small caregiver setup page at `/caregiver`. Development caregive
 
 Caregiver requests use a separate `X-MemoryCue-Caregiver-Id` header and a centralized link/permission check. Caregivers can only view or modify data for linked patients, and mutations require the matching management permission. These records are the same `Person` and `ScheduleItem` data used by the wearer-facing retrieval system, so caregiver edits are visible in patient queries.
 
-Important object definitions describe things a caregiver considers useful; they do not create `ObjectObservation` history. Caregiver notes are stored for setup context and are not automatically included in AI prompts. The caregiver identity mechanism is simulated and not production authentication; invitations, consent workflows, passwords, and production biometric security remain out of scope.
+Important object definitions describe things a caregiver considers useful; they do not create `ObjectObservation` history. Profile bio, home context, and response style are stored but do not currently alter wearer answers or cues. Caregiver notes are stored for setup context and are not automatically included in answers, cues, or AI prompts. The caregiver identity mechanism is simulated and not production authentication; invitations, consent workflows, passwords, and production biometric security remain out of scope.
 
 ## Approved Known-Person Recognition
 

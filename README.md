@@ -1,10 +1,10 @@
 # MemoryCue
 
-> AI-assisted memory support designed for people experiencing memory loss and the caregivers who support them.
+> A browser-based research prototype exploring AI-assisted memory support for people experiencing memory loss and the caregivers who support them.
 
-MemoryCue is an experimental software project exploring how AI-powered smart glasses could act as an external memory aid in everyday life.
+MemoryCue is an experimental software prototype for capturing, saving, and retrieving everyday context. It explores how this experience could later extend to AI-assisted smart glasses; no physical MemoryCue glasses are available today.
 
-The idea is simple: the system observes important moments, remembers useful context, and helps the user recall that information later through short, calm prompts.
+In the current prototype, a person uploads an image or captures one with a browser camera, reviews or edits the details, and chooses what to save. MemoryCue can later retrieve short answers from those saved records and from caregiver-provided people and schedule information.
 
 For example, a user could ask:
 
@@ -20,11 +20,11 @@ Instead of relying on a general-purpose chatbot to guess, MemoryCue is designed 
 The prototype has four focused surfaces:
 
 * [`/`](http://localhost:3000/) — the product and research overview;
-* [`/app`](http://localhost:3000/app) — the wearer-facing glasses simulator;
-* [`/caregiver`](http://localhost:3000/caregiver) — trusted patient context and setup; and
-* [`/demo`](http://localhost:3000/demo) — development tools for seeding data and inspecting responses.
+* [`/app`](http://localhost:3000/app) — the wearer-facing browser camera simulator;
+* [`/caregiver`](http://localhost:3000/caregiver) — setup for profiles linked to a simulated caregiver; and
+* [`/demo`](http://localhost:3000/demo) — development tools for resetting sample data and inspecting responses.
 
-The product page is the natural starting point. The wearer app keeps the live camera, memory capture, AI review, everyday cues, and approved known-person recognition close at hand. The caregiver surface is intentionally form-oriented, while the demo workspace keeps profile switching and response diagnostics available for local development.
+The product page is the natural starting point. The wearer app brings the camera, optional AI suggestions, review-and-save flow, supported questions, and opt-in person checks together. The caregiver page stores linked-profile setup, while the demo workspace keeps profile switching and response diagnostics available for local development.
 
 ## The Idea
 
@@ -39,14 +39,14 @@ Someone may forget:
 
 MemoryCue explores whether an AI system connected to smart glasses could provide a lightweight layer of memory support.
 
-The long-term concept is:
+The concept is:
 
 ```text
-See and hear what the user experiences
+Capture a useful moment
                 ↓
-Identify useful moments
+Review or confirm the context
                 ↓
-Store structured memories
+Save a structured record
                 ↓
 Retrieve them when needed
                 ↓
@@ -67,7 +67,7 @@ The user can ask:
 
 > What was I doing?
 
-The system recalls a recent observed activity.
+The system recalls a recent saved activity.
 
 ### 2. Last-seen object recall
 
@@ -99,7 +99,7 @@ Caregivers can optionally enroll a face for an existing person in a patient prof
 
 ### 6. Proactive context cues
 
-Stage 8 adds a small rule-based cue engine that can surface one useful reminder without waiting for a typed question. The wearer app polls the patient-scoped `/api/cues` endpoint every 45 seconds while **Proactive cues** is turned on.
+The prototype includes a small rule-based cue engine that can surface one useful reminder without waiting for a typed question. The wearer app polls the profile-scoped `/api/cues` endpoint every 45 seconds while **Optional cues** is turned on.
 
 The cue engine currently considers only:
 
@@ -119,7 +119,7 @@ Uploaded images are stored locally with generated filenames. When an object is p
 
 ### AI-assisted image understanding
 
-When the optional vision provider is configured, select an image and choose **Analyze with AI**. MemoryCue returns concise suggestions for the description, location, activity, and visible objects. The suggestions are placed into the editable form for review; nothing is stored until the user chooses **Save memory**.
+When the optional external vision provider is configured, select an image and choose **Analyze with AI**. The image is sent to that provider, and MemoryCue returns concise suggestions for the description, location, activity, and visible objects. The suggestions are placed into the editable form for review; no MemoryCue memory record is created until the user chooses **Save memory**.
 
 To enable the OpenAI provider locally, set these variables in a `.env` file and start the API with that file:
 
@@ -143,12 +143,12 @@ AI-generated metadata is a suggestion, not a fact. Review and edit it before sav
 The browser-based Glasses Simulator uses the laptop webcam as a stand-in for a future wearable camera. Camera access normally requires `localhost` or HTTPS; no microphone permission is requested.
 
 1. Open the app locally and choose **Start camera**.
-2. Point the camera at a useful moment and choose **Capture memory**.
+2. Point the camera at a useful moment and choose **Capture image**.
 3. Choose **Analyze with AI**, then review or edit the suggested fields.
-4. Choose **Save memory** to store the captured frame through the normal memory flow.
+4. Choose **Save memory** to store the captured image through the normal memory flow.
 5. Ask a supported question such as **Where are my keys?** to retrieve the saved context.
 
-Use **Retake** to replace the captured frame and **Stop camera** when finished. Capture and analysis are always user-triggered in this milestone. MemoryCue does not continuously record, analyze frames, or create memories in the background.
+Use **Retake** to replace the captured image and **Stop camera** when finished. Capture and analysis are always user-triggered in this milestone. MemoryCue does not continuously record, analyze frames, or create memories in the background.
 
 ### Glasses-style memory HUD
 
@@ -158,7 +158,7 @@ The cue shows the existing answer directly, including a clear unknown state when
 
 ### Approved known-person recognition
 
-Known-person recognition is opt-in and begins in the existing caregiver **People** section. A caregiver chooses an existing person, uploads a reference photo containing exactly one face, and selects **Enroll face**. The upload does not create a person automatically. **Replace** updates the enrollment and **Remove** deletes it.
+Known-person recognition is opt-in and begins in the existing caregiver **People** section. A caregiver chooses an existing person, uploads a reference photo containing exactly one face, and selects **Enroll reference**. The upload does not create a person automatically. **Replace reference** updates the enrollment and **Remove reference** deletes it.
 
 The backend uses the local `dlib-bin` runtime with the pretrained `face-recognition-models` dlib ResNet encoder and five-point landmark predictor. Embeddings are generated on the local API process using CPU and only the derived 128-dimensional embedding is stored; the reference photo is not retained by this feature. The configurable similarity threshold defaults to `0.65` and `FACE_MATCH_MARGIN` defaults to `0.08`. Similarity is normalized so larger values are better. A match must clear the threshold and exceed the next candidate by the margin; otherwise the result is unknown.
 
@@ -172,14 +172,14 @@ Your daughter
 or:
 
 ```text
-I don't recognize this person.
+I couldn't match this person to an enrolled face.
 ```
 
 There is no global face database, public-figure or stranger search, internet identity lookup, automatic enrollment, continuous scanning, relationship inference, or biometric authentication. Names and relationships come from the caregiver-managed `Person` record. This is a research prototype, not production biometric security.
 
 ## Development Profiles
 
-The local prototype includes a clearly labeled **Development profile** selector for two deterministic demo users: Alex and Jordan. Choose a profile to view its isolated memories, people, schedule, object observations, and HUD answers. Changing profiles clears the current question result and any unsaved camera memory so captured information cannot be saved under the wrong profile.
+The local prototype includes a clearly labeled **Demo profile** selector for two deterministic users: Alex and Jordan. Choose a profile to view its isolated memories, people, schedule, object observations, and camera-cue answers. Changing profiles clears the current question result and any unsaved camera memory so captured information cannot be saved under the wrong profile.
 
 This selector is a development convenience, not authentication. The browser sends the selected profile ID in the `X-MemoryCue-User-Id` request header, and the API uses it to scope personal data. The demo seed is a local reset operation that recreates both profiles. The caregiver page uses a separate simulated identity and explicit patient links for this prototype; production identity, consent, and audit controls remain future work.
 
@@ -303,11 +303,11 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for the product page. Choose **Try MemoryCue** or open [http://localhost:3000/app](http://localhost:3000/app) for the wearer experience. Use [http://localhost:3000/demo](http://localhost:3000/demo) to choose **Alex** or **Jordan**, seed deterministic data, and inspect grounded answers. Open [http://localhost:3000/caregiver](http://localhost:3000/caregiver) for the caregiver setup page, select Maya, Sam, or Taylor, and manage only the linked patient context. The backend uses a local SQLite database by default. AI image understanding is optional; follow the configuration above when you want to enable it.
+Open [http://localhost:3000](http://localhost:3000) for the product page. Choose **Try the simulator** or open [http://localhost:3000/app](http://localhost:3000/app) for the wearer experience. Use [http://localhost:3000/demo](http://localhost:3000/demo) to choose **Alex** or **Jordan**, select **Reset all data and load demo**, and inspect saved answers. That reset replaces all prototype data before loading samples for both profiles. Open [http://localhost:3000/caregiver](http://localhost:3000/caregiver) for the caregiver setup page, select Maya, Sam, or Taylor, and manage only the linked profile information. The backend uses a local SQLite database by default. AI image understanding is optional and uses an external vision provider when configured; follow the configuration above when you want to enable it.
 
 The local prototype stores timestamps as naive local wall-clock values. The browser and backend use their local time for manual/camera entries and the demo schedule; timezone-aware API timestamps are converted to the backend's local time before storage.
 
-To try proactive cues locally, seed the demo data, then use `/caregiver` to add a schedule item within the next 30 minutes for Alex or Jordan. Open `/app`, select the same profile, start the camera, and leave **Proactive cues** turned on. The cue appears in the glasses-style HUD, can be dismissed, and will not immediately repeat. `/demo` includes a **Current cue** panel for inspecting the patient-scoped result without using the camera.
+To try optional cues locally, reset and load the demo data, then use `/caregiver` to add a schedule item within the next 30 minutes for Alex or Jordan. Open `/app`, select the same profile, start the camera, and leave **Optional cues** turned on. The cue appears over the camera preview, can be dismissed, and will not immediately repeat. `/demo` includes a **Current cue** panel for inspecting the profile-scoped result without using the camera.
 
 ## Safety and Scope
 

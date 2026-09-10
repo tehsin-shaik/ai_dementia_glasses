@@ -234,7 +234,7 @@ export default function CaregiverPage() {
       try {
         const response = await caregiverFetch(`${API_URL}/api/caregiver/patients`, activeCaregiverId);
         if (!response.ok) {
-          throw new Error(await errorMessage(response, "The linked patients could not be loaded."));
+          throw new Error(await errorMessage(response, "The linked profiles could not be loaded."));
         }
         const nextPatients = parsePatients(await response.json());
         if (requestVersionRef.current !== requestVersion) {
@@ -282,7 +282,7 @@ export default function CaregiverPage() {
         ]);
         const failedResponse = responses.find((response) => !response.ok);
         if (failedResponse) {
-          throw new Error(await errorMessage(failedResponse, "The patient profile could not be loaded."));
+          throw new Error(await errorMessage(failedResponse, "The selected profile could not be loaded."));
         }
         const [nextProfile, nextPeople, nextObjects, nextSchedule, nextNotes] = await Promise.all([
           responses[0].json(),
@@ -387,7 +387,7 @@ export default function CaregiverPage() {
           response_style: profileForm.response_style || null,
         }),
       },
-      "Patient profile saved.",
+      "Profile information saved.",
     );
     if (saved) {
       const response = await caregiverFetch(`${baseUrl}/profile`, activeCaregiverId);
@@ -453,7 +453,7 @@ export default function CaregiverPage() {
     if (!baseUrl) return;
     if (!file) {
       clearFeedback();
-      setError("Choose a face photo before enrolling.");
+      setError("Choose a reference photo before enrolling a face.");
       return;
     }
     const formData = new FormData();
@@ -462,7 +462,7 @@ export default function CaregiverPage() {
       `face-${person.id}`,
       `${baseUrl}/people/${person.id}/face`,
       { method: "POST", body: formData },
-      person.face_enrolled ? "Face enrollment replaced." : "Face enrolled.",
+      person.face_enrolled ? "Face reference replaced." : "Face reference enrolled.",
     );
     if (saved) {
       setFaceFiles((files) => ({ ...files, [person.id]: null }));
@@ -477,7 +477,7 @@ export default function CaregiverPage() {
       `face-remove-${person.id}`,
       `${baseUrl}/people/${person.id}/face`,
       { method: "DELETE" },
-      "Face enrollment removed.",
+      "Face reference removed.",
     );
     if (deleted) {
       setFaceFiles((files) => ({ ...files, [person.id]: null }));
@@ -618,6 +618,10 @@ export default function CaregiverPage() {
     if (!profile) return null;
     return (
       <form className="caregiver-form" onSubmit={saveProfile}>
+        <p className="caregiver-muted">
+          These fields are stored with the demo profile. Response style, bio, and home context do not currently change
+          wearer answers or cues.
+        </p>
         <div className="caregiver-form-grid">
           <label>
             <span>Preferred name</span>
@@ -628,7 +632,7 @@ export default function CaregiverPage() {
             />
           </label>
           <label>
-            <span>Response style</span>
+            <span>Response style <em>(not applied yet)</em></span>
             <input
               type="text"
               value={profileForm.response_style}
@@ -638,7 +642,7 @@ export default function CaregiverPage() {
           </label>
         </div>
         <label>
-          <span>Short bio <em>(optional)</em></span>
+          <span>Short bio <em>(optional, stored only)</em></span>
           <textarea
             value={profileForm.short_bio}
             rows={2}
@@ -646,7 +650,7 @@ export default function CaregiverPage() {
           />
         </label>
         <label>
-          <span>Home context <em>(optional)</em></span>
+          <span>Home context <em>(optional, stored only)</em></span>
           <textarea
             value={profileForm.home_context}
             rows={2}
@@ -663,6 +667,10 @@ export default function CaregiverPage() {
   function renderPeople() {
     return (
       <div className="caregiver-section-stack">
+        <p className="caregiver-muted">
+          A person&apos;s saved name and relationship can answer questions such as “Who is Sarah?” Camera matching is
+          optional and works only after a separate reference photo is enrolled.
+        </p>
         <form className="caregiver-inline-form" onSubmit={addPerson}>
           <label>
             <span>Name</span>
@@ -711,13 +719,13 @@ export default function CaregiverPage() {
                   Delete
                 </button>
               </div>
-              <div className="face-enrollment" aria-label={`${person.name} face enrollment`}>
+              <div className="face-enrollment" aria-label={`${person.name} optional face enrollment`}>
                 <div>
-                  <span className="record-meta">Face enrollment</span>
-                  <strong>{person.face_enrolled ? "Enrolled" : "Not enrolled"}</strong>
+                  <span className="record-meta">Optional face check</span>
+                  <strong>{person.face_enrolled ? "Reference enrolled" : "No reference enrolled"}</strong>
                 </div>
                 <label className="face-file-picker">
-                  <span>{person.face_enrolled ? "Replace photo" : "Upload face photo"}</span>
+                  <span>{person.face_enrolled ? "Replace reference photo" : "Choose reference photo"}</span>
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
@@ -732,7 +740,7 @@ export default function CaregiverPage() {
                   onClick={() => void enrollFace(person)}
                   disabled={savingKey !== null || !faceFiles[person.id]}
                 >
-                  {person.face_enrolled ? "Replace" : "Enroll face"}
+                  {person.face_enrolled ? "Replace reference" : "Enroll reference"}
                 </button>
                 {person.face_enrolled && (
                   <button
@@ -741,12 +749,13 @@ export default function CaregiverPage() {
                     onClick={() => void removeFace(person)}
                     disabled={savingKey !== null}
                   >
-                    Remove
+                    Remove reference
                   </button>
                 )}
               </div>
             </article>
           ))}
+          {people.length === 0 && <p className="caregiver-muted">No people have been added to this profile.</p>}
         </div>
       </div>
     );
@@ -755,6 +764,10 @@ export default function CaregiverPage() {
   function renderObjects() {
     return (
       <div className="caregiver-section-stack">
+        <p className="caregiver-muted">
+          An important-object entry marks what may matter for optional cues. It is not a last-seen record; that requires
+          a saved memory containing the object.
+        </p>
         <form className="caregiver-inline-form" onSubmit={addObject}>
           <label>
             <span>Object name</span>
@@ -765,7 +778,7 @@ export default function CaregiverPage() {
             <input
               value={objectNotes}
               onChange={(event) => setObjectNotes(event.target.value)}
-              placeholder="Usually carried when leaving"
+              placeholder="Optional description for caregivers"
             />
           </label>
           <button className="secondary-button" type="submit" disabled={savingKey === "object-add"}>
@@ -805,6 +818,7 @@ export default function CaregiverPage() {
               </div>
             </article>
           ))}
+          {objects.length === 0 && <p className="caregiver-muted">No important objects have been added.</p>}
         </div>
       </div>
     );
@@ -813,6 +827,9 @@ export default function CaregiverPage() {
   function renderSchedule() {
     return (
       <div className="caregiver-section-stack">
+        <p className="caregiver-muted">
+          Saved schedule items can answer today questions and may appear as optional upcoming cues.
+        </p>
         <form className="caregiver-inline-form" onSubmit={addScheduleItem}>
           <label>
             <span>Title</span>
@@ -861,6 +878,7 @@ export default function CaregiverPage() {
               </div>
             </article>
           ))}
+          {schedule.length === 0 && <p className="caregiver-muted">No schedule items have been added.</p>}
         </div>
       </div>
     );
@@ -869,10 +887,13 @@ export default function CaregiverPage() {
   function renderNotes() {
     return (
       <div className="caregiver-section-stack">
+        <p className="caregiver-muted">
+          Notes are stored for caregiver reference. They are not currently included in wearer answers or cues.
+        </p>
         <form className="caregiver-note-form" onSubmit={addNote}>
           <label>
             <span>Caregiver note</span>
-            <textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} rows={3} placeholder="A short trusted note about this patient" />
+            <textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} rows={3} placeholder="A short note for other caregivers" />
           </label>
           <button className="secondary-button" type="submit" disabled={savingKey === "note-add"}>
             Add note
@@ -890,6 +911,7 @@ export default function CaregiverPage() {
               </button>
             </article>
           ))}
+          {notes.length === 0 && <p className="caregiver-muted">No caregiver notes have been added.</p>}
         </div>
       </div>
     );
@@ -903,11 +925,11 @@ export default function CaregiverPage() {
           <div>
             <p className="eyebrow">Caregiver space</p>
             <h1 id="caregiver-title">Caregiver setup</h1>
-            <p className="subtitle">Keep the right context close for someone you support.</p>
+            <p className="subtitle">Review setup information for a linked demo profile.</p>
           </div>
           <div className="caregiver-identity">
             <label>
-              <span>Active caregiver</span>
+              <span>Demo caregiver</span>
               <select value={activeCaregiverId} onChange={handleCaregiverChange}>
                 {CAREGIVERS.map((caregiver) => (
                   <option key={caregiver.id} value={caregiver.id}>
@@ -915,21 +937,22 @@ export default function CaregiverPage() {
                   </option>
                 ))}
               </select>
-              <small>Development prototype — identity is simulated and not secure authentication.</small>
+              <small>Simulated identity for local testing — not a secure account.</small>
             </label>
           </div>
         </header>
 
         <div className="caregiver-notice" role="note">
-          Only explicitly linked patient profiles are available here. This local prototype does not provide production authentication, invitations, consent workflows, or medical records.
+          Only profiles linked to the selected demo caregiver appear here. Production authentication, consent workflows,
+          invitations, and medical records are not included.
         </div>
 
         <div className="caregiver-layout">
           <aside className="patient-list-panel" aria-labelledby="patient-list-title">
-            <p className="section-kicker">Linked patients</p>
-            <h2 id="patient-list-title">{activeCaregiver.name}&apos;s patients</h2>
+            <p className="section-kicker">Linked profiles</p>
+            <h2 id="patient-list-title">Profiles available to {activeCaregiver.name}</h2>
             {isLoadingPatients ? (
-              <p className="caregiver-muted">Loading linked patients...</p>
+              <p className="caregiver-muted">Loading linked profiles...</p>
             ) : patients.length > 0 ? (
               <div className="patient-list">
                 {patients.map((patient) => (
@@ -948,7 +971,7 @@ export default function CaregiverPage() {
                 ))}
               </div>
             ) : (
-              <p className="caregiver-muted">No patients are linked to this caregiver.</p>
+              <p className="caregiver-muted">No profiles are linked to this demo caregiver.</p>
             )}
           </aside>
 
@@ -957,12 +980,12 @@ export default function CaregiverPage() {
               <>
                 <div className="management-heading">
                   <div>
-                    <p className="section-kicker">Patient profile data</p>
-                    <h2 id="management-title">Managing {selectedPatient.preferred_name ?? selectedPatient.name}</h2>
+                    <p className="section-kicker">Selected profile</p>
+                    <h2 id="management-title">{selectedPatient.preferred_name ?? selectedPatient.name}&apos;s setup</h2>
                   </div>
-                  <span className="access-badge">{activeCaregiver.name} · linked access</span>
+                  <span className="access-badge">{activeCaregiver.name} · linked demo access</span>
                 </div>
-                <nav className="management-tabs" aria-label="Patient setup sections">
+                <nav className="management-tabs" aria-label="Profile setup sections">
                   {TABS.map((tab) => (
                     <button
                       className={`management-tab ${activeTab === tab.id ? "is-active" : ""}`}
@@ -978,7 +1001,7 @@ export default function CaregiverPage() {
                   ))}
                 </nav>
                 {isLoadingPatient ? (
-                  <p className="caregiver-muted management-loading">Loading patient data...</p>
+                  <p className="caregiver-muted management-loading">Loading profile information...</p>
                 ) : (
                   <div className="management-section">
                     {activeTab === "profile" && renderProfile()}
@@ -991,9 +1014,9 @@ export default function CaregiverPage() {
               </>
             ) : (
               <div className="management-empty">
-                <p className="section-kicker">Choose a patient</p>
-                <h2>Patient-specific setup stays behind the caregiver link.</h2>
-                <p>Select one of the linked patients to view or manage their approved profile data.</p>
+                <p className="section-kicker">Choose a profile</p>
+                <h2>Select a linked profile to begin.</h2>
+                <p>Choose a profile to review the information available to this demo caregiver.</p>
               </div>
             )}
           </section>

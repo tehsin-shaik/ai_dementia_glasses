@@ -5,7 +5,7 @@ import SiteNav from "./SiteNav";
 
 function MemoryCueMockup() {
   return (
-    <div className="hero-mockup" aria-label="MemoryCue glasses experience preview">
+    <div className="hero-mockup" aria-label="Example of a future glasses-style MemoryCue reminder">
       <div className="hero-glasses" aria-hidden="true">
         <span className="hero-lens hero-lens-left" />
         <span className="hero-bridge" />
@@ -14,7 +14,7 @@ function MemoryCueMockup() {
         <span className="hero-arm hero-arm-right" />
       </div>
       <div className="hero-cue">
-        <span className="hero-cue-label">MemoryCue</span>
+        <span className="hero-cue-label">Example cue</span>
         <strong>Sarah</strong>
         <span>Your daughter</span>
       </div>
@@ -32,7 +32,7 @@ function StoryVisual({ type }: { type: "remember" | "find" | "people" | "today" 
         <span className="visual-time">10:25 AM</span>
         <strong>Preparing to leave</strong>
         <span className="visual-line" />
-        <span className="visual-caption">A moment worth keeping</span>
+        <span className="visual-caption">Saved after review</span>
       </div>
     );
   }
@@ -53,7 +53,7 @@ function StoryVisual({ type }: { type: "remember" | "find" | "people" | "today" 
           <strong>Sarah</strong>
           <span>Your daughter</span>
         </div>
-        <small>Caregiver-approved contact</small>
+        <small>Example enrolled person</small>
       </div>
     );
   }
@@ -72,24 +72,25 @@ export default function ProductPage() {
 
       <section className="product-hero">
         <div className="product-hero-copy">
-          <p className="product-kicker">A quieter kind of assistive technology</p>
+          <p className="product-kicker">Browser-based research prototype</p>
           <h1>Memory,<br /><em>when you need it.</em></h1>
           <p className="product-hero-intro">
-            AI-assisted glasses designed to bring everyday context back into view.
+            MemoryCue is a browser prototype for people experiencing memory loss and their caregivers. It saves and
+            retrieves everyday context while exploring how the same experience could work through future smart glasses.
           </p>
           <Link className="product-button" href="/app">
             Try the simulator <span aria-hidden="true">↗</span>
           </Link>
         </div>
         <MemoryCueMockup />
-        <span className="hero-note">Observe · remember · assist</span>
+        <span className="hero-note">Capture · review · save · retrieve</span>
       </section>
 
       <section className="story-section story-section-remember" id="remember">
         <div className="story-copy">
           <p className="product-kicker">01 · Remember</p>
           <h2>Remember<br /><em>what just happened.</em></h2>
-          <p>Useful moments become retrievable personal memories.</p>
+          <p>Capture or upload an image, review the details, and save it as a memory you can ask about later.</p>
         </div>
         <StoryVisual type="remember" />
       </section>
@@ -98,7 +99,7 @@ export default function ProductPage() {
         <div className="story-copy">
           <p className="product-kicker">02 · Find</p>
           <h2>Find what<br /><em>you misplaced.</em></h2>
-          <p>MemoryCue tells you what it last saw, without pretending it knows the present.</p>
+          <p>Answers use the latest saved observation and report where and when an object was last seen—not where it is now.</p>
         </div>
         <StoryVisual type="find" />
       </section>
@@ -107,7 +108,10 @@ export default function ProductPage() {
         <div className="story-copy">
           <p className="product-kicker">03 · People</p>
           <h2>Recognize the<br /><em>people you trust.</em></h2>
-          <p>Known-person recognition stays inside caregiver-approved contacts.</p>
+          <p>
+            Saved records answer questions such as “Who is Sarah?” A separate “Who is this?” check compares one camera
+            image with enrolled reference faces for the selected demo profile.
+          </p>
         </div>
         <StoryVisual type="people" />
       </section>
@@ -116,7 +120,7 @@ export default function ProductPage() {
         <div className="story-copy">
           <p className="product-kicker">04 · Today</p>
           <h2>Keep today<br /><em>close.</em></h2>
-          <p>A calm glance at what is coming next.</p>
+          <p>Saved schedule items answer questions about today and can appear before an upcoming event. These optional cues can be dismissed or turned off.</p>
         </div>
         <StoryVisual type="today" />
       </section>
@@ -127,21 +131,24 @@ export default function ProductPage() {
           <h2>Personal context,<br /><em>set up with care.</em></h2>
         </div>
         <div className="caregiver-story-side">
-          <p>People, schedules, important objects, and notes—kept familiar and patient-specific.</p>
+          <p>
+            Add familiar people, important objects, schedule items, and notes for a linked demo profile. Notes are
+            stored for caregivers, while last-seen answers require a saved observation.
+          </p>
           <Link className="outline-button" href="/caregiver">Open caregiver setup <span aria-hidden="true">↗</span></Link>
         </div>
       </section>
 
       <section className="product-final-cta">
         <p className="product-kicker">Start with a moment</p>
-        <h2>See what MemoryCue<br /><em>remembers.</em></h2>
-        <Link className="product-button product-button-dark" href="/app">Launch simulator <span aria-hidden="true">↗</span></Link>
+        <h2>See what MemoryCue<br /><em>can retrieve.</em></h2>
+        <Link className="product-button product-button-dark" href="/app">Try the simulator <span aria-hidden="true">↗</span></Link>
       </section>
 
       <AboutProject />
 
       <footer className="product-footer">
-        <span>MemoryCue · experimental memory support</span>
+        <span>MemoryCue · browser-based research prototype</span>
         <Link href="/demo">Development tools</Link>
       </footer>
     </main>
