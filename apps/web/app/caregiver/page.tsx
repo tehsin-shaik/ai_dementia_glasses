@@ -218,6 +218,8 @@ export default function CaregiverPage() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [patientListError, setPatientListError] = useState<string | null>(null);
+  const [patientListRefreshToken, setPatientListRefreshToken] = useState(0);
   const [patientRefreshToken, setPatientRefreshToken] = useState(0);
   const requestVersionRef = useRef(0);
 
@@ -229,6 +231,7 @@ export default function CaregiverPage() {
     requestVersionRef.current += 1;
     const requestVersion = requestVersionRef.current;
     setIsLoadingPatients(true);
+    setPatientListError(null);
     setError(null);
     void (async () => {
       try {
@@ -246,7 +249,9 @@ export default function CaregiverPage() {
         if (requestVersionRef.current === requestVersion) {
           setPatients([]);
           setSelectedPatientId(null);
-          setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+          setPatientListError(
+            requestError instanceof Error ? requestError.message : "The linked profiles could not be loaded.",
+          );
         }
       } finally {
         if (requestVersionRef.current === requestVersion) {
@@ -254,7 +259,7 @@ export default function CaregiverPage() {
         }
       }
     })();
-  }, [activeCaregiverId]);
+  }, [activeCaregiverId, patientListRefreshToken]);
 
   useEffect(() => {
     if (selectedPatientId === null) {
@@ -330,11 +335,19 @@ export default function CaregiverPage() {
     }
     requestVersionRef.current += 1;
     setActiveCaregiverId(nextCaregiverId);
+    setIsLoadingPatients(true);
+    setPatientListError(null);
     setPatients([]);
     setSelectedPatientId(null);
     setProfile(null);
     setActiveTab("profile");
     clearFeedback();
+  }
+
+  function retryPatientList() {
+    setIsLoadingPatients(true);
+    setPatientListError(null);
+    setPatientListRefreshToken((token) => token + 1);
   }
 
   function patientBaseUrl(): string | null {
@@ -720,7 +733,7 @@ export default function CaregiverPage() {
                 </button>
               </div>
               <div className="face-enrollment" aria-label={`${person.name} optional face enrollment`}>
-                <div>
+                <div className="face-enrollment-status">
                   <span className="record-meta">Optional face check</span>
                   <strong>{person.face_enrolled ? "Reference enrolled" : "No reference enrolled"}</strong>
                 </div>
@@ -734,24 +747,26 @@ export default function CaregiverPage() {
                     }
                   />
                 </label>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void enrollFace(person)}
-                  disabled={savingKey !== null || !faceFiles[person.id]}
-                >
-                  {person.face_enrolled ? "Replace reference" : "Enroll reference"}
-                </button>
-                {person.face_enrolled && (
+                <div className="face-enrollment-actions">
                   <button
-                    className="danger-button"
+                    className="secondary-button"
                     type="button"
-                    onClick={() => void removeFace(person)}
-                    disabled={savingKey !== null}
+                    onClick={() => void enrollFace(person)}
+                    disabled={savingKey !== null || !faceFiles[person.id]}
                   >
-                    Remove reference
+                    {person.face_enrolled ? "Replace reference" : "Enroll reference"}
                   </button>
-                )}
+                  {person.face_enrolled && (
+                    <button
+                      className="danger-button"
+                      type="button"
+                      onClick={() => void removeFace(person)}
+                      disabled={savingKey !== null}
+                    >
+                      Remove reference
+                    </button>
+                  )}
+                </div>
               </div>
             </article>
           ))}
@@ -952,7 +967,18 @@ export default function CaregiverPage() {
             <p className="section-kicker">Linked profiles</p>
             <h2 id="patient-list-title">Profiles available to {activeCaregiver.name}</h2>
             {isLoadingPatients ? (
-              <p className="caregiver-muted">Loading linked profiles...</p>
+              <p className="caregiver-muted">Loading profiles…</p>
+            ) : patientListError ? (
+              <div role="alert">
+                <p className="caregiver-muted">Couldn’t load profiles. Try again.</p>
+                <button className="text-button" type="button" onClick={retryPatientList}>
+                  Retry
+                </button>
+                <details className="debug-details caregiver-list-debug">
+                  <summary>Development details</summary>
+                  <p>{patientListError}</p>
+                </details>
+              </div>
             ) : patients.length > 0 ? (
               <div className="patient-list">
                 {patients.map((patient) => (
@@ -976,7 +1002,13 @@ export default function CaregiverPage() {
           </aside>
 
           <section className="management-panel" aria-labelledby="management-title">
-            {selectedPatient ? (
+            {isLoadingPatients || patientListError ? (
+              <div className="management-empty">
+                <p className="section-kicker">{patientListError ? "Profiles unavailable" : "Linked profiles"}</p>
+                <h2 id="management-title">{patientListError ? "Couldn’t load profiles." : "Loading profiles…"}</h2>
+                {patientListError && <p>Use Retry in the profile list to try the request again.</p>}
+              </div>
+            ) : selectedPatient ? (
               <>
                 <div className="management-heading">
                   <div>
