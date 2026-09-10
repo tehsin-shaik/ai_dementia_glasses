@@ -32,7 +32,7 @@ function StoryVisual({ type }: { type: "remember" | "find" | "people" | "today" 
         <span className="visual-time">10:25 AM</span>
         <strong>Preparing to leave</strong>
         <span className="visual-line" />
-        <span className="visual-caption">Saved after review</span>
+        <span className="visual-caption">A moment worth keeping</span>
       </div>
     );
   }
@@ -53,7 +53,7 @@ function StoryVisual({ type }: { type: "remember" | "find" | "people" | "today" 
           <strong>Sarah</strong>
           <span>Your daughter</span>
         </div>
-        <small>Example enrolled person</small>
+        <small>Example · reference enrolled</small>
       </div>
     );
   }
@@ -72,25 +72,24 @@ export default function ProductPage() {
 
       <section className="product-hero">
         <div className="product-hero-copy">
-          <p className="product-kicker">Browser-based research prototype</p>
+          <p className="product-kicker">A quieter kind of assistive technology</p>
           <h1>Memory,<br /><em>when you need it.</em></h1>
           <p className="product-hero-intro">
-            MemoryCue is a browser prototype for people experiencing memory loss and their caregivers. It saves and
-            retrieves everyday context while exploring how the same experience could work through future smart glasses.
+            AI-assisted memory support that brings everyday context back into view.
           </p>
           <Link className="product-button" href="/app">
-            Try the simulator <span aria-hidden="true">↗</span>
+            Try MemoryCue <span aria-hidden="true">↗</span>
           </Link>
         </div>
         <MemoryCueMockup />
-        <span className="hero-note">Capture · review · save · retrieve</span>
+        <span className="hero-note">Everyday context, close at hand</span>
       </section>
 
       <section className="story-section story-section-remember" id="remember">
         <div className="story-copy">
           <p className="product-kicker">01 · Remember</p>
           <h2>Remember<br /><em>what just happened.</em></h2>
-          <p>Capture or upload an image, review the details, and save it as a memory you can ask about later.</p>
+          <p>Capture a moment, review the details, and save it for later.</p>
         </div>
         <StoryVisual type="remember" />
       </section>
@@ -99,7 +98,7 @@ export default function ProductPage() {
         <div className="story-copy">
           <p className="product-kicker">02 · Find</p>
           <h2>Find what<br /><em>you misplaced.</em></h2>
-          <p>Answers use the latest saved observation and report where and when an object was last seen—not where it is now.</p>
+          <p>See where your keys were last seen, with the saved time and place.</p>
         </div>
         <StoryVisual type="find" />
       </section>
@@ -108,10 +107,7 @@ export default function ProductPage() {
         <div className="story-copy">
           <p className="product-kicker">03 · People</p>
           <h2>Recognize the<br /><em>people you trust.</em></h2>
-          <p>
-            Saved records answer questions such as “Who is Sarah?” A separate “Who is this?” check compares one camera
-            image with enrolled reference faces for the selected demo profile.
-          </p>
+          <p>Bring a familiar name and relationship into view with “Who is this?” using approved reference faces.</p>
         </div>
         <StoryVisual type="people" />
       </section>
@@ -120,7 +116,7 @@ export default function ProductPage() {
         <div className="story-copy">
           <p className="product-kicker">04 · Today</p>
           <h2>Keep today<br /><em>close.</em></h2>
-          <p>Saved schedule items answer questions about today and can appear before an upcoming event. These optional cues can be dismissed or turned off.</p>
+          <p>See what is coming up through saved schedules and optional reminders you can dismiss or turn off.</p>
         </div>
         <StoryVisual type="today" />
       </section>
@@ -131,24 +127,21 @@ export default function ProductPage() {
           <h2>Personal context,<br /><em>set up with care.</em></h2>
         </div>
         <div className="caregiver-story-side">
-          <p>
-            Add familiar people, important objects, schedule items, and notes for a linked demo profile. Notes are
-            stored for caregivers, while last-seen answers require a saved observation.
-          </p>
+          <p>Add familiar people, important objects, schedules, and notes for someone you support.</p>
           <Link className="outline-button" href="/caregiver">Open caregiver setup <span aria-hidden="true">↗</span></Link>
         </div>
       </section>
 
       <section className="product-final-cta">
         <p className="product-kicker">Start with a moment</p>
-        <h2>See what MemoryCue<br /><em>can retrieve.</em></h2>
-        <Link className="product-button product-button-dark" href="/app">Try the simulator <span aria-hidden="true">↗</span></Link>
+        <h2>See what MemoryCue<br /><em>remembers.</em></h2>
+        <Link className="product-button product-button-dark" href="/app">Try MemoryCue <span aria-hidden="true">↗</span></Link>
       </section>
 
       <AboutProject />
 
       <footer className="product-footer">
-        <span>MemoryCue · browser-based research prototype</span>
+        <span>MemoryCue · everyday memory support</span>
         <Link href="/demo">Development tools</Link>
       </footer>
     </main>

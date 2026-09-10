@@ -59,3 +59,9 @@ This pass reviewed the visible copy for `/`, `/app`, `/caregiver`, and `/demo`, 
 * The web package does not define a separate lint script, so no lint command was available to run.
 * `git diff --check`: passed after the final edits.
 * The edited strings were reviewed against the existing responsive markup and mobile CSS constraints. Interactive browser inspection was not available in this environment, so no claim of visual browser verification is made.
+
+## Editorial follow-up
+
+After comparing the product-focused copy at `08ad5df` with the factual corrections at `22aedf0`, the homepage was revised to lead with MemoryCue's everyday benefit again. The shorter hero, feature sections, caregiver introduction, and final call to action restore the warmer product voice. The full browser-prototype explanation now lives in About, alongside the reviewed-save flow, current capabilities, future smart-glasses direction, and medical disclaimer. Action-level corrections remain in the wearer, caregiver, and demo interfaces where they are useful.
+
+Unlike the initial pass recorded above, a headless browser was available for this follow-up. The complete homepage was reviewed at 1440px and 390px viewport widths. The production build, standalone TypeScript check, and final diff check also passed; no backend tests were needed because this revision did not change APIs, behavior, or backend response copy.
