@@ -162,15 +162,17 @@ def list_patients(
     db: Session = Depends(get_db),
     current_caregiver: Caregiver = Depends(get_current_caregiver),
 ) -> list[PatientSummary]:
-    patient_ids = list(
+    access_rows = list(
         db.scalars(
-            select(CaregiverPatientAccess.patient_user_id)
+            select(CaregiverPatientAccess)
             .where(CaregiverPatientAccess.caregiver_id == current_caregiver.id)
             .order_by(CaregiverPatientAccess.patient_user_id)
         )
     )
+    patient_ids = [access.patient_user_id for access in access_rows]
     if not patient_ids:
         return []
+    access_by_patient = {access.patient_user_id: access for access in access_rows}
     users = list(db.scalars(select(User).where(User.id.in_(patient_ids)).order_by(User.id)))
     profiles = {
         profile.user_id: profile
@@ -183,6 +185,12 @@ def list_patients(
             user_id=user.id,
             name=user.name,
             preferred_name=profiles[user.id].preferred_name if user.id in profiles else None,
+            role=access_by_patient[user.id].role,
+            can_manage_profile=access_by_patient[user.id].role == "primary",
+            can_manage_people=access_by_patient[user.id].can_manage_people,
+            can_manage_schedule=access_by_patient[user.id].can_manage_schedule,
+            can_manage_objects=access_by_patient[user.id].can_manage_objects,
+            can_manage_notes=access_by_patient[user.id].can_manage_notes,
         )
         for user in users
     ]

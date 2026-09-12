@@ -34,6 +34,7 @@ type GlassesSimulatorProps = {
   proactiveCue: ProactiveCue | null;
   proactiveCuesEnabled: boolean;
   onProactiveCuesChange: (enabled: boolean) => void;
+  onProactiveCueVisibilityChange: (cue: ProactiveCue | null) => void;
   onHudQuery: (question: string) => void;
   onDismissHud: () => void;
   onImagePreviewError: () => void;
@@ -119,6 +120,7 @@ export default function GlassesSimulator({
   proactiveCue,
   proactiveCuesEnabled,
   onProactiveCuesChange,
+  onProactiveCueVisibilityChange,
   onHudQuery,
   onDismissHud,
   onImagePreviewError,
@@ -128,6 +130,8 @@ export default function GlassesSimulator({
   const streamRef = useRef<MediaStream | null>(null);
   const [baseStatus, setBaseStatus] = useState<BaseCameraStatus>("inactive");
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isPageVisible, setIsPageVisible] = useState(true);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   useEffect(() => {
     if (!capturedFrame && baseStatus === "captured") {
@@ -144,6 +148,26 @@ export default function GlassesSimulator({
       }
     };
   }, []);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      setIsPageVisible(document.visibilityState === "visible");
+      setCurrentTime(Date.now());
+    }
+
+    handleVisibilityChange();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    if (!proactiveCue?.expires_at) {
+      return;
+    }
+    const delay = Math.max(0, new Date(proactiveCue.expires_at).getTime() - Date.now());
+    const timeoutId = window.setTimeout(() => setCurrentTime(Date.now()), delay + 10);
+    return () => window.clearTimeout(timeoutId);
+  }, [proactiveCue]);
 
   function stopActiveStream() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -261,10 +285,18 @@ export default function GlassesSimulator({
   const isStreamActive = Boolean(streamRef.current);
   const showLivePreview = isActive || isStarting || isStreamActive;
   const hasFrame = Boolean(capturedFrame && capturedPreviewUrl);
-  const visibleProactiveCue = isStreamActive && proactiveCue &&
-    (!proactiveCue.expires_at || new Date(proactiveCue.expires_at).getTime() > Date.now())
+  const visibleProactiveCue = isStreamActive && isPageVisible && hudState === "idle" && proactiveCue &&
+    (!proactiveCue.expires_at || new Date(proactiveCue.expires_at).getTime() > currentTime)
     ? proactiveCue
     : null;
+
+  useEffect(() => {
+    onProactiveCueVisibilityChange(visibleProactiveCue);
+  }, [onProactiveCueVisibilityChange, visibleProactiveCue]);
+
+  useEffect(() => {
+    return () => onProactiveCueVisibilityChange(null);
+  }, [onProactiveCueVisibilityChange]);
 
   return (
     <section className="camera-panel" aria-labelledby="camera-heading">
@@ -279,7 +311,7 @@ export default function GlassesSimulator({
         </span>
       </div>
       <p className="camera-helper">
-        Capture an image. AI analysis is optional; review or edit the details before saving. <strong>Who is this?</strong>
+        Capture an image. AI analysis is optional; review or edit the details before saving. <strong>Who is this?</strong>{" "}
         checks one image against reference faces enrolled for this demo profile.
       </p>
 

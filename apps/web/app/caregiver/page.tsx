@@ -13,6 +13,18 @@ type PatientSummary = {
   user_id: number;
   name: string;
   preferred_name: string | null;
+  role: string;
+  can_manage_profile: boolean;
+  can_manage_people: boolean;
+  can_manage_schedule: boolean;
+  can_manage_objects: boolean;
+  can_manage_notes: boolean;
+};
+
+type PatientScope = {
+  caregiverId: number;
+  patientId: number;
+  generation: number;
 };
 
 type PatientProfile = {
@@ -82,7 +94,13 @@ function parsePatients(payload: unknown): PatientSummary[] {
         isRecord(patient) &&
         typeof patient.user_id === "number" &&
         typeof patient.name === "string" &&
-        (patient.preferred_name === null || typeof patient.preferred_name === "string"),
+        (patient.preferred_name === null || typeof patient.preferred_name === "string") &&
+        typeof patient.role === "string" &&
+        typeof patient.can_manage_profile === "boolean" &&
+        typeof patient.can_manage_people === "boolean" &&
+        typeof patient.can_manage_schedule === "boolean" &&
+        typeof patient.can_manage_objects === "boolean" &&
+        typeof patient.can_manage_notes === "boolean",
     )
   ) {
     throw new Error("The patient list returned an invalid response.");
@@ -221,69 +239,183 @@ export default function CaregiverPage() {
   const [patientListError, setPatientListError] = useState<string | null>(null);
   const [patientListRefreshToken, setPatientListRefreshToken] = useState(0);
   const [patientRefreshToken, setPatientRefreshToken] = useState(0);
-  const requestVersionRef = useRef(0);
+  const patientListGenerationRef = useRef(0);
+  const detailGenerationRef = useRef(0);
+  const activeCaregiverIdRef = useRef(activeCaregiverId);
+  const selectedPatientIdRef = useRef(selectedPatientId);
+  const patientListAbortRef = useRef<AbortController | null>(null);
+  const detailAbortRef = useRef<AbortController | null>(null);
+  const mutationAbortRefs = useRef<Set<AbortController>>(new Set());
+
+  activeCaregiverIdRef.current = activeCaregiverId;
+  selectedPatientIdRef.current = selectedPatientId;
 
   const activeCaregiver =
     CAREGIVERS.find((caregiver) => caregiver.id === activeCaregiverId) ?? CAREGIVERS[0];
   const selectedPatient = patients.find((patient) => patient.user_id === selectedPatientId) ?? null;
+  const canManageProfile = selectedPatient?.can_manage_profile === true;
+  const canManagePeople = selectedPatient?.can_manage_people === true;
+  const canManageObjects = selectedPatient?.can_manage_objects === true;
+  const canManageSchedule = selectedPatient?.can_manage_schedule === true;
+  const canManageNotes = selectedPatient?.can_manage_notes === true;
+  const activeTabCanManage = selectedPatient
+    ? {
+        profile: canManageProfile,
+        people: canManagePeople,
+        objects: canManageObjects,
+        schedule: canManageSchedule,
+        notes: canManageNotes,
+      }[activeTab]
+    : false;
+
+  function clearPatientContext(nextPatientId: number | null) {
+    detailGenerationRef.current += 1;
+    detailAbortRef.current?.abort();
+    detailAbortRef.current = null;
+    mutationAbortRefs.current.forEach((controller) => controller.abort());
+    mutationAbortRefs.current.clear();
+    selectedPatientIdRef.current = nextPatientId;
+    setProfile(null);
+    setProfileForm({ preferred_name: "", short_bio: "", home_context: "", response_style: "" });
+    setPeople([]);
+    setObjects([]);
+    setSchedule([]);
+    setNotes([]);
+    setFaceFiles({});
+    setPersonName("");
+    setPersonRelationship("");
+    setObjectName("");
+    setObjectNotes("");
+    setScheduleTitle("");
+    setScheduleAt(localDateTimeValue(new Date()));
+    setNoteText("");
+    setSavingKey(null);
+    setMessage(null);
+    setError(null);
+    setIsLoadingPatient(nextPatientId !== null);
+  }
+
+  function selectPatient(patientId: number | null) {
+    const selectionIsUnchanged = selectedPatientIdRef.current === patientId;
+    clearPatientContext(patientId);
+    setSelectedPatientId(patientId);
+    if (selectionIsUnchanged && patientId !== null) {
+      setPatientRefreshToken((token) => token + 1);
+    }
+  }
+
+  function scopeIsCurrent(scope: PatientScope): boolean {
+    return (
+      activeCaregiverIdRef.current === scope.caregiverId &&
+      selectedPatientIdRef.current === scope.patientId &&
+      detailGenerationRef.current === scope.generation
+    );
+  }
+
+  function currentPatientScope(): PatientScope | null {
+    const patientId = selectedPatientIdRef.current;
+    if (patientId === null || !profile || isLoadingPatient) {
+      return null;
+    }
+    return {
+      caregiverId: activeCaregiverIdRef.current,
+      patientId,
+      generation: detailGenerationRef.current,
+    };
+  }
 
   useEffect(() => {
-    requestVersionRef.current += 1;
-    const requestVersion = requestVersionRef.current;
+    return () => {
+      patientListGenerationRef.current += 1;
+      detailGenerationRef.current += 1;
+      patientListAbortRef.current?.abort();
+      detailAbortRef.current?.abort();
+      mutationAbortRefs.current.forEach((controller) => controller.abort());
+      mutationAbortRefs.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    patientListGenerationRef.current += 1;
+    const requestGeneration = patientListGenerationRef.current;
+    const requestCaregiverId = activeCaregiverId;
+    const controller = new AbortController();
+    patientListAbortRef.current?.abort();
+    patientListAbortRef.current = controller;
     setIsLoadingPatients(true);
     setPatientListError(null);
     setError(null);
     void (async () => {
       try {
-        const response = await caregiverFetch(`${API_URL}/api/caregiver/patients`, activeCaregiverId);
+        const response = await caregiverFetch(`${API_URL}/api/caregiver/patients`, requestCaregiverId, {
+          signal: controller.signal,
+        });
         if (!response.ok) {
           throw new Error(await errorMessage(response, "The linked profiles could not be loaded."));
         }
         const nextPatients = parsePatients(await response.json());
-        if (requestVersionRef.current !== requestVersion) {
+        if (
+          patientListGenerationRef.current !== requestGeneration ||
+          activeCaregiverIdRef.current !== requestCaregiverId
+        ) {
           return;
         }
         setPatients(nextPatients);
-        setSelectedPatientId(nextPatients[0]?.user_id ?? null);
+        selectPatient(nextPatients[0]?.user_id ?? null);
       } catch (requestError) {
-        if (requestVersionRef.current === requestVersion) {
+        if (
+          !(requestError instanceof DOMException && requestError.name === "AbortError") &&
+          patientListGenerationRef.current === requestGeneration &&
+          activeCaregiverIdRef.current === requestCaregiverId
+        ) {
           setPatients([]);
-          setSelectedPatientId(null);
+          selectPatient(null);
           setPatientListError(
             requestError instanceof Error ? requestError.message : "The linked profiles could not be loaded.",
           );
         }
       } finally {
-        if (requestVersionRef.current === requestVersion) {
+        if (
+          patientListGenerationRef.current === requestGeneration &&
+          activeCaregiverIdRef.current === requestCaregiverId
+        ) {
           setIsLoadingPatients(false);
         }
       }
     })();
+    return () => controller.abort();
   }, [activeCaregiverId, patientListRefreshToken]);
 
   useEffect(() => {
     if (selectedPatientId === null) {
-      setProfile(null);
-      setPeople([]);
-      setObjects([]);
-      setSchedule([]);
-      setNotes([]);
-      setFaceFiles({});
+      setIsLoadingPatient(false);
       return;
     }
+    detailGenerationRef.current += 1;
+    const requestGeneration = detailGenerationRef.current;
+    const requestCaregiverId = activeCaregiverId;
+    const requestPatientId = selectedPatientId;
+    const controller = new AbortController();
+    detailAbortRef.current?.abort();
+    detailAbortRef.current = controller;
+    setProfile(null);
+    setProfileForm({ preferred_name: "", short_bio: "", home_context: "", response_style: "" });
+    setPeople([]);
+    setObjects([]);
+    setSchedule([]);
+    setNotes([]);
     setFaceFiles({});
-    const requestVersion = requestVersionRef.current;
     setIsLoadingPatient(true);
     setError(null);
     void (async () => {
       try {
-        const baseUrl = `${API_URL}/api/caregiver/patients/${selectedPatientId}`;
+        const baseUrl = `${API_URL}/api/caregiver/patients/${requestPatientId}`;
         const responses = await Promise.all([
-          caregiverFetch(`${baseUrl}/profile`, activeCaregiverId),
-          caregiverFetch(`${baseUrl}/people`, activeCaregiverId),
-          caregiverFetch(`${baseUrl}/objects`, activeCaregiverId),
-          caregiverFetch(`${baseUrl}/schedule`, activeCaregiverId),
-          caregiverFetch(`${baseUrl}/notes`, activeCaregiverId),
+          caregiverFetch(`${baseUrl}/profile`, requestCaregiverId, { signal: controller.signal }),
+          caregiverFetch(`${baseUrl}/people`, requestCaregiverId, { signal: controller.signal }),
+          caregiverFetch(`${baseUrl}/objects`, requestCaregiverId, { signal: controller.signal }),
+          caregiverFetch(`${baseUrl}/schedule`, requestCaregiverId, { signal: controller.signal }),
+          caregiverFetch(`${baseUrl}/notes`, requestCaregiverId, { signal: controller.signal }),
         ]);
         const failedResponse = responses.find((response) => !response.ok);
         if (failedResponse) {
@@ -296,10 +428,15 @@ export default function CaregiverPage() {
           responses[3].json(),
           responses[4].json(),
         ]);
-        if (requestVersionRef.current !== requestVersion) {
+        const scope = { caregiverId: requestCaregiverId, patientId: requestPatientId, generation: requestGeneration };
+        if (!scopeIsCurrent(scope)) {
           return;
         }
         const parsedProfile = parseProfile(nextProfile);
+        const parsedPeople = parsePeople(nextPeople);
+        const parsedObjects = parseObjects(nextObjects);
+        const parsedSchedule = parseSchedule(nextSchedule);
+        const parsedNotes = parseNotes(nextNotes);
         setProfile(parsedProfile);
         setProfileForm({
           preferred_name: parsedProfile.preferred_name,
@@ -307,20 +444,26 @@ export default function CaregiverPage() {
           home_context: parsedProfile.home_context ?? "",
           response_style: parsedProfile.response_style ?? "",
         });
-        setPeople(parsePeople(nextPeople));
-        setObjects(parseObjects(nextObjects));
-        setSchedule(parseSchedule(nextSchedule));
-        setNotes(parseNotes(nextNotes));
+        setPeople(parsedPeople);
+        setObjects(parsedObjects);
+        setSchedule(parsedSchedule);
+        setNotes(parsedNotes);
       } catch (requestError) {
-        if (requestVersionRef.current === requestVersion) {
+        const scope = { caregiverId: requestCaregiverId, patientId: requestPatientId, generation: requestGeneration };
+        if (
+          !(requestError instanceof DOMException && requestError.name === "AbortError") &&
+          scopeIsCurrent(scope)
+        ) {
           setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
         }
       } finally {
-        if (requestVersionRef.current === requestVersion) {
+        const scope = { caregiverId: requestCaregiverId, patientId: requestPatientId, generation: requestGeneration };
+        if (scopeIsCurrent(scope)) {
           setIsLoadingPatient(false);
         }
       }
     })();
+    return () => controller.abort();
   }, [activeCaregiverId, selectedPatientId, patientRefreshToken]);
 
   function clearFeedback() {
@@ -333,15 +476,15 @@ export default function CaregiverPage() {
     if (!CAREGIVERS.some((caregiver) => caregiver.id === nextCaregiverId)) {
       return;
     }
-    requestVersionRef.current += 1;
+    patientListGenerationRef.current += 1;
+    patientListAbortRef.current?.abort();
+    activeCaregiverIdRef.current = nextCaregiverId;
     setActiveCaregiverId(nextCaregiverId);
     setIsLoadingPatients(true);
     setPatientListError(null);
     setPatients([]);
-    setSelectedPatientId(null);
-    setProfile(null);
+    selectPatient(null);
     setActiveTab("profile");
-    clearFeedback();
   }
 
   function retryPatientList() {
@@ -350,44 +493,62 @@ export default function CaregiverPage() {
     setPatientListRefreshToken((token) => token + 1);
   }
 
-  function patientBaseUrl(): string | null {
-    return selectedPatientId === null
-      ? null
-      : `${API_URL}/api/caregiver/patients/${selectedPatientId}`;
-  }
-
   async function sendMutation(
+    scope: PatientScope,
     key: string,
     path: string,
     init: RequestInit,
     successMessage: string,
   ): Promise<boolean> {
+    if (!scopeIsCurrent(scope)) {
+      return false;
+    }
+    const controller = new AbortController();
+    mutationAbortRefs.current.add(controller);
     setSavingKey(key);
     clearFeedback();
     try {
-      const response = await caregiverFetch(path, activeCaregiverId, init);
+      const response = await caregiverFetch(path, scope.caregiverId, {
+        ...init,
+        signal: controller.signal,
+      });
       if (!response.ok) {
         throw new Error(await errorMessage(response, "The change could not be saved."));
+      }
+      if (!scopeIsCurrent(scope)) {
+        return false;
       }
       setMessage(successMessage);
       return true;
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+      if (
+        !(requestError instanceof DOMException && requestError.name === "AbortError") &&
+        scopeIsCurrent(scope)
+      ) {
+        setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
+      }
       return false;
     } finally {
-      setSavingKey(null);
+      mutationAbortRefs.current.delete(controller);
+      if (scopeIsCurrent(scope)) {
+        setSavingKey(null);
+      }
     }
   }
 
-  function reloadPatient() {
-    setPatientRefreshToken((token) => token + 1);
+  function reloadPatient(scope: PatientScope) {
+    if (scopeIsCurrent(scope)) {
+      setPatientRefreshToken((token) => token + 1);
+    }
   }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const saved = await sendMutation(
+      scope,
       "profile",
       `${baseUrl}/profile`,
       {
@@ -403,19 +564,17 @@ export default function CaregiverPage() {
       "Profile information saved.",
     );
     if (saved) {
-      const response = await caregiverFetch(`${baseUrl}/profile`, activeCaregiverId);
-      if (response.ok) {
-        const nextProfile = parseProfile(await response.json());
-        setProfile(nextProfile);
-      }
+      reloadPatient(scope);
     }
   }
 
   async function addPerson(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const saved = await sendMutation(
+      scope,
       "person-add",
       `${baseUrl}/people`,
       {
@@ -428,14 +587,16 @@ export default function CaregiverPage() {
     if (saved) {
       setPersonName("");
       setPersonRelationship("");
-      await reloadPatient();
+      reloadPatient(scope);
     }
   }
 
   async function savePerson(person: Person) {
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const saved = await sendMutation(
+      scope,
       `person-${person.id}`,
       `${baseUrl}/people/${person.id}`,
       {
@@ -445,25 +606,28 @@ export default function CaregiverPage() {
       },
       "Person updated.",
     );
-    if (saved) await reloadPatient();
+    if (saved) reloadPatient(scope);
   }
 
   async function deletePerson(person: Person) {
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const deleted = await sendMutation(
+      scope,
       `person-delete-${person.id}`,
       `${baseUrl}/people/${person.id}`,
       { method: "DELETE" },
       "Person deleted.",
     );
-    if (deleted) await reloadPatient();
+    if (deleted) reloadPatient(scope);
   }
 
   async function enrollFace(person: Person) {
-    const baseUrl = patientBaseUrl();
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const file = faceFiles[person.id];
-    if (!baseUrl) return;
     if (!file) {
       clearFeedback();
       setError("Choose a reference photo before enrolling a face.");
@@ -472,6 +636,7 @@ export default function CaregiverPage() {
     const formData = new FormData();
     formData.append("image", file);
     const saved = await sendMutation(
+      scope,
       `face-${person.id}`,
       `${baseUrl}/people/${person.id}/face`,
       { method: "POST", body: formData },
@@ -479,14 +644,16 @@ export default function CaregiverPage() {
     );
     if (saved) {
       setFaceFiles((files) => ({ ...files, [person.id]: null }));
-      await reloadPatient();
+      reloadPatient(scope);
     }
   }
 
   async function removeFace(person: Person) {
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const deleted = await sendMutation(
+      scope,
       `face-remove-${person.id}`,
       `${baseUrl}/people/${person.id}/face`,
       { method: "DELETE" },
@@ -494,15 +661,17 @@ export default function CaregiverPage() {
     );
     if (deleted) {
       setFaceFiles((files) => ({ ...files, [person.id]: null }));
-      await reloadPatient();
+      reloadPatient(scope);
     }
   }
 
   async function addObject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const saved = await sendMutation(
+      scope,
       "object-add",
       `${baseUrl}/objects`,
       {
@@ -515,14 +684,16 @@ export default function CaregiverPage() {
     if (saved) {
       setObjectName("");
       setObjectNotes("");
-      await reloadPatient();
+      reloadPatient(scope);
     }
   }
 
   async function saveObject(item: ImportantObject) {
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const saved = await sendMutation(
+      scope,
       `object-${item.id}`,
       `${baseUrl}/objects/${item.id}`,
       {
@@ -532,26 +703,30 @@ export default function CaregiverPage() {
       },
       "Important object updated.",
     );
-    if (saved) await reloadPatient();
+    if (saved) reloadPatient(scope);
   }
 
   async function deleteObject(item: ImportantObject) {
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const deleted = await sendMutation(
+      scope,
       `object-delete-${item.id}`,
       `${baseUrl}/objects/${item.id}`,
       { method: "DELETE" },
       "Important object deleted.",
     );
-    if (deleted) await reloadPatient();
+    if (deleted) reloadPatient(scope);
   }
 
   async function addScheduleItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const saved = await sendMutation(
+      scope,
       "schedule-add",
       `${baseUrl}/schedule`,
       {
@@ -563,14 +738,16 @@ export default function CaregiverPage() {
     );
     if (saved) {
       setScheduleTitle("");
-      await reloadPatient();
+      reloadPatient(scope);
     }
   }
 
   async function saveScheduleItem(item: ScheduleItem) {
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const saved = await sendMutation(
+      scope,
       `schedule-${item.id}`,
       `${baseUrl}/schedule/${item.id}`,
       {
@@ -580,26 +757,30 @@ export default function CaregiverPage() {
       },
       "Schedule item updated.",
     );
-    if (saved) await reloadPatient();
+    if (saved) reloadPatient(scope);
   }
 
   async function deleteScheduleItem(item: ScheduleItem) {
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const deleted = await sendMutation(
+      scope,
       `schedule-delete-${item.id}`,
       `${baseUrl}/schedule/${item.id}`,
       { method: "DELETE" },
       "Schedule item deleted.",
     );
-    if (deleted) await reloadPatient();
+    if (deleted) reloadPatient(scope);
   }
 
   async function addNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const saved = await sendMutation(
+      scope,
       "note-add",
       `${baseUrl}/notes`,
       {
@@ -611,20 +792,22 @@ export default function CaregiverPage() {
     );
     if (saved) {
       setNoteText("");
-      await reloadPatient();
+      reloadPatient(scope);
     }
   }
 
   async function deleteNote(note: CaregiverNote) {
-    const baseUrl = patientBaseUrl();
-    if (!baseUrl) return;
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const baseUrl = `${API_URL}/api/caregiver/patients/${scope.patientId}`;
     const deleted = await sendMutation(
+      scope,
       `note-delete-${note.id}`,
       `${baseUrl}/notes/${note.id}`,
       { method: "DELETE" },
       "Caregiver note deleted.",
     );
-    if (deleted) await reloadPatient();
+    if (deleted) reloadPatient(scope);
   }
 
   function renderProfile() {
@@ -641,6 +824,7 @@ export default function CaregiverPage() {
             <input
               type="text"
               value={profileForm.preferred_name}
+              disabled={!canManageProfile || savingKey !== null}
               onChange={(event) => setProfileForm({ ...profileForm, preferred_name: event.target.value })}
             />
           </label>
@@ -650,6 +834,7 @@ export default function CaregiverPage() {
               type="text"
               value={profileForm.response_style}
               placeholder="e.g. short, calm"
+              disabled={!canManageProfile || savingKey !== null}
               onChange={(event) => setProfileForm({ ...profileForm, response_style: event.target.value })}
             />
           </label>
@@ -659,6 +844,7 @@ export default function CaregiverPage() {
           <textarea
             value={profileForm.short_bio}
             rows={2}
+            disabled={!canManageProfile || savingKey !== null}
             onChange={(event) => setProfileForm({ ...profileForm, short_bio: event.target.value })}
           />
         </label>
@@ -667,10 +853,11 @@ export default function CaregiverPage() {
           <textarea
             value={profileForm.home_context}
             rows={2}
+            disabled={!canManageProfile || savingKey !== null}
             onChange={(event) => setProfileForm({ ...profileForm, home_context: event.target.value })}
           />
         </label>
-        <button className="primary-button" type="submit" disabled={savingKey === "profile"}>
+        <button className="primary-button" type="submit" disabled={!canManageProfile || savingKey !== null}>
           {savingKey === "profile" ? "Saving..." : "Save profile"}
         </button>
       </form>
@@ -687,7 +874,7 @@ export default function CaregiverPage() {
         <form className="caregiver-inline-form" onSubmit={addPerson}>
           <label>
             <span>Name</span>
-            <input value={personName} onChange={(event) => setPersonName(event.target.value)} placeholder="Sarah" />
+            <input value={personName} onChange={(event) => setPersonName(event.target.value)} placeholder="Sarah" disabled={!canManagePeople || savingKey !== null} />
           </label>
           <label>
             <span>Relationship</span>
@@ -695,9 +882,10 @@ export default function CaregiverPage() {
               value={personRelationship}
               onChange={(event) => setPersonRelationship(event.target.value)}
               placeholder="Daughter"
+              disabled={!canManagePeople || savingKey !== null}
             />
           </label>
-          <button className="secondary-button" type="submit" disabled={savingKey === "person-add"}>
+          <button className="secondary-button" type="submit" disabled={!canManagePeople || savingKey !== null}>
             Add person
           </button>
         </form>
@@ -708,6 +896,7 @@ export default function CaregiverPage() {
                 <input
                   aria-label="Person name"
                   value={person.name}
+                  disabled={!canManagePeople || savingKey !== null}
                   onChange={(event) =>
                     setPeople(people.map((item) => (item.id === person.id ? { ...item, name: event.target.value } : item)))
                   }
@@ -715,6 +904,7 @@ export default function CaregiverPage() {
                 <input
                   aria-label="Relationship"
                   value={person.relationship}
+                  disabled={!canManagePeople || savingKey !== null}
                   onChange={(event) =>
                     setPeople(
                       people.map((item) =>
@@ -725,10 +915,10 @@ export default function CaregiverPage() {
                 />
               </div>
               <div className="caregiver-record-actions">
-                <button className="text-button" type="button" onClick={() => void savePerson(person)} disabled={savingKey !== null}>
+                <button className="text-button" type="button" onClick={() => void savePerson(person)} disabled={!canManagePeople || savingKey !== null}>
                   Save
                 </button>
-                <button className="danger-button" type="button" onClick={() => void deletePerson(person)} disabled={savingKey !== null}>
+                <button className="danger-button" type="button" onClick={() => void deletePerson(person)} disabled={!canManagePeople || savingKey !== null}>
                   Delete
                 </button>
               </div>
@@ -742,6 +932,7 @@ export default function CaregiverPage() {
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    disabled={!canManagePeople || savingKey !== null}
                     onChange={(event) =>
                       setFaceFiles((files) => ({ ...files, [person.id]: event.target.files?.[0] ?? null }))
                     }
@@ -752,7 +943,7 @@ export default function CaregiverPage() {
                     className="secondary-button"
                     type="button"
                     onClick={() => void enrollFace(person)}
-                    disabled={savingKey !== null || !faceFiles[person.id]}
+                    disabled={!canManagePeople || savingKey !== null || !faceFiles[person.id]}
                   >
                     {person.face_enrolled ? "Replace reference" : "Enroll reference"}
                   </button>
@@ -761,7 +952,7 @@ export default function CaregiverPage() {
                       className="danger-button"
                       type="button"
                       onClick={() => void removeFace(person)}
-                      disabled={savingKey !== null}
+                      disabled={!canManagePeople || savingKey !== null}
                     >
                       Remove reference
                     </button>
@@ -786,7 +977,7 @@ export default function CaregiverPage() {
         <form className="caregiver-inline-form" onSubmit={addObject}>
           <label>
             <span>Object name</span>
-            <input value={objectName} onChange={(event) => setObjectName(event.target.value)} placeholder="Keys" />
+            <input value={objectName} onChange={(event) => setObjectName(event.target.value)} placeholder="Keys" disabled={!canManageObjects || savingKey !== null} />
           </label>
           <label>
             <span>Notes <em>(optional)</em></span>
@@ -794,9 +985,10 @@ export default function CaregiverPage() {
               value={objectNotes}
               onChange={(event) => setObjectNotes(event.target.value)}
               placeholder="Optional description for caregivers"
+              disabled={!canManageObjects || savingKey !== null}
             />
           </label>
-          <button className="secondary-button" type="submit" disabled={savingKey === "object-add"}>
+          <button className="secondary-button" type="submit" disabled={!canManageObjects || savingKey !== null}>
             Add object
           </button>
         </form>
@@ -807,6 +999,7 @@ export default function CaregiverPage() {
                 <input
                   aria-label="Important object name"
                   value={item.name}
+                  disabled={!canManageObjects || savingKey !== null}
                   onChange={(event) =>
                     setObjects(objects.map((object) => (object.id === item.id ? { ...object, name: event.target.value } : object)))
                   }
@@ -814,6 +1007,7 @@ export default function CaregiverPage() {
                 <input
                   aria-label="Important object notes"
                   value={item.notes ?? ""}
+                  disabled={!canManageObjects || savingKey !== null}
                   onChange={(event) =>
                     setObjects(
                       objects.map((object) =>
@@ -824,10 +1018,10 @@ export default function CaregiverPage() {
                 />
               </div>
               <div className="caregiver-record-actions">
-                <button className="text-button" type="button" onClick={() => void saveObject(item)} disabled={savingKey !== null}>
+                <button className="text-button" type="button" onClick={() => void saveObject(item)} disabled={!canManageObjects || savingKey !== null}>
                   Save
                 </button>
-                <button className="danger-button" type="button" onClick={() => void deleteObject(item)} disabled={savingKey !== null}>
+                <button className="danger-button" type="button" onClick={() => void deleteObject(item)} disabled={!canManageObjects || savingKey !== null}>
                   Delete
                 </button>
               </div>
@@ -848,13 +1042,13 @@ export default function CaregiverPage() {
         <form className="caregiver-inline-form" onSubmit={addScheduleItem}>
           <label>
             <span>Title</span>
-            <input value={scheduleTitle} onChange={(event) => setScheduleTitle(event.target.value)} placeholder="Sarah visits" />
+            <input value={scheduleTitle} onChange={(event) => setScheduleTitle(event.target.value)} placeholder="Sarah visits" disabled={!canManageSchedule || savingKey !== null} />
           </label>
           <label>
             <span>Date and time</span>
-            <input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} />
+            <input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} disabled={!canManageSchedule || savingKey !== null} />
           </label>
-          <button className="secondary-button" type="submit" disabled={savingKey === "schedule-add"}>
+          <button className="secondary-button" type="submit" disabled={!canManageSchedule || savingKey !== null}>
             Add schedule item
           </button>
         </form>
@@ -865,6 +1059,7 @@ export default function CaregiverPage() {
                 <input
                   aria-label="Schedule title"
                   value={item.title}
+                  disabled={!canManageSchedule || savingKey !== null}
                   onChange={(event) =>
                     setSchedule(schedule.map((entry) => (entry.id === item.id ? { ...entry, title: event.target.value } : entry)))
                   }
@@ -873,6 +1068,7 @@ export default function CaregiverPage() {
                   aria-label="Schedule date and time"
                   type="datetime-local"
                   value={dateTimeInputValue(item.scheduled_at)}
+                  disabled={!canManageSchedule || savingKey !== null}
                   onChange={(event) =>
                     setSchedule(
                       schedule.map((entry) =>
@@ -884,10 +1080,10 @@ export default function CaregiverPage() {
               </div>
               <div className="caregiver-record-actions">
                 <span className="record-meta">{displayDateTime(item.scheduled_at)}</span>
-                <button className="text-button" type="button" onClick={() => void saveScheduleItem(item)} disabled={savingKey !== null}>
+                <button className="text-button" type="button" onClick={() => void saveScheduleItem(item)} disabled={!canManageSchedule || savingKey !== null}>
                   Save
                 </button>
-                <button className="danger-button" type="button" onClick={() => void deleteScheduleItem(item)} disabled={savingKey !== null}>
+                <button className="danger-button" type="button" onClick={() => void deleteScheduleItem(item)} disabled={!canManageSchedule || savingKey !== null}>
                   Delete
                 </button>
               </div>
@@ -908,9 +1104,9 @@ export default function CaregiverPage() {
         <form className="caregiver-note-form" onSubmit={addNote}>
           <label>
             <span>Caregiver note</span>
-            <textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} rows={3} placeholder="A short note for other caregivers" />
+            <textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} rows={3} placeholder="A short note for other caregivers" disabled={!canManageNotes || savingKey !== null} />
           </label>
-          <button className="secondary-button" type="submit" disabled={savingKey === "note-add"}>
+          <button className="secondary-button" type="submit" disabled={!canManageNotes || savingKey !== null}>
             Add note
           </button>
         </form>
@@ -921,7 +1117,7 @@ export default function CaregiverPage() {
                 <p>{note.note}</p>
                 <small>{displayDateTime(note.created_at)} · caregiver {note.caregiver_id}</small>
               </div>
-              <button className="danger-button" type="button" onClick={() => void deleteNote(note)} disabled={savingKey !== null}>
+              <button className="danger-button" type="button" onClick={() => void deleteNote(note)} disabled={!canManageNotes || savingKey !== null}>
                 Delete
               </button>
             </article>
@@ -986,10 +1182,7 @@ export default function CaregiverPage() {
                     className={`patient-button ${selectedPatientId === patient.user_id ? "is-selected" : ""}`}
                     key={patient.user_id}
                     type="button"
-                    onClick={() => {
-                      setSelectedPatientId(patient.user_id);
-                      clearFeedback();
-                    }}
+                    onClick={() => selectPatient(patient.user_id)}
                   >
                     <strong>{patient.preferred_name ?? patient.name}</strong>
                     <span>{patient.name}</span>
@@ -1015,7 +1208,9 @@ export default function CaregiverPage() {
                     <p className="section-kicker">Selected profile</p>
                     <h2 id="management-title">{selectedPatient.preferred_name ?? selectedPatient.name}&apos;s setup</h2>
                   </div>
-                  <span className="access-badge">{activeCaregiver.name} · linked demo access</span>
+                  <span className="access-badge">
+                    {activeCaregiver.name} · {selectedPatient.role === "primary" ? "linked demo access" : "read-only demo access"}
+                  </span>
                 </div>
                 <nav className="management-tabs" aria-label="Profile setup sections">
                   {TABS.map((tab) => (
@@ -1034,8 +1229,17 @@ export default function CaregiverPage() {
                 </nav>
                 {isLoadingPatient ? (
                   <p className="caregiver-muted management-loading">Loading profile information...</p>
+                ) : !profile ? (
+                  <p className="caregiver-muted management-loading">
+                    Profile information is unavailable. Select the profile again to retry.
+                  </p>
                 ) : (
                   <div className="management-section">
+                    {!activeTabCanManage && (
+                      <p className="caregiver-read-only" role="note">
+                        This caregiver can view this section but cannot make changes.
+                      </p>
+                    )}
                     {activeTab === "profile" && renderProfile()}
                     {activeTab === "people" && renderPeople()}
                     {activeTab === "objects" && renderObjects()}

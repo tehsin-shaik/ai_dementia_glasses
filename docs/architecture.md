@@ -39,7 +39,16 @@ Patient-scoped CueEngine
 GET /api/cues
         |
         v
-One prioritized, dismissible HUD cue
+Read-only candidate evaluation
+        |
+        v
+Visible, active, idle wearer HUD
+        |
+        v
+POST /api/cues/present
+        |
+        v
+One acknowledged, dismissible HUD cue
 ```
 
 ## Hardware Abstraction
@@ -155,7 +164,9 @@ User-scoped query / memory / people / schedule / object / media / cue access
 
 The cue engine lives under `app/cues/` and keeps rule evaluation out of route handlers. It evaluates three stored-context rules: same-day schedule items within the configurable lookahead window, the latest successful explicit recognition event, and an important object whose recent observation is paired with an explicitly recorded leaving-related activity.
 
-Candidates are sorted by priority (`recognized_person`, `schedule_upcoming`, then `important_object`). `GET /api/cues` returns at most one candidate, records its presentation time, and applies the patient-scoped cooldown. `POST /api/cues/{cue_id}/dismiss` records dismissal for the same patient-scoped cue key. The wearer polls at a low frequency only while proactive cues are enabled.
+Candidates are sorted by priority (`recognized_person`, `schedule_upcoming`, then `important_object`). `GET /api/cues` returns at most one eligible candidate and is observational: it does not record a presentation or start a cooldown. The wearer polls at a low frequency only while proactive cues are enabled and preserves an unexpired displayed cue when a later poll is empty.
+
+The wearer calls `POST /api/cues/present` only after the camera is active, the page is visible, the manual HUD is idle, and the cue is rendered. The server revalidates eligibility, records the presentation, and starts the patient-scoped cooldown. Each visible presentation carries a UUID; retrying the same UUID is idempotent and returns the original presentation time rather than extending the cooldown. Reusing a UUID for another cue or acknowledging an ineligible cue returns a conflict. `POST /api/cues/{cue_id}/dismiss` records dismissal for the same patient-scoped cue key. The demo workspace only performs the observational GET and cannot suppress wearer delivery.
 
 The current defaults are `CUE_SCHEDULE_LOOKAHEAD_MINUTES=30`, `CUE_COOLDOWN_MINUTES=20`, `CUE_RECOGNITION_WINDOW_MINUTES=10`, and `CUE_OBJECT_LOOKBACK_MINUTES=30`. The rules prefer no cue when the stored context is insufficient. They do not infer emotion, confusion, medical needs, medication compliance, wandering, falls, or behavioral anomalies.
 

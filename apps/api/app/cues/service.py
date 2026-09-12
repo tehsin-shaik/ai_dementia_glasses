@@ -5,7 +5,16 @@ from datetime import datetime, time
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import CueState, ImportantObject, Memory, ObjectObservation, Person, RecognitionEvent, ScheduleItem
+from ..models import (
+    CuePresentation,
+    CueState,
+    ImportantObject,
+    Memory,
+    ObjectObservation,
+    Person,
+    RecognitionEvent,
+    ScheduleItem,
+)
 from ..query_service import format_time
 from .rules import (
     cooldown_delta,
@@ -36,6 +45,14 @@ def _upsert_state(db: Session, user_id: int, cue_key: str) -> CueState:
     return state
 
 
+class CueNotEligibleError(ValueError):
+    """Raised when a cue key is not currently valid for the scoped patient."""
+
+
+class CuePresentationConflictError(ValueError):
+    """Raised when a presentation token is reused for another cue."""
+
+
 class CueEngine:
     """Evaluate and record only conservative context cues."""
 
@@ -45,21 +62,65 @@ class CueEngine:
             state.cue_key: state
             for state in db.scalars(select(CueState).where(CueState.user_id == user_id))
         }
-        candidates = [
-            *self._recognized_person_cues(db, user_id, current_time),
-            *self._schedule_cues(db, user_id, current_time),
-            *self._important_object_cues(db, user_id, current_time),
-        ]
-        candidates.sort(key=lambda cue: (-cue.priority, cue.id))
+        candidates = self._candidates(db, user_id, current_time)
         return [cue for cue in candidates if not _cue_is_suppressed(states.get(cue.id), current_time)]
 
-    def mark_presented(self, db: Session, user_id: int, cue_id: str, now: datetime | None = None) -> None:
-        state = _upsert_state(db, user_id, cue_id)
-        state.last_shown_at = now or datetime.now()
+    def acknowledge_presentation(
+        self,
+        db: Session,
+        user_id: int,
+        cue_id: str,
+        presentation_id: str,
+        now: datetime | None = None,
+    ) -> tuple[str, datetime]:
+        """Record a visible cue once, while validating current server-side context."""
+
+        existing = db.scalar(
+            select(CuePresentation).where(
+                CuePresentation.user_id == user_id,
+                CuePresentation.presentation_id == presentation_id,
+            )
+        )
+        if existing is not None:
+            if existing.cue_key != cue_id:
+                raise CuePresentationConflictError("Presentation token belongs to another cue.")
+            return "already_presented", existing.presented_at
+
+        current_time = now or datetime.now()
+        candidate = next(
+            (cue for cue in self._candidates(db, user_id, current_time) if cue.id == cue_id),
+            None,
+        )
+        state = db.scalar(
+            select(CueState).where(CueState.user_id == user_id, CueState.cue_key == cue_id)
+        )
+        if candidate is None or _cue_is_suppressed(state, current_time):
+            raise CueNotEligibleError("Cue is not currently eligible for presentation.")
+
+        state = state or _upsert_state(db, user_id, cue_id)
+        state.last_shown_at = current_time
+        db.add(
+            CuePresentation(
+                user_id=user_id,
+                cue_key=cue_id,
+                presentation_id=presentation_id,
+                presented_at=current_time,
+            )
+        )
+        return "presented", current_time
 
     def dismiss(self, db: Session, user_id: int, cue_id: str, now: datetime | None = None) -> None:
         state = _upsert_state(db, user_id, cue_id)
         state.dismissed_at = now or datetime.now()
+
+    def _candidates(self, db: Session, user_id: int, now: datetime) -> list[ProactiveCue]:
+        candidates = [
+            *self._recognized_person_cues(db, user_id, now),
+            *self._schedule_cues(db, user_id, now),
+            *self._important_object_cues(db, user_id, now),
+        ]
+        candidates.sort(key=lambda cue: (-cue.priority, cue.id))
+        return candidates
 
     def _schedule_cues(self, db: Session, user_id: int, now: datetime) -> list[ProactiveCue]:
         today_start = datetime.combine(now.date(), time.min)

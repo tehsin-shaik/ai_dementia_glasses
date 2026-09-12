@@ -39,6 +39,12 @@ class PatientSummary(BaseModel):
     user_id: int
     name: str
     preferred_name: str | None
+    role: str
+    can_manage_profile: bool
+    can_manage_people: bool
+    can_manage_schedule: bool
+    can_manage_objects: bool
+    can_manage_notes: bool
 
 
 class PatientProfileResponse(BaseModel):

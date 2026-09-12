@@ -23,7 +23,8 @@ Stage 8 extends the reactive memory loop with a limited proactive loop:
 ```text
 Evaluate stored patient context
     -> select one explainable cue
-    -> show it calmly
+    -> show it only in an active, visible HUD
+    -> acknowledge that presentation
     -> let the wearer dismiss or disable it
 ```
 
@@ -59,7 +60,7 @@ The current rules are deliberately narrow:
 * `recognized_person`: the latest successful explicit **Who is this?** event within a short window, using the stored `Person` name and relationship; and
 * `important_object`: a caregiver-marked important object with a recent last-seen observation and a recent activity explicitly matching a leaving-related phrase.
 
-Recognition cues have the highest priority, followed by schedule cues and then important-object cues. The endpoint presents one cue at a time. A patient-scoped cue state prevents the same cue from repeating during the configurable 20-minute cooldown, and a dismissal prevents that cue key from returning. The wearer can turn proactive polling off; manual questions, camera capture, and explicit face recognition remain available.
+Recognition cues have the highest priority, followed by schedule cues and then important-object cues. `GET /api/cues` evaluates and returns at most one cue without changing presentation state, so repeated polls and the demo inspector cannot consume it. Once the wearer HUD is active, visible, idle, and actually showing the cue, the client acknowledges it through `POST /api/cues/present`. That acknowledgement starts the patient-scoped configurable 20-minute cooldown. Repeating the same presentation ID is idempotent and does not extend the cooldown; a dismissal prevents that cue key from returning. The wearer can turn proactive polling off; manual questions, camera capture, and explicit face recognition remain available.
 
 The cue engine never infers medical needs, medication compliance, emotion, confusion, distress, wandering, falls, or behavioral anomalies. It does not continuously inspect video or perform background face recognition. It evaluates stored context only.
 

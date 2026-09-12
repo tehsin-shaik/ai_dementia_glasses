@@ -9,6 +9,8 @@ from .models import (
     Caregiver,
     CaregiverNote,
     CaregiverPatientAccess,
+    CuePresentation,
+    CueState,
     ImportantObject,
     Memory,
     ObjectObservation,
@@ -18,7 +20,6 @@ from .models import (
     RecognitionEvent,
     ScheduleItem,
     User,
-    CueState,
 )
 
 
@@ -27,6 +28,7 @@ def seed_demo_data(db: Session) -> dict[str, int | list[int]]:
 
     # Delete children first so this remains safe when foreign keys are enforced.
     for model in (
+        CuePresentation,
         CueState,
         RecognitionEvent,
         CaregiverNote,

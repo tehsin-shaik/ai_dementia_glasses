@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, create_database_engine, get_db
 from app.authorization import CAREGIVER_ID_HEADER
+from app.cues import routes as cue_routes
+from app.cues import service as cue_service
 from app.face import provider as face_provider
 from app.face.base import MultipleFacesFoundError, NoFaceFoundError
 from app.identity import USER_ID_HEADER
@@ -1136,9 +1138,39 @@ def test_caregivers_only_list_linked_patients(client: TestClient) -> None:
     sam = client.get("/api/caregiver/patients", headers=caregiver_headers(2))
     taylor = client.get("/api/caregiver/patients", headers=caregiver_headers(3))
 
-    assert maya.json() == [{"user_id": 1, "name": "Alex", "preferred_name": "Alex"}]
-    assert sam.json() == [{"user_id": 2, "name": "Jordan", "preferred_name": "Jordan"}]
-    assert taylor.json() == [{"user_id": 1, "name": "Alex", "preferred_name": "Alex"}]
+    assert maya.json() == [{
+        "user_id": 1,
+        "name": "Alex",
+        "preferred_name": "Alex",
+        "role": "primary",
+        "can_manage_profile": True,
+        "can_manage_people": True,
+        "can_manage_schedule": True,
+        "can_manage_objects": True,
+        "can_manage_notes": True,
+    }]
+    assert sam.json() == [{
+        "user_id": 2,
+        "name": "Jordan",
+        "preferred_name": "Jordan",
+        "role": "primary",
+        "can_manage_profile": True,
+        "can_manage_people": True,
+        "can_manage_schedule": True,
+        "can_manage_objects": True,
+        "can_manage_notes": True,
+    }]
+    assert taylor.json() == [{
+        "user_id": 1,
+        "name": "Alex",
+        "preferred_name": "Alex",
+        "role": "viewer",
+        "can_manage_profile": False,
+        "can_manage_people": False,
+        "can_manage_schedule": False,
+        "can_manage_objects": False,
+        "can_manage_notes": False,
+    }]
 
     maya_cannot_open_jordan = client.get(
         "/api/caregiver/patients/2/profile",
@@ -1417,7 +1449,7 @@ def test_schedule_cue_is_user_scoped(client: TestClient, monkeypatch) -> None:
     assert response.json() == {"cues": []}
 
 
-def test_cue_cooldown_prevents_repeat(client: TestClient, monkeypatch) -> None:
+def test_cue_reads_are_observational_until_presentation_is_acknowledged(client: TestClient, monkeypatch) -> None:
     seed(client)
     clear_schedule(client, 1)
     monkeypatch.setenv("CUE_COOLDOWN_MINUTES", "20")
@@ -1433,7 +1465,107 @@ def test_cue_cooldown_prevents_repeat(client: TestClient, monkeypatch) -> None:
     second = client.get("/api/cues", headers=user_headers(1))
 
     assert len(first.json()["cues"]) == 1
-    assert second.json() == {"cues": []}
+    assert second.json() == first.json()
+
+    cue_id = first.json()["cues"][0]["id"]
+    presented = client.post(
+        "/api/cues/present",
+        headers=user_headers(1),
+        json={
+            "cue_id": cue_id,
+            "presentation_id": "00000000-0000-4000-8000-000000000001",
+        },
+    )
+    suppressed = client.get("/api/cues", headers=user_headers(1))
+
+    assert presented.status_code == 200
+    assert presented.json()["status"] == "presented"
+    assert suppressed.json() == {"cues": []}
+
+
+def test_duplicate_presentation_acknowledgement_does_not_extend_cooldown(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    monkeypatch.setenv("CUE_COOLDOWN_MINUTES", "20")
+    monkeypatch.setenv("CUE_SCHEDULE_LOOKAHEAD_MINUTES", "60")
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+    initial_time = datetime.now().replace(second=0, microsecond=0)
+
+    class ControlledDateTime(datetime):
+        current = initial_time
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.current
+
+    monkeypatch.setattr(cue_routes, "datetime", ControlledDateTime)
+    monkeypatch.setattr(cue_service, "datetime", ControlledDateTime)
+    created = client.post(
+        "/api/caregiver/patients/1/schedule",
+        headers=caregiver_headers(1),
+        json={"title": "A later appointment", "scheduled_at": (initial_time + timedelta(minutes=50)).isoformat()},
+    )
+    assert created.status_code == 201
+    cue_id = client.get("/api/cues", headers=user_headers(1)).json()["cues"][0]["id"]
+    payload = {
+        "cue_id": cue_id,
+        "presentation_id": "00000000-0000-4000-8000-000000000002",
+    }
+
+    first = client.post("/api/cues/present", headers=user_headers(1), json=payload)
+    ControlledDateTime.current = initial_time + timedelta(minutes=10)
+    duplicate = client.post("/api/cues/present", headers=user_headers(1), json=payload)
+    competing = client.post(
+        "/api/cues/present",
+        headers=user_headers(1),
+        json={
+            "cue_id": cue_id,
+            "presentation_id": "00000000-0000-4000-8000-000000000003",
+        },
+    )
+    ControlledDateTime.current = initial_time + timedelta(minutes=21)
+    after_original_cooldown = client.get("/api/cues", headers=user_headers(1))
+
+    assert first.status_code == 200
+    assert duplicate.status_code == 200
+    assert duplicate.json()["status"] == "already_presented"
+    assert duplicate.json()["presented_at"] == first.json()["presented_at"]
+    assert competing.status_code == 409
+    assert len(after_original_cooldown.json()["cues"]) == 1
+
+
+def test_presentation_acknowledgement_validates_patient_context(client: TestClient, monkeypatch) -> None:
+    seed(client)
+    clear_schedule(client, 1)
+    clear_schedule(client, 2)
+    monkeypatch.setenv("CUE_OBJECT_LOOKBACK_MINUTES", "0")
+    created = client.post(
+        "/api/caregiver/patients/1/schedule",
+        headers=caregiver_headers(1),
+        json={"title": "Alex appointment", "scheduled_at": timestamp_in(10)},
+    )
+    assert created.status_code == 201
+    cue_id = client.get("/api/cues", headers=user_headers(1)).json()["cues"][0]["id"]
+
+    other_patient = client.post(
+        "/api/cues/present",
+        headers=user_headers(2),
+        json={
+            "cue_id": cue_id,
+            "presentation_id": "00000000-0000-4000-8000-000000000004",
+        },
+    )
+    unknown_cue = client.post(
+        "/api/cues/present",
+        headers=user_headers(1),
+        json={
+            "cue_id": "schedule:99999",
+            "presentation_id": "00000000-0000-4000-8000-000000000005",
+        },
+    )
+
+    assert other_patient.status_code == 409
+    assert unknown_cue.status_code == 409
 
 
 def test_dismissed_cue_does_not_reappear(client: TestClient, monkeypatch) -> None:

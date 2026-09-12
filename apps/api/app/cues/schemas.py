@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -26,3 +27,14 @@ class CueListResponse(BaseModel):
 class CueDismissResponse(BaseModel):
     status: Literal["dismissed"]
     cue_id: str
+
+
+class CuePresentationRequest(BaseModel):
+    cue_id: str = Field(min_length=1, max_length=255)
+    presentation_id: UUID
+
+
+class CuePresentationResponse(BaseModel):
+    status: Literal["presented", "already_presented"]
+    cue_id: str
+    presented_at: datetime

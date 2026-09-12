@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, SyntheticEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 import GlassesSimulator from "./GlassesSimulator";
 import { MemoryHudState, ProactiveCue } from "./MemoryHud";
 import { memoryCueFetch } from "./api";
@@ -37,6 +37,14 @@ type MemoryImageSource = "upload" | "camera" | null;
 
 type ApiError = {
   detail?: string;
+};
+
+type CuePresentationAttempt = {
+  key: string;
+  presentationId: string;
+  attempts: number;
+  status: "idle" | "pending" | "acknowledged" | "failed";
+  retryTimer: number | null;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -171,6 +179,10 @@ function parseProactiveCues(payload: unknown): ProactiveCue[] {
   return payload.cues as ProactiveCue[];
 }
 
+function cueIsUnexpired(cue: ProactiveCue, now = Date.now()): boolean {
+  return !cue.expires_at || new Date(cue.expires_at).getTime() > now;
+}
+
 export default function WearerApp() {
   const [activeUserId, setActiveUserId] = useState<number>(DEMO_PROFILES[0].id);
   const [question, setQuestion] = useState("");
@@ -203,6 +215,15 @@ export default function WearerApp() {
   const profileVersionRef = useRef(0);
   const proactiveRequestRef = useRef(0);
   const dismissedCueKeysRef = useRef<Set<string>>(new Set());
+  const activeUserIdRef = useRef(activeUserId);
+  const proactiveCuesEnabledRef = useRef(proactiveCuesEnabled);
+  const proactiveCueRef = useRef<ProactiveCue | null>(proactiveCue);
+  const visibleProactiveCueRef = useRef<ProactiveCue | null>(null);
+  const cuePresentationRef = useRef<CuePresentationAttempt | null>(null);
+
+  activeUserIdRef.current = activeUserId;
+  proactiveCuesEnabledRef.current = proactiveCuesEnabled;
+  proactiveCueRef.current = proactiveCue;
 
   const activeProfile = DEMO_PROFILES.find((profile) => profile.id === activeUserId) ?? DEMO_PROFILES[0];
 
@@ -223,17 +244,21 @@ export default function WearerApp() {
     proactiveRequestRef.current = requestGeneration;
     const requestUserId = activeUserId;
     const requestProfileVersion = profileVersionRef.current;
+    const controller = new AbortController();
 
     if (!proactiveCuesEnabled) {
       setProactiveCue(null);
       return () => {
+        controller.abort();
         proactiveRequestRef.current += 1;
       };
     }
 
     async function pollForCue() {
       try {
-        const response = await memoryCueFetch(`${API_URL}/api/cues`, requestUserId);
+        const response = await memoryCueFetch(`${API_URL}/api/cues`, requestUserId, {
+          signal: controller.signal,
+        });
         if (!response.ok) return;
         const nextCue = parseProactiveCues(await response.json())[0] ?? null;
         if (
@@ -243,8 +268,17 @@ export default function WearerApp() {
           return;
         }
         const cueKey = nextCue ? `${requestUserId}:${nextCue.id}` : null;
-        setProactiveCue(cueKey && dismissedCueKeysRef.current.has(cueKey) ? null : nextCue);
-      } catch {
+        const availableCue = cueKey && dismissedCueKeysRef.current.has(cueKey) ? null : nextCue;
+        setProactiveCue((currentCue) => {
+          if (availableCue) {
+            return availableCue;
+          }
+          return currentCue && cueIsUnexpired(currentCue) ? currentCue : null;
+        });
+      } catch (requestError) {
+        if (requestError instanceof DOMException && requestError.name === "AbortError") {
+          return;
+        }
         // Proactive polling is best-effort and should not interrupt manual cues.
       }
     }
@@ -253,9 +287,132 @@ export default function WearerApp() {
     const intervalId = window.setInterval(() => void pollForCue(), 45_000);
     return () => {
       window.clearInterval(intervalId);
+      controller.abort();
       proactiveRequestRef.current += 1;
     };
   }, [activeUserId, proactiveCuesEnabled, proactiveRefreshToken]);
+
+  useEffect(() => {
+    if (!proactiveCue?.expires_at) {
+      return;
+    }
+    const cueId = proactiveCue.id;
+    const delay = Math.max(0, new Date(proactiveCue.expires_at).getTime() - Date.now());
+    const timeoutId = window.setTimeout(() => {
+      setProactiveCue((currentCue) => currentCue?.id === cueId ? null : currentCue);
+    }, delay + 10);
+    function clearExpiredCueAfterVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        setProactiveCue((currentCue) =>
+          currentCue && cueIsUnexpired(currentCue) ? currentCue : null,
+        );
+      }
+    }
+    document.addEventListener("visibilitychange", clearExpiredCueAfterVisibilityChange);
+    return () => {
+      window.clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", clearExpiredCueAfterVisibilityChange);
+    };
+  }, [proactiveCue]);
+
+  useEffect(() => {
+    return () => {
+      const retryTimer = cuePresentationRef.current?.retryTimer;
+      if (retryTimer !== null && retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+      }
+    };
+  }, []);
+
+  const handleProactiveCueVisibilityChange = useCallback((cue: ProactiveCue | null) => {
+    visibleProactiveCueRef.current = cue;
+    if (!cue) {
+      if (!proactiveCueRef.current) {
+        const retryTimer = cuePresentationRef.current?.retryTimer;
+        if (retryTimer !== null && retryTimer !== undefined) {
+          window.clearTimeout(retryTimer);
+        }
+        cuePresentationRef.current = null;
+      }
+      return;
+    }
+
+    const requestUserId = activeUserIdRef.current;
+    const requestProfileVersion = profileVersionRef.current;
+    const key = `${requestUserId}:${cue.id}`;
+    let attempt = cuePresentationRef.current;
+    if (!attempt || attempt.key !== key) {
+      if (attempt?.retryTimer !== null && attempt?.retryTimer !== undefined) {
+        window.clearTimeout(attempt.retryTimer);
+      }
+      attempt = {
+        key,
+        presentationId: crypto.randomUUID(),
+        attempts: 0,
+        status: "idle",
+        retryTimer: null,
+      };
+      cuePresentationRef.current = attempt;
+    }
+    const presentationAttempt = attempt;
+    const cueToAcknowledge = cue;
+
+    async function acknowledgeVisibleCue() {
+      const visibleCue = visibleProactiveCueRef.current;
+      if (
+        cuePresentationRef.current !== presentationAttempt ||
+        presentationAttempt.status === "pending" ||
+        presentationAttempt.status === "acknowledged" ||
+        presentationAttempt.status === "failed" ||
+        presentationAttempt.attempts >= 2 ||
+        activeUserIdRef.current !== requestUserId ||
+        profileVersionRef.current !== requestProfileVersion ||
+        !proactiveCuesEnabledRef.current ||
+        document.visibilityState !== "visible" ||
+        visibleCue?.id !== cueToAcknowledge.id ||
+        proactiveCueRef.current?.id !== cueToAcknowledge.id ||
+        !cueIsUnexpired(cueToAcknowledge)
+      ) {
+        return;
+      }
+
+      presentationAttempt.status = "pending";
+      presentationAttempt.attempts += 1;
+      try {
+        const response = await memoryCueFetch(`${API_URL}/api/cues/present`, requestUserId, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cue_id: cueToAcknowledge.id, presentation_id: presentationAttempt.presentationId }),
+        });
+        if (!response.ok) {
+          const requestError = new Error("The proactive cue presentation could not be acknowledged.");
+          Object.assign(requestError, { status: response.status });
+          throw requestError;
+        }
+        if (cuePresentationRef.current === presentationAttempt) {
+          presentationAttempt.status = "acknowledged";
+        }
+      } catch (requestError) {
+        if (cuePresentationRef.current !== presentationAttempt) {
+          return;
+        }
+        const status = isRecord(requestError) && typeof requestError.status === "number"
+          ? requestError.status
+          : null;
+        if (presentationAttempt.attempts < 2 && (status === null || status >= 500)) {
+          presentationAttempt.status = "idle";
+          presentationAttempt.retryTimer = window.setTimeout(() => {
+            presentationAttempt.retryTimer = null;
+            void acknowledgeVisibleCue();
+          }, 750);
+        } else {
+          presentationAttempt.status = "failed";
+        }
+      }
+    }
+
+    void acknowledgeVisibleCue();
+  }, []);
 
   function clearProactiveCue() {
     setProactiveCue(null);
@@ -649,6 +806,7 @@ export default function WearerApp() {
           hudError={hudError}
           proactiveCue={proactiveCue}
           proactiveCuesEnabled={proactiveCuesEnabled}
+          onProactiveCueVisibilityChange={handleProactiveCueVisibilityChange}
           onProactiveCuesChange={(enabled) => {
             setProactiveCuesEnabled(enabled);
             if (!enabled) {

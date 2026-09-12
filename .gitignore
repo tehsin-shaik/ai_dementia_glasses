@@ -44,6 +44,9 @@ coverage/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+playwright-report/
+test-results/
+.next-playwright/
 
 # Generated media
 media/

@@ -1764,6 +1764,33 @@ h2 {
   object-fit: cover;
 }
 
+.recent-memory-image-fallback {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  padding: 5px;
+  color: var(--muted);
+  background: #e7eeee;
+  font-size: 0.62rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.demo-load-error {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  color: #9f4d3d;
+}
+
+.demo-load-error p,
+.demo-load-error details {
+  margin: 0;
+}
+
 .recent-memory > div {
   min-width: 0;
 }
@@ -2360,6 +2387,15 @@ h2 {
 .caregiver-status {
   color: var(--teal-dark);
   background: var(--teal-soft);
+}
+
+.caregiver-read-only {
+  margin: 0 0 20px;
+  border-left: 3px solid var(--coral);
+  padding: 9px 12px;
+  color: var(--muted);
+  background: #fffaf0;
+  font-size: 0.8rem;
 }
 
 .caregiver-error {
@@ -3017,6 +3053,7 @@ h2 {
 @media (max-width: 600px) {
   .wearer-shell.wearer-experience .app-header { gap: 22px; }
   .wearer-shell.wearer-experience .header-actions { width: auto; }
+  .wearer-shell.wearer-experience .camera-panel-heading { align-items: flex-start; }
   .wearer-shell.wearer-experience .camera-view { height: 58vh; min-height: 350px; border-width: 6px; border-radius: 22px; }
   .wearer-shell.wearer-experience .camera-view::before { inset: 12px; border-radius: 16px; }
   .wearer-shell.wearer-experience .camera-view::after { top: 22px; }

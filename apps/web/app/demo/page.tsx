@@ -101,11 +101,62 @@ function displayTime(timestamp: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(timestamp));
 }
 
+function ProtectedMemoryImage({ path, userId }: { path: string; userId: number }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let nextObjectUrl: string | null = null;
+    setObjectUrl(null);
+    setFailed(false);
+    void (async () => {
+      try {
+        const response = await memoryCueFetch(imageUrl(path), userId, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(await errorMessage(response, "The memory image could not be loaded."));
+        }
+        const imageBlob = await response.blob();
+        if (controller.signal.aborted) {
+          return;
+        }
+        nextObjectUrl = URL.createObjectURL(imageBlob);
+        setObjectUrl(nextObjectUrl);
+      } catch (requestError) {
+        if (
+          !controller.signal.aborted &&
+          !(requestError instanceof DOMException && requestError.name === "AbortError")
+        ) {
+          setFailed(true);
+        }
+      }
+    })();
+
+    return () => {
+      controller.abort();
+      if (nextObjectUrl) {
+        URL.revokeObjectURL(nextObjectUrl);
+      }
+    };
+  }, [path, userId]);
+
+  if (objectUrl) {
+    return <img src={objectUrl} alt="" />;
+  }
+  return (
+    <span className="recent-memory-image-fallback" role={failed ? "status" : undefined}>
+      {failed ? "Image unavailable" : "Loading image…"}
+    </span>
+  );
+}
+
 export default function DemoPage() {
   const [activeUserId, setActiveUserId] = useState<number>(DEMO_PROFILES[0].id);
   const [demoLoaded, setDemoLoaded] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [memories, setMemories] = useState<MemoryListItem[]>([]);
+  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<QueryResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -114,42 +165,103 @@ export default function DemoPage() {
   const [isLoadingCues, setIsLoadingCues] = useState(false);
   const [cueError, setCueError] = useState<string | null>(null);
   const profileVersionRef = useRef(0);
+  const activeUserIdRef = useRef(activeUserId);
+  const memoryRequestRef = useRef(0);
+  const cueRequestRef = useRef(0);
+  const memoryAbortRef = useRef<AbortController | null>(null);
+  const cueAbortRef = useRef<AbortController | null>(null);
+
+  activeUserIdRef.current = activeUserId;
 
   async function refreshMemories(userId = activeUserId, version = profileVersionRef.current) {
+    memoryRequestRef.current += 1;
+    const requestGeneration = memoryRequestRef.current;
+    const controller = new AbortController();
+    memoryAbortRef.current?.abort();
+    memoryAbortRef.current = controller;
+    if (profileVersionRef.current === version && activeUserIdRef.current === userId) {
+      setIsLoadingMemories(true);
+      setMemories([]);
+      setMemoryError(null);
+    }
     try {
-      const response = await memoryCueFetch(`${API_URL}/api/memories`, userId);
-      if (!response.ok) return;
+      const response = await memoryCueFetch(`${API_URL}/api/memories`, userId, {
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response, "The memories could not be loaded."));
+      }
       const nextMemories = parseMemoryList(await response.json());
-      if (profileVersionRef.current === version) {
+      if (
+        profileVersionRef.current === version &&
+        activeUserIdRef.current === userId &&
+        memoryRequestRef.current === requestGeneration
+      ) {
         setMemories(nextMemories);
       }
-    } catch {
-      if (profileVersionRef.current === version) {
+    } catch (requestError) {
+      if (
+        !(requestError instanceof DOMException && requestError.name === "AbortError") &&
+        profileVersionRef.current === version &&
+        activeUserIdRef.current === userId &&
+        memoryRequestRef.current === requestGeneration
+      ) {
         setMemories([]);
+        setMemoryError(requestError instanceof Error ? requestError.message : "The memories could not be loaded.");
+      }
+    } finally {
+      if (
+        profileVersionRef.current === version &&
+        activeUserIdRef.current === userId &&
+        memoryRequestRef.current === requestGeneration
+      ) {
+        setIsLoadingMemories(false);
       }
     }
   }
 
   async function refreshCues(userId = activeUserId, version = profileVersionRef.current) {
-    if (profileVersionRef.current === version) {
+    cueRequestRef.current += 1;
+    const requestGeneration = cueRequestRef.current;
+    const controller = new AbortController();
+    cueAbortRef.current?.abort();
+    cueAbortRef.current = controller;
+    if (profileVersionRef.current === version && activeUserIdRef.current === userId) {
       setIsLoadingCues(true);
       setProactiveCue(null);
       setCueError(null);
     }
     try {
-      const response = await memoryCueFetch(`${API_URL}/api/cues`, userId);
-      if (!response.ok) return;
+      const response = await memoryCueFetch(`${API_URL}/api/cues`, userId, {
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response, "The proactive cues could not be loaded."));
+      }
       const nextCue = parseProactiveCues(await response.json())[0] ?? null;
-      if (profileVersionRef.current === version) {
+      if (
+        profileVersionRef.current === version &&
+        activeUserIdRef.current === userId &&
+        cueRequestRef.current === requestGeneration
+      ) {
         setProactiveCue(nextCue);
       }
     } catch (requestError) {
-      if (profileVersionRef.current === version) {
+      if (
+        !(requestError instanceof DOMException && requestError.name === "AbortError") &&
+        profileVersionRef.current === version &&
+        activeUserIdRef.current === userId &&
+        cueRequestRef.current === requestGeneration
+      ) {
         setProactiveCue(null);
         setCueError(requestError instanceof Error ? requestError.message : "The proactive cues could not be loaded.");
       }
     } finally {
-      if (profileVersionRef.current === version) {
+      if (
+        profileVersionRef.current === version &&
+        activeUserIdRef.current === userId &&
+        cueRequestRef.current === requestGeneration
+      ) {
         setIsLoadingCues(false);
       }
     }
@@ -160,6 +272,8 @@ export default function DemoPage() {
     profileVersionRef.current = version;
     setDemoLoaded(false);
     setMemories([]);
+    setIsLoadingMemories(true);
+    setMemoryError(null);
     setQuestion("");
     setResult(null);
     setIsLoading(false);
@@ -170,7 +284,30 @@ export default function DemoPage() {
     setError(null);
     void refreshMemories(activeUserId, version);
     void refreshCues(activeUserId, version);
+    return () => {
+      memoryAbortRef.current?.abort();
+      cueAbortRef.current?.abort();
+    };
   }, [activeUserId]);
+
+  function handleProfileChange(nextUserId: number) {
+    if (!DEMO_PROFILES.some((profile) => profile.id === nextUserId) || nextUserId === activeUserIdRef.current) {
+      return;
+    }
+    profileVersionRef.current += 1;
+    memoryRequestRef.current += 1;
+    cueRequestRef.current += 1;
+    memoryAbortRef.current?.abort();
+    cueAbortRef.current?.abort();
+    activeUserIdRef.current = nextUserId;
+    setMemories([]);
+    setMemoryError(null);
+    setIsLoadingMemories(true);
+    setProactiveCue(null);
+    setCueError(null);
+    setIsLoadingCues(true);
+    setActiveUserId(nextUserId);
+  }
 
   async function loadDemo() {
     const version = profileVersionRef.current;
@@ -269,7 +406,7 @@ export default function DemoPage() {
           <div className="demo-toolbar">
             <label className="profile-selector">
               <span>Profile to inspect</span>
-              <select value={activeUserId} onChange={(event) => setActiveUserId(Number(event.target.value))}>
+              <select value={activeUserId} onChange={(event) => handleProfileChange(Number(event.target.value))}>
                 {DEMO_PROFILES.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
               </select>
             </label>
@@ -330,11 +467,24 @@ export default function DemoPage() {
               <div><p className="section-kicker">Data check</p><h2 id="recent-memory-heading">Recent memories</h2></div>
               <span className="recent-count">{memories.length}</span>
             </div>
-            {memories.length ? (
+            {isLoadingMemories ? (
+              <p className="empty-answer">Loading memories…</p>
+            ) : memoryError ? (
+              <div className="demo-load-error" role="alert">
+                <p>Couldn&apos;t load memories.</p>
+                <button className="text-button" type="button" onClick={() => void refreshMemories()}>
+                  Retry
+                </button>
+                <details className="debug-details">
+                  <summary>Development details</summary>
+                  <p>{memoryError}</p>
+                </details>
+              </div>
+            ) : memories.length ? (
               <div className="recent-list">
                 {memories.slice(0, 8).map((memory) => (
                   <article className="recent-memory" key={memory.id}>
-                    {memory.image_url && <img src={imageUrl(memory.image_url)} alt="" />}
+                    {memory.image_url && <ProtectedMemoryImage path={memory.image_url} userId={activeUserId} />}
                     <div><p className="recent-time">{displayTime(memory.timestamp)}</p><p className="recent-location">{memory.location}</p><p className="recent-description">{memory.description}</p></div>
                   </article>
                 ))}
@@ -350,7 +500,20 @@ export default function DemoPage() {
               {isLoadingCues ? "Checking..." : "Refresh"}
             </button>
           </div>
-          {proactiveCue ? (
+          {isLoadingCues ? (
+            <p className="empty-answer">Loading cue…</p>
+          ) : cueError ? (
+            <div className="demo-load-error" role="alert">
+              <p>Couldn&apos;t load the current cue.</p>
+              <button className="text-button" type="button" onClick={() => void refreshCues()}>
+                Retry
+              </button>
+              <details className="debug-details">
+                <summary>Development details</summary>
+                <p>{cueError}</p>
+              </details>
+            </div>
+          ) : proactiveCue ? (
             <div className="demo-cue-preview">
               <p className="demo-cue-preview-title">{proactiveCue.title}</p>
               <p>{proactiveCue.message}</p>
@@ -360,7 +523,6 @@ export default function DemoPage() {
           ) : (
             <p className="empty-answer">No eligible cue returned for this profile.</p>
           )}
-          {cueError && <p className="error-message" role="alert">{cueError}</p>}
         </section>
 
         <section className="demo-card demo-config-card" aria-labelledby="config-heading">

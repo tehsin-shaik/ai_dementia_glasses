@@ -148,3 +148,18 @@ class CueState(Base):
     cue_key: Mapped[str] = mapped_column(String(255), nullable=False)
     last_shown_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     dismissed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class CuePresentation(Base):
+    """Idempotency record for one client-reported visible cue presentation."""
+
+    __tablename__ = "cue_presentations"
+    __table_args__ = (
+        UniqueConstraint("user_id", "presentation_id", name="uq_cue_presentation_user_token"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    cue_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    presentation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    presented_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)

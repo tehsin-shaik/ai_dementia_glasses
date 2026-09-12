@@ -41,7 +41,7 @@ export function MemoryHudOverlay({ state, answer, error, proactiveCue, onDismiss
     return null;
   }
 
-  const isProactive = state !== "querying" && proactiveCue !== null;
+  const isProactive = state === "idle" && proactiveCue !== null;
   const isError = state === "error" && !isProactive;
   const isUnknown = state === "unknown" && !isProactive;
   const heading = state === "querying"
