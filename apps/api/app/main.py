@@ -192,12 +192,12 @@ async def analyze_vision(
         raise HTTPException(status_code=422, detail="Context cannot exceed 500 characters.")
 
     extension, image_bytes = await read_uploaded_image(image)
+    demo_analysis = vision_provider.demo_vision_analysis(image.filename)
+    if demo_analysis:
+        return demo_analysis
     try:
         analyzer = vision_provider.get_vision_analyzer()
     except VisionProviderNotConfiguredError as exc:
-        demo_analysis = vision_provider.demo_vision_analysis(image.filename)
-        if demo_analysis:
-            return demo_analysis
         raise HTTPException(
             status_code=503,
             detail="Vision analysis is not configured.",
