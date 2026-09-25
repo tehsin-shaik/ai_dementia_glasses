@@ -549,6 +549,29 @@ def test_object_question_is_unknown_for_an_untracked_object(client: TestClient) 
     assert body["evidence"] == []
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Where is my passport today?",
+        "Where is my passport, not my keys?",
+    ],
+)
+def test_untracked_object_stays_unknown_next_to_known_words(
+    client: TestClient, question: str
+) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": question}).json()
+    assert body["intent"] == "unknown"
+    assert body["evidence"] == []
+
+
+def test_person_question_uses_the_full_name_that_was_asked(client: TestClient) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": "Who is Sarah Zorblax?"}).json()
+    assert body["intent"] == "unknown"
+    assert body["evidence"] == []
+
+
 def test_person_question_resolves_any_stored_person(client: TestClient) -> None:
     seed(client)
     response = client.post(

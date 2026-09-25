@@ -29,6 +29,8 @@ SCHEDULE_TERMS_AR = {"اليوم", "جدول", "جدولي", "مواعيدي", "
 ACTIVITY_TERMS_EN = {"doing", "do", "did", "was"}
 ACTIVITY_TERMS_AR = {"أفعل", "افعل", "كنت", "نشاطي"}
 LOCATION_TERMS_AR = {"أين", "اين", "وين"}
+NEGATION_TERMS = {"not", "except", "besides", "ليس", "وليس"}
+PERSON_TRAILING_WORDS = {"again", "please", "now", "to", "me", "مرة", "أخرى"}
 PERSON_TERMS_AR = ("من هي", "من هو", "من تكون", "من يكون")
 
 STOP_WORDS = {
@@ -57,6 +59,10 @@ def detect_intent(question: str) -> Intent:
     if not normalized:
         return "unknown"
 
+    # A "where" question is about an object even when it also mentions today.
+    if "where" in tokens or tokens & LOCATION_TERMS_AR:
+        return "object_location"
+
     if tokens & SCHEDULE_TERMS_EN or tokens & SCHEDULE_TERMS_AR:
         return "schedule"
 
@@ -69,9 +75,6 @@ def detect_intent(question: str) -> Intent:
         return "person_lookup"
     if any(normalized.startswith(prefix) for prefix in PERSON_TERMS_AR):
         return "person_lookup"
-
-    if "where" in tokens or tokens & LOCATION_TERMS_AR:
-        return "object_location"
 
     return "unknown"
 
@@ -99,9 +102,18 @@ def format_time(value: datetime, language: Language = "en") -> str:
 
 
 def candidate_object_names(question: str) -> list[str]:
-    """Return the words of a question that could name a stored object."""
+    """Return the words of a question that could name a stored object.
 
-    tokens = [token for token in normalize_question(question).split() if token not in STOP_WORDS]
+    Words after a negation such as "not my keys" are excluded so an excluded
+    object never becomes the answer.
+    """
+
+    words = normalize_question(question).split()
+    for index, word in enumerate(words):
+        if word in NEGATION_TERMS:
+            words = words[:index]
+            break
+    tokens = [token for token in words if token not in STOP_WORDS]
     candidates: list[str] = []
     for token in tokens:
         candidates.append(ARABIC_OBJECT_SYNONYMS.get(token, token))
@@ -139,11 +151,16 @@ def resolve_object_name(db: Session, user_id: int, question: str) -> str | None:
 
 
 def resolve_person_name(question: str) -> str | None:
+    """Return the full name asked about, so a longer name is not truncated."""
+
     normalized = normalize_question(question)
-    match = re.match(r"(?:who is|whos|من هي|من هو|من تكون|من يكون)\s+(\w+)", normalized)
+    match = re.match(r"(?:who is|whos|من هي|من هو|من تكون|من يكون)\s+(.+)", normalized)
     if match is None:
         return None
-    return match.group(1)
+    words = match.group(1).split()
+    while words and words[-1] in PERSON_TRAILING_WORDS:
+        words.pop()
+    return " ".join(words) or None
 
 
 def answer_question(
