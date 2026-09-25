@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, time
 
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -24,28 +24,46 @@ from .models import (
 )
 
 
+SEEDED_MODELS = (
+    # Children first so this remains safe when foreign keys are enforced.
+    CuePresentation,
+    CueState,
+    RecognitionEvent,
+    CaregiverNote,
+    CaregiverPatientAccess,
+    ImportantObject,
+    ScheduleItem,
+    PersonFaceEnrollment,
+    Person,
+    MemoryCorrection,
+    ObjectObservation,
+    Memory,
+    PatientProfile,
+    Caregiver,
+    User,
+)
+
+
+def reset_application_data(db: Session) -> None:
+    """Empty every table and restart the identity counters.
+
+    The demo profiles are addressed by id, so reseeding has to hand out the
+    same ids again. SQLite reuses row ids once a table is empty; Postgres
+    keeps counting unless the sequences are restarted.
+    """
+
+    if db.get_bind().dialect.name == "postgresql":
+        tables = ", ".join(model.__tablename__ for model in SEEDED_MODELS)
+        db.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
+        return
+    for model in SEEDED_MODELS:
+        db.execute(delete(model))
+
+
 def seed_demo_data(db: Session) -> dict[str, int | list[int]]:
     """Reset application data and insert isolated patients and caregivers."""
 
-    # Delete children first so this remains safe when foreign keys are enforced.
-    for model in (
-        CuePresentation,
-        CueState,
-        RecognitionEvent,
-        CaregiverNote,
-        CaregiverPatientAccess,
-        ImportantObject,
-        ScheduleItem,
-        PersonFaceEnrollment,
-        Person,
-        MemoryCorrection,
-        ObjectObservation,
-        Memory,
-        PatientProfile,
-        Caregiver,
-        User,
-    ):
-        db.execute(delete(model))
+    reset_application_data(db)
 
     today = date.today()
     patient_definitions = [
