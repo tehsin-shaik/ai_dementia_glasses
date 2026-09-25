@@ -58,6 +58,17 @@ Stage 9 makes the HUD usable hands-free and makes grounding visible.
 * **Answer language.** An English/Arabic toggle sets the request language. Arabic answers are assembled from the same stored records with Arabic templates, so switching language never changes what the system claims to know. Arabic object words such as `مفاتيحي` map to the stored object names.
 * **Provenance.** A result shows the records behind it: a human-readable label, the stored detail, and when it was recorded. An unknown result shows no sources and states that MemoryCue does not guess.
 
+## Rewind Recent Moments
+
+Stage 10 adds `GET /api/rewind` and a saved-moments strip on the wearer screen.
+
+* **Saved moments only.** The strip shows the latest saved memories for the selected profile with their photo, description, full observation date and time, and whether the record came from a live capture or a loaded sample. Nothing enters the strip before the wearer reviews and saves it.
+* **Ten-minute recap.** **Rewind recent moments** summarizes at most three saved moments from the last ten minutes in chronological order. The recap names how many moments it covers and states that it is not continuous recording.
+* **Empty window.** When nothing was saved in the window, the recap says so and offers **Show earlier saved moments**. Earlier moments are labelled as earlier, never described as recent.
+* **Evidence.** Object answers carry the saved photo alongside the stored detail and observation time, and last-seen answers say `Last recorded` so they never imply an object is still there.
+
+Rewind does not add background recording, continuous capture, or any new inference: it re-reads rows the wearer already saved.
+
 ## Proactive Context Cues
 
 Stage 8 adds a small rule-based `CueEngine` behind `GET /api/cues`. The endpoint uses the current `X-MemoryCue-User-Id` and returns at most one current cue for that patient. Cues are normalized, explainable records with a source ID, priority, and optional expiration.

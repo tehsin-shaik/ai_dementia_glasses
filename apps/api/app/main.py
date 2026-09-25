@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from fastapi import Depends, File, Form, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, File, Form, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
@@ -24,12 +24,15 @@ from .media_storage import (
 )
 from .models import Memory, ObjectObservation, User
 from .query_service import answer_question
+from .rewind_service import DEFAULT_WINDOW_MINUTES, build_rewind
 from .schemas import (
     HealthResponse,
+    Language,
     MemoryListItem,
     MemoryResponse,
     QueryRequest,
     QueryResponse,
+    RewindResponse,
     SeedResponse,
 )
 from .seed import seed_demo_data
@@ -69,6 +72,23 @@ def query(
     current_user: User = Depends(get_current_user),
 ) -> QueryResponse:
     return answer_question(db, current_user.id, request.question, request.language)
+
+
+@app.get("/api/rewind", response_model=RewindResponse)
+def rewind(
+    window_minutes: int = Query(default=DEFAULT_WINDOW_MINUTES, ge=1, le=1440),
+    include_earlier: bool = False,
+    language: Language = "en",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RewindResponse:
+    return build_rewind(
+        db,
+        current_user.id,
+        window_minutes=window_minutes,
+        include_earlier=include_earlier,
+        language=language,
+    )
 
 
 def image_url(image_path: str | None) -> str | None:

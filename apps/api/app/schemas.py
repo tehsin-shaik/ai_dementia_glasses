@@ -150,6 +150,31 @@ class QueryEvidence(BaseModel):
     label: str
     detail: str
     recorded_at: datetime | None
+    image_url: str | None = None
+
+
+MomentSource = Literal["capture", "sample"]
+
+
+class RewindMoment(BaseModel):
+    """One saved moment shown in the recent strip or a recap."""
+
+    memory_id: int
+    recorded_at: datetime
+    location: str
+    activity: str | None
+    description: str
+    image_url: str | None
+    source: MomentSource
+
+
+class RewindResponse(BaseModel):
+    summary: str
+    moments: list[RewindMoment] = Field(default_factory=list)
+    window_minutes: int
+    within_window: bool
+    has_earlier: bool
+    language: Language = "en"
 
 
 class QueryResponse(BaseModel):

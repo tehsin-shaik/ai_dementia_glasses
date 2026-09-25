@@ -6,6 +6,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .formatting import format_time, media_url
 from .models import ImportantObject, Memory, ObjectObservation, Person, ScheduleItem
 from .schemas import Intent, Language, QueryEvidence, QueryResponse
 
@@ -28,6 +29,7 @@ SCHEDULE_TERMS_EN = {"today", "schedule", "plans", "plan", "appointments"}
 SCHEDULE_TERMS_AR = {"اليوم", "جدول", "جدولي", "مواعيدي", "برنامجي"}
 ACTIVITY_TERMS_EN = {"doing", "do", "did", "was"}
 ACTIVITY_TERMS_AR = {"أفعل", "افعل", "كنت", "نشاطي"}
+LOCATION_TERMS_EN = {"where", "find", "seen", "misplaced", "lost", "leave", "left", "put"}
 LOCATION_TERMS_AR = {"أين", "اين", "وين"}
 NEGATION_TERMS = {"not", "except", "besides", "ليس", "وليس"}
 PERSON_TRAILING_WORDS = {"again", "please", "now", "to", "me", "مرة", "أخرى"}
@@ -59,8 +61,8 @@ def detect_intent(question: str) -> Intent:
     if not normalized:
         return "unknown"
 
-    # A "where" question is about an object even when it also mentions today.
-    if "where" in tokens or tokens & LOCATION_TERMS_AR:
+    # A locating question is about an object even when it also mentions today.
+    if tokens & LOCATION_TERMS_EN or tokens & LOCATION_TERMS_AR:
         return "object_location"
 
     if tokens & SCHEDULE_TERMS_EN or tokens & SCHEDULE_TERMS_AR:
@@ -92,13 +94,6 @@ def unknown_response(language: Language = "en") -> QueryResponse:
         evidence=[],
         language=language,
     )
-
-
-def format_time(value: datetime, language: Language = "en") -> str:
-    formatted = value.strftime("%I:%M %p").lstrip("0")
-    if language == "ar":
-        return formatted.replace("AM", "صباحًا").replace("PM", "مساءً")
-    return formatted
 
 
 def candidate_object_names(question: str) -> list[str]:
@@ -200,6 +195,7 @@ def answer_question(
                     label=f"Saved memory #{memory.id}",
                     detail=memory.location,
                     recorded_at=memory.timestamp,
+                    image_url=media_url(memory.image_path),
                 )
             ],
             language=language,
@@ -220,11 +216,15 @@ def answer_question(
         )
         if observation is None:
             return unknown_response(language)
+        observation_memory = db.get(Memory, observation.memory_id)
+        observation_photo = (
+            media_url(observation_memory.image_path) if observation_memory else None
+        )
         observed_time = format_time(observation.observed_at, language)
         answer = (
-            f"آخر مرة رأيت {object_name} كانت في {observation.location} الساعة {observed_time}."
+            f"آخر تسجيل: {object_name} في {observation.location} الساعة {observed_time}."
             if language == "ar"
-            else f"I last saw your {object_name} on the {observation.location} at {observed_time}."
+            else f"Last recorded: your {object_name} on the {observation.location} at {observed_time}."
         )
         return QueryResponse(
             answer=answer,
@@ -239,12 +239,14 @@ def answer_question(
                     label=f"Observation of {object_name}",
                     detail=observation.location,
                     recorded_at=observation.observed_at,
+                    image_url=observation_photo,
                 ),
                 QueryEvidence(
                     source_id=f"memory:{observation.memory_id}",
                     label=f"Saved memory #{observation.memory_id}",
                     detail=observation.location,
                     recorded_at=observation.observed_at,
+                    image_url=observation_photo,
                 ),
             ],
             language=language,

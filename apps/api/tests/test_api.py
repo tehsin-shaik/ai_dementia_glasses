@@ -474,7 +474,7 @@ def test_keys_last_seen_query(client: TestClient) -> None:
     seed(client)
     response = client.post("/api/query", json={"question": "Where are my keys?"})
     body = response.json()
-    assert body["answer"] == "I last saw your keys on the kitchen counter at 10:18 AM."
+    assert body["answer"] == "Last recorded: your keys on the kitchen counter at 10:18 AM."
     assert body["intent"] == "object_location"
     assert body["source_ids"]
 
@@ -538,7 +538,7 @@ def test_object_question_resolves_any_observed_object(client: TestClient) -> Non
     response = client.post("/api/query", json={"question": "Where did I leave my glasses?"})
     body = response.json()
     assert body["intent"] == "object_location"
-    assert body["answer"].startswith("I last saw your glasses on the hallway shelf at ")
+    assert body["answer"].startswith("Last recorded: your glasses on the hallway shelf at ")
 
 
 def test_object_question_is_unknown_for_an_untracked_object(client: TestClient) -> None:
@@ -716,7 +716,7 @@ def test_create_memory_with_object_observation(client: TestClient) -> None:
     assert response.json()["object_observation_id"] > 0
     query_response = client.post("/api/query", json={"question": "Where are my keys?"})
     assert query_response.json()["answer"] == (
-        "I last saw your keys on the Kitchen counter at 10:42 AM."
+        "Last recorded: your keys on the Kitchen counter at 10:42 AM."
     )
 
 
@@ -734,7 +734,7 @@ def test_latest_uploaded_object_overrides_seeded_last_seen(client: TestClient) -
 
     query_response = client.post("/api/query", json={"question": "Where are my keys?"})
     assert query_response.json()["answer"] == (
-        "I last saw your keys on the bedroom desk at 10:42 AM."
+        "Last recorded: your keys on the bedroom desk at 10:42 AM."
     )
 
 
@@ -1097,8 +1097,8 @@ def test_queries_are_scoped_to_selected_user(client: TestClient) -> None:
         headers=user_headers(2),
     ).json()
 
-    assert alex_keys["answer"] == "I last saw your keys on the kitchen counter at 10:18 AM."
-    assert jordan_keys["answer"] == "I last saw your keys on the bedroom desk at 10:24 AM."
+    assert alex_keys["answer"] == "Last recorded: your keys on the kitchen counter at 10:18 AM."
+    assert jordan_keys["answer"] == "Last recorded: your keys on the bedroom desk at 10:24 AM."
     assert alex_keys["source_ids"] != jordan_keys["source_ids"]
     assert alex_person["answer"] == "Sarah is your daughter."
     assert jordan_person["answer"] == "Sarah is your neighbor."
@@ -1196,8 +1196,8 @@ def test_object_observations_are_scoped_to_selected_user(client: TestClient) -> 
         json={"question": "Where are my keys?"},
         headers=user_headers(2),
     ).json()["answer"]
-    assert alex_answer == "I last saw your keys on the Alex table at 11:03 AM."
-    assert jordan_answer == "I last saw your keys on the Jordan shelf at 11:04 AM."
+    assert alex_answer == "Last recorded: your keys on the Alex table at 11:03 AM."
+    assert jordan_answer == "Last recorded: your keys on the Jordan shelf at 11:04 AM."
 
 
 def test_media_is_only_available_to_its_owner(client: TestClient) -> None:
@@ -1405,7 +1405,7 @@ def test_important_objects_are_definitions_separate_from_observations(client: Te
         headers=user_headers(1),
         json={"question": "Where are my keys?"},
     )
-    assert keys_answer.json()["answer"] == "I last saw your keys on the kitchen counter at 10:18 AM."
+    assert keys_answer.json()["answer"] == "Last recorded: your keys on the kitchen counter at 10:18 AM."
 
     deleted = client.delete(
         f"/api/caregiver/patients/1/objects/{object_id}",
@@ -1792,3 +1792,147 @@ def test_cues_endpoint_requires_identity(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json() == {"detail": "User identity is required."}
+
+
+def test_rewind_returns_the_three_newest_saved_moments_in_order(client: TestClient) -> None:
+    seed(client)
+    for minutes, location, activity in (
+        (-8, "Kitchen", "pouring water"),
+        (-5, "Porch", "checking the post"),
+        (-3, "Study", "sorting papers"),
+        (-1, "Hallway", "putting on shoes"),
+    ):
+        created = upload_memory(
+            client,
+            timestamp=timestamp_in(minutes),
+            location=location,
+            description=f"{activity} at {location}.",
+            activity=activity,
+            filename=f"moment{abs(minutes)}.jpg",
+        )
+        assert created.status_code == 201
+
+    body = client.get("/api/rewind", headers=user_headers(1)).json()
+
+    assert body["within_window"] is True
+    assert [moment["location"] for moment in body["moments"]] == ["Porch", "Study", "Hallway"]
+    assert all(moment["image_url"] for moment in body["moments"])
+    assert all(moment["source"] == "capture" for moment in body["moments"])
+    assert "3 saved moments" in body["summary"]
+    assert "Hallway" in body["summary"]
+
+
+def test_rewind_excludes_moments_older_than_the_window(client: TestClient) -> None:
+    seed(client)
+    old = upload_memory(
+        client,
+        timestamp=timestamp_in(-45),
+        location="Garden",
+        description="Watering the garden.",
+        activity="watering the garden",
+    )
+    assert old.status_code == 201
+
+    body = client.get("/api/rewind", headers=user_headers(1)).json()
+
+    assert body["moments"] == []
+    assert body["within_window"] is False
+    assert body["has_earlier"] is True
+    assert "last 10 minutes" in body["summary"]
+
+
+def test_rewind_can_show_earlier_saved_moments_on_request(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-45),
+        location="Garden",
+        description="Watering the garden.",
+        activity="watering the garden",
+    )
+    assert created.status_code == 201
+
+    body = client.get(
+        "/api/rewind",
+        params={"include_earlier": "true"},
+        headers=user_headers(1),
+    ).json()
+
+    assert body["within_window"] is False
+    assert body["moments"][-1]["location"] == "Garden"
+    assert "not continuous recording" in body["summary"]
+
+
+def test_rewind_only_includes_the_selected_profile(client: TestClient) -> None:
+    seed(client)
+    alex = upload_memory(
+        client,
+        timestamp=timestamp_in(-2),
+        location="Kitchen",
+        description="Alex put a cup down.",
+        user_id=1,
+    )
+    jordan = upload_memory(
+        client,
+        timestamp=timestamp_in(-2),
+        location="Bedroom",
+        description="Jordan folded a shirt.",
+        user_id=2,
+    )
+    assert alex.status_code == 201
+    assert jordan.status_code == 201
+
+    body = client.get("/api/rewind", headers=user_headers(2)).json()
+
+    assert [moment["location"] for moment in body["moments"]] == ["Bedroom"]
+    assert body["moments"][0]["image_url"] != alex.json()["image_url"]
+
+
+def test_object_answer_evidence_links_to_the_saved_photo(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-4),
+        location="hallway table",
+        description="Wallet left on the hallway table.",
+        object_name="wallet",
+        filename="wallet.jpg",
+    )
+    assert created.status_code == 201
+
+    body = client.post(
+        "/api/query",
+        json={"question": "Have you seen my wallet anywhere?"},
+    ).json()
+
+    assert body["intent"] == "object_location"
+    assert "hallway table" in body["answer"]
+    assert body["evidence"][0]["image_url"] == created.json()["image_url"]
+
+
+def test_object_answer_uses_the_newest_observation(client: TestClient) -> None:
+    seed(client)
+    older = upload_memory(
+        client,
+        timestamp=timestamp_in(-30),
+        location="kitchen counter",
+        description="Bag on the kitchen counter.",
+        object_name="bag",
+        filename="bag-old.jpg",
+    )
+    newer = upload_memory(
+        client,
+        timestamp=timestamp_in(-5),
+        location="front door hook",
+        description="Bag on the front door hook.",
+        object_name="bag",
+        filename="bag-new.jpg",
+    )
+    assert older.status_code == 201
+    assert newer.status_code == 201
+
+    body = client.post("/api/query", json={"question": "Where did I put my bag?"}).json()
+
+    assert "front door hook" in body["answer"]
+    assert "kitchen counter" not in body["answer"]
+    assert body["evidence"][0]["image_url"] == newer.json()["image_url"]

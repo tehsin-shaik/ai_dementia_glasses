@@ -96,7 +96,7 @@ function hud(page: Page) {
 }
 
 const keysAnswer = {
-  answer: "I last saw your keys on the kitchen counter at 10:18 AM.",
+  answer: "Last recorded: your keys on the kitchen counter at 10:18 AM.",
   intent: "object_location",
   source_ids: ["memory:2"],
   evidence: [
@@ -141,7 +141,7 @@ test("the Arabic toggle sends and speaks Arabic answers", async ({ page }) => {
   const questions: QueryPayload[] = [];
   await routeApi(page, (payload) => {
     questions.push(payload);
-    return { ...keysAnswer, answer: "آخر مرة رأيت مفاتيحك على kitchen counter.", language: "ar" };
+    return { ...keysAnswer, answer: "آخر تسجيل: مفاتيحك في kitchen counter.", language: "ar" };
   });
 
   await page.goto("/app");
@@ -150,13 +150,13 @@ test("the Arabic toggle sends and speaks Arabic answers", async ({ page }) => {
   await page.getByRole("button", { name: "العربية" }).click();
   await page.getByRole("button", { name: "أين مفاتيحي؟" }).click();
 
-  await expect(hud(page).getByText("آخر مرة رأيت مفاتيحك على kitchen counter.", { exact: true })).toBeVisible();
+  await expect(hud(page).getByText("آخر تسجيل: مفاتيحك في kitchen counter.", { exact: true })).toBeVisible();
   expect(questions).toEqual([{ question: "أين مفاتيحي؟", language: "ar" }]);
 
   const spoken = await page.evaluate(
     () => (window as Window & { __spokenAnswers?: Array<{ text: string; lang: string }> }).__spokenAnswers ?? [],
   );
-  expect(spoken).toEqual([{ text: "آخر مرة رأيت مفاتيحك على kitchen counter.", lang: "ar-AE" }]);
+  expect(spoken).toEqual([{ text: "آخر تسجيل: مفاتيحك في kitchen counter.", lang: "ar-AE" }]);
 });
 
 test("an ungrounded question shows no sources and refuses to guess", async ({ page }) => {

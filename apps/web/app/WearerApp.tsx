@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, SyntheticEvent, useCallback, useEffect, useRef,
 import GlassesSimulator from "./GlassesSimulator";
 import { MemoryHudState, ProactiveCue, QueryEvidence } from "./MemoryHud";
 import { memoryCueFetch } from "./api";
+import RewindPanel from "./RewindPanel";
 import SiteNav from "./SiteNav";
 import {
   isSpeechOutputSupported,
@@ -105,6 +106,7 @@ function parseEvidence(payload: unknown): QueryEvidence[] {
         label: item.label,
         detail: item.detail,
         recorded_at: (item.recorded_at as string | null) ?? null,
+        image_url: typeof item.image_url === "string" ? item.image_url : null,
       },
     ];
   });
@@ -254,6 +256,7 @@ export default function WearerApp() {
   const [proactiveCuesEnabled, setProactiveCuesEnabled] = useState(true);
   const [proactiveCue, setProactiveCue] = useState<ProactiveCue | null>(null);
   const [proactiveRefreshToken, setProactiveRefreshToken] = useState(0);
+  const [rewindRefreshToken, setRewindRefreshToken] = useState(0);
   const hudRequestRef = useRef(0);
   const profileVersionRef = useRef(0);
   const proactiveRequestRef = useRef(0);
@@ -722,6 +725,7 @@ export default function WearerApp() {
       if (memoryImageSource === "camera") {
         setCameraSaved(true);
       }
+      setRewindRefreshToken((token) => token + 1);
     } catch (requestError) {
       if (profileVersionRef.current === requestProfileVersion) {
         setError(requestError instanceof Error ? requestError.message : "The memory could not be saved.");
@@ -933,6 +937,13 @@ export default function WearerApp() {
           onHudQuery={askHudQuestion}
           onDismissHud={dismissHud}
           onImagePreviewError={reportImagePreviewError}
+        />
+
+        <RewindPanel
+          apiUrl={API_URL}
+          userId={activeUserId}
+          language={language}
+          refreshToken={rewindRefreshToken}
         />
 
         <section className="question-panel" aria-labelledby="question-heading">

@@ -1365,6 +1365,138 @@ h2 {
   color: rgba(231, 248, 244, 0.6);
 }
 
+.hud-provenance-photo {
+  color: rgba(231, 248, 244, 0.6);
+  font-style: italic;
+}
+
+.rewind-panel {
+  max-width: 720px;
+  margin: 0 auto 28px;
+  padding: 18px 20px;
+  border: 1px solid rgba(23, 60, 54, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.rewind-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rewind-heading h3 {
+  margin: 4px 0 0;
+}
+
+.rewind-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rewind-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(23, 60, 54, 0.12);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 0.8rem;
+}
+
+.rewind-photo {
+  width: 100%;
+  height: 96px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.rewind-photo.is-empty {
+  display: grid;
+  place-items: center;
+  background: rgba(23, 60, 54, 0.06);
+  color: rgba(23, 60, 54, 0.6);
+  font-size: 0.72rem;
+}
+
+.rewind-card-description {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
+.rewind-card-time,
+.rewind-card-source {
+  color: rgba(23, 60, 54, 0.66);
+  font-size: 0.72rem;
+}
+
+.rewind-recap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(23, 60, 54, 0.14);
+}
+
+.rewind-recap-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rewind-recap-badge {
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 196, 120, 0.28);
+  font-size: 0.72rem;
+}
+
+.rewind-recap-summary {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.rewind-empty,
+.rewind-note,
+.rewind-error {
+  margin: 12px 0 0;
+  font-size: 0.76rem;
+  color: rgba(23, 60, 54, 0.66);
+}
+
+.rewind-error {
+  color: #a33a1f;
+}
+
+.wearer-shell.wearer-experience .rewind-panel {
+  border-color: rgba(214, 240, 236, 0.22);
+  background: rgba(10, 32, 29, 0.55);
+  color: #eaf7f3;
+}
+
+.wearer-shell.wearer-experience .rewind-card {
+  border-color: rgba(214, 240, 236, 0.18);
+  background: rgba(8, 26, 24, 0.75);
+  color: #eaf7f3;
+}
+
+.wearer-shell.wearer-experience .rewind-card-time,
+.wearer-shell.wearer-experience .rewind-card-source,
+.wearer-shell.wearer-experience .rewind-empty,
+.wearer-shell.wearer-experience .rewind-note {
+  color: rgba(231, 248, 244, 0.68);
+}
+
 .hud-provenance-empty {
   margin: 10px 0 0;
   color: #ffe4d9;
