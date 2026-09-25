@@ -14,6 +14,8 @@ Intent = Literal[
     "unknown",
 ]
 
+Language = Literal["en", "ar"]
+
 
 class HealthResponse(BaseModel):
     status: Literal["ok"]
@@ -138,12 +140,24 @@ class CaregiverNoteCreate(BaseModel):
 
 class QueryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=500)
+    language: Language = "en"
+
+
+class QueryEvidence(BaseModel):
+    """Human-readable provenance for one stored record behind an answer."""
+
+    source_id: str
+    label: str
+    detail: str
+    recorded_at: datetime | None
 
 
 class QueryResponse(BaseModel):
     answer: str
     intent: Intent
     source_ids: list[str]
+    evidence: list[QueryEvidence] = Field(default_factory=list)
+    language: Language = "en"
 
 
 class MemoryResponse(BaseModel):

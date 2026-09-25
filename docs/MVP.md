@@ -50,6 +50,14 @@ Stage 5 adds a wearer-facing HUD to the live camera view. While the webcam is ac
 
 The HUD supports idle, querying, result, unknown, and error states. A cue can be dismissed without stopping the camera. The manual HUD does not analyze video; Stage 8 adds a separate, low-frequency poll of stored context for proactive cues. Stage 7 adds a separate explicit face-recognition action.
 
+## Voice, Answer Language, and Provenance
+
+Stage 9 makes the HUD usable hands-free and makes grounding visible.
+
+* **Voice in and out.** The wearer can press **Speak** to dictate one question through the browser Web Speech API, and answers are read aloud through speech synthesis. Dictation is a single explicit turn: there is no wake word, no background listening, and no audio is uploaded or stored. Browsers without Web Speech support keep the typed HUD and hide the voice controls.
+* **Answer language.** An English/Arabic toggle sets the request language. Arabic answers are assembled from the same stored records with Arabic templates, so switching language never changes what the system claims to know. Arabic object words such as `مفاتيحي` map to the stored object names.
+* **Provenance.** A result shows the records behind it: a human-readable label, the stored detail, and when it was recorded. An unknown result shows no sources and states that MemoryCue does not guess.
+
 ## Proactive Context Cues
 
 Stage 8 adds a small rule-based `CueEngine` behind `GET /api/cues`. The endpoint uses the current `X-MemoryCue-User-Id` and returns at most one current cue for that patient. Cues are normalized, explainable records with a source ID, priority, and optional expiration.
@@ -157,6 +165,8 @@ The first MVP does not include:
 - medical diagnosis;
 - dementia diagnosis;
 - voice cloning;
+- wake words, background listening, or stored audio;
+- machine translation of stored records;
 - Meta Quest;
 - continuous video recording;
 - production authentication;

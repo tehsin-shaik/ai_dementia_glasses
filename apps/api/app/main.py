@@ -68,7 +68,7 @@ def query(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> QueryResponse:
-    return answer_question(db, current_user.id, request.question)
+    return answer_question(db, current_user.id, request.question, request.language)
 
 
 def image_url(image_path: str | None) -> str | None:

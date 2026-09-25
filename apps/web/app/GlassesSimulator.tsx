@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { captureVideoFrame } from "./camera";
-import { MemoryHudControls, MemoryHudOverlay, MemoryHudState, ProactiveCue } from "./MemoryHud";
+import {
+  MemoryHudControls,
+  MemoryHudOverlay,
+  MemoryHudState,
+  ProactiveCue,
+  QueryEvidence,
+} from "./MemoryHud";
+import type { VoiceLanguage } from "./voice";
 
 export type CameraStatus =
   | "inactive"
@@ -31,6 +38,15 @@ type GlassesSimulatorProps = {
   hudState: MemoryHudState;
   hudAnswer: string | null;
   hudError: string | null;
+  hudEvidence: QueryEvidence[];
+  language: VoiceLanguage;
+  onLanguageChange: (language: VoiceLanguage) => void;
+  isListening: boolean;
+  onListeningChange: (listening: boolean) => void;
+  voiceInputSupported: boolean;
+  speakAnswers: boolean;
+  onSpeakAnswersChange: (enabled: boolean) => void;
+  speechOutputSupported: boolean;
   proactiveCue: ProactiveCue | null;
   proactiveCuesEnabled: boolean;
   onProactiveCuesChange: (enabled: boolean) => void;
@@ -117,6 +133,15 @@ export default function GlassesSimulator({
   hudState,
   hudAnswer,
   hudError,
+  hudEvidence,
+  language,
+  onLanguageChange,
+  isListening,
+  onListeningChange,
+  voiceInputSupported,
+  speakAnswers,
+  onSpeakAnswersChange,
+  speechOutputSupported,
   proactiveCue,
   proactiveCuesEnabled,
   onProactiveCuesChange,
@@ -328,6 +353,8 @@ export default function GlassesSimulator({
           state={hudState}
           answer={hudAnswer}
           error={hudError}
+          evidence={hudEvidence}
+          language={language}
           proactiveCue={visibleProactiveCue}
           onDismiss={onDismissHud}
         />
@@ -340,6 +367,14 @@ export default function GlassesSimulator({
         onQuery={onHudQuery}
         proactiveCuesEnabled={proactiveCuesEnabled}
         onProactiveCuesChange={onProactiveCuesChange}
+        language={language}
+        onLanguageChange={onLanguageChange}
+        isListening={isListening}
+        onListeningChange={onListeningChange}
+        voiceInputSupported={voiceInputSupported}
+        speakAnswers={speakAnswers}
+        onSpeakAnswersChange={onSpeakAnswersChange}
+        speechOutputSupported={speechOutputSupported}
       />
 
       <div className="camera-controls">

@@ -59,3 +59,4 @@ local_snapshots/
 *.webm
 *.wav
 *.mp3
+*.tsbuildinfo

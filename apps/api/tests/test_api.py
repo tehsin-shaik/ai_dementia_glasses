@@ -462,11 +462,12 @@ def test_sqlite_foreign_keys_are_enabled(tmp_path) -> None:
 def test_recent_activity_query(client: TestClient) -> None:
     seed(client)
     response = client.post("/api/query", json={"question": "What was I doing?"})
-    assert response.json() == {
-        "answer": "You were preparing to leave.",
-        "intent": "recent_activity",
-        "source_ids": ["memory:4"],
-    }
+    body = response.json()
+    assert body["answer"] == "You were preparing to leave."
+    assert body["intent"] == "recent_activity"
+    assert body["source_ids"] == ["memory:4"]
+    assert body["language"] == "en"
+    assert [item["source_id"] for item in body["evidence"]] == ["memory:4"]
 
 
 def test_keys_last_seen_query(client: TestClient) -> None:
@@ -503,7 +504,93 @@ def test_unknown_query(client: TestClient) -> None:
         "answer": "I couldn't find matching saved information for that.",
         "intent": "unknown",
         "source_ids": [],
+        "evidence": [],
+        "language": "en",
     }
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "what was i just doing",
+        "What did I do a moment ago?",
+        "what was I doing",
+    ],
+)
+def test_recent_activity_accepts_spoken_phrasings(client: TestClient, question: str) -> None:
+    seed(client)
+    response = client.post("/api/query", json={"question": question})
+    body = response.json()
+    assert body["intent"] == "recent_activity"
+    assert body["answer"] == "You were preparing to leave."
+
+
+def test_object_question_resolves_any_observed_object(client: TestClient) -> None:
+    seed(client)
+    upload = upload_memory(
+        client,
+        timestamp=timestamp_at(hour=11, minute=5),
+        location="hallway shelf",
+        description="Reading glasses left on the shelf.",
+        object_name="glasses",
+    )
+    assert upload.status_code == 201
+    response = client.post("/api/query", json={"question": "Where did I leave my glasses?"})
+    body = response.json()
+    assert body["intent"] == "object_location"
+    assert body["answer"].startswith("I last saw your glasses on the hallway shelf at ")
+
+
+def test_object_question_is_unknown_for_an_untracked_object(client: TestClient) -> None:
+    seed(client)
+    response = client.post("/api/query", json={"question": "Where is my passport?"})
+    body = response.json()
+    assert body["intent"] == "unknown"
+    assert body["evidence"] == []
+
+
+def test_person_question_resolves_any_stored_person(client: TestClient) -> None:
+    seed(client)
+    response = client.post(
+        "/api/caregiver/patients/1/people",
+        headers={CAREGIVER_ID_HEADER: "1"},
+        json={"name": "Omar", "relationship": "Neighbor"},
+    )
+    assert response.status_code == 201
+    body = client.post("/api/query", json={"question": "Who is Omar?"}).json()
+    assert body["intent"] == "person_lookup"
+    assert body["answer"] == "Omar is your neighbor."
+
+
+def test_answers_carry_evidence_with_timestamps(client: TestClient) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": "Where are my keys?"}).json()
+    evidence = body["evidence"]
+    assert [item["source_id"] for item in evidence] == body["source_ids"]
+    assert evidence[0]["detail"] == "kitchen counter"
+    assert evidence[0]["recorded_at"] is not None
+
+
+def test_arabic_answers_stay_grounded_in_stored_records(client: TestClient) -> None:
+    seed(client)
+    body = client.post(
+        "/api/query",
+        json={"question": "أين مفاتيحي؟", "language": "ar"},
+    ).json()
+    assert body["intent"] == "object_location"
+    assert body["language"] == "ar"
+    assert "kitchen counter" in body["answer"]
+    assert "صباحًا" in body["answer"]
+
+
+def test_arabic_unknown_answer_refuses_to_guess(client: TestClient) -> None:
+    seed(client)
+    body = client.post(
+        "/api/query",
+        json={"question": "What is the weather?", "language": "ar"},
+    ).json()
+    assert body["intent"] == "unknown"
+    assert body["answer"] == "لا أملك معلومات محفوظة عن ذلك، ولن أخمّن."
 
 
 def test_seed_can_be_run_twice_without_duplicate_demo_state(client: TestClient) -> None:

@@ -2,14 +2,24 @@
 
 import { ChangeEvent, FormEvent, SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 import GlassesSimulator from "./GlassesSimulator";
-import { MemoryHudState, ProactiveCue } from "./MemoryHud";
+import { MemoryHudState, ProactiveCue, QueryEvidence } from "./MemoryHud";
 import { memoryCueFetch } from "./api";
 import SiteNav from "./SiteNav";
+import {
+  isSpeechOutputSupported,
+  isVoiceInputSupported,
+  speak,
+  startListening,
+  stopSpeaking,
+  VoiceLanguage,
+} from "./voice";
 
 type QueryResult = {
   answer: string;
   intent: string;
   source_ids: string[];
+  evidence: QueryEvidence[];
+  language: VoiceLanguage;
 };
 
 type FaceRecognitionResult = {
@@ -75,6 +85,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
 }
 
+function parseEvidence(payload: unknown): QueryEvidence[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  return payload.flatMap((item) => {
+    if (
+      !isRecord(item) ||
+      typeof item.source_id !== "string" ||
+      typeof item.label !== "string" ||
+      typeof item.detail !== "string" ||
+      (item.recorded_at !== null && typeof item.recorded_at !== "string")
+    ) {
+      return [];
+    }
+    return [
+      {
+        source_id: item.source_id,
+        label: item.label,
+        detail: item.detail,
+        recorded_at: (item.recorded_at as string | null) ?? null,
+      },
+    ];
+  });
+}
+
 function parseQueryResult(payload: unknown): QueryResult {
   if (
     !isRecord(payload) ||
@@ -89,6 +124,8 @@ function parseQueryResult(payload: unknown): QueryResult {
     answer: payload.answer,
     intent: payload.intent,
     source_ids: payload.source_ids,
+    evidence: parseEvidence(payload.evidence),
+    language: payload.language === "ar" ? "ar" : "en",
   };
 }
 
@@ -190,6 +227,12 @@ export default function WearerApp() {
   const [hudState, setHudState] = useState<MemoryHudState>("idle");
   const [hudAnswer, setHudAnswer] = useState<string | null>(null);
   const [hudError, setHudError] = useState<string | null>(null);
+  const [hudEvidence, setHudEvidence] = useState<QueryEvidence[]>([]);
+  const [language, setLanguage] = useState<VoiceLanguage>("en");
+  const [isListening, setIsListening] = useState(false);
+  const [speakAnswers, setSpeakAnswers] = useState(true);
+  const [voiceInputSupported, setVoiceInputSupported] = useState(false);
+  const [speechOutputSupported, setSpeechOutputSupported] = useState(false);
   const [isRecognizingFace, setIsRecognizingFace] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -220,6 +263,12 @@ export default function WearerApp() {
   const proactiveCueRef = useRef<ProactiveCue | null>(proactiveCue);
   const visibleProactiveCueRef = useRef<ProactiveCue | null>(null);
   const cuePresentationRef = useRef<CuePresentationAttempt | null>(null);
+  const stopListeningRef = useRef<(() => void) | null>(null);
+  const languageRef = useRef(language);
+  const speakAnswersRef = useRef(speakAnswers);
+
+  languageRef.current = language;
+  speakAnswersRef.current = speakAnswers;
 
   activeUserIdRef.current = activeUserId;
   proactiveCuesEnabledRef.current = proactiveCuesEnabled;
@@ -230,6 +279,15 @@ export default function WearerApp() {
   useEffect(() => {
     setMemoryTimestamp(localDateTimeValue(new Date()));
   }, [activeUserId]);
+
+  useEffect(() => {
+    setVoiceInputSupported(isVoiceInputSupported());
+    setSpeechOutputSupported(isSpeechOutputSupported());
+    return () => {
+      stopListeningRef.current?.();
+      stopSpeaking();
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -445,6 +503,8 @@ export default function WearerApp() {
     setHudState("idle");
     setHudAnswer(null);
     setHudError(null);
+    setHudEvidence([]);
+    stopSpeaking();
     clearProactiveCue();
   }
 
@@ -475,13 +535,14 @@ export default function WearerApp() {
       setHudState("querying");
       setHudAnswer(null);
       setHudError(null);
+      setHudEvidence([]);
     }
 
     try {
       const response = await memoryCueFetch(`${API_URL}/api/query`, requestUserId, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmedQuestion }),
+        body: JSON.stringify({ question: trimmedQuestion, language }),
       });
       if (!response.ok) {
         throw new Error(await errorMessage(response, "The question could not be answered."));
@@ -493,7 +554,11 @@ export default function WearerApp() {
       setResult(queryResult);
       if (surface === "hud" && hudRequestRef.current === hudRequestId) {
         setHudAnswer(queryResult.answer);
+        setHudEvidence(queryResult.evidence);
         setHudState(queryResult.intent === "unknown" ? "unknown" : "result");
+        if (speakAnswersRef.current) {
+          speak(queryResult.answer, queryResult.language);
+        }
       }
     } catch (requestError) {
       if (profileVersionRef.current !== requestProfileVersion) {
@@ -521,6 +586,43 @@ export default function WearerApp() {
 
   function askHudQuestion(value: string) {
     void submitQuery(value, "hud");
+  }
+
+  function stopListening() {
+    stopListeningRef.current?.();
+    stopListeningRef.current = null;
+    setIsListening(false);
+  }
+
+  function changeListening(listening: boolean) {
+    if (!listening) {
+      stopListening();
+      return;
+    }
+    stopSpeaking();
+    const stop = startListening(languageRef.current, {
+      onTranscript: (transcript) => askHudQuestion(transcript),
+      onError: (message) => {
+        setHudError(message);
+        setHudState("error");
+      },
+      onEnd: () => {
+        stopListeningRef.current = null;
+        setIsListening(false);
+      },
+    });
+    if (stop === null) {
+      setVoiceInputSupported(false);
+      return;
+    }
+    stopListeningRef.current = stop;
+    setIsListening(true);
+  }
+
+  function changeLanguage(next: VoiceLanguage) {
+    stopListening();
+    stopSpeaking();
+    setLanguage(next);
   }
 
   async function recognizePerson(file: File) {
@@ -804,6 +906,20 @@ export default function WearerApp() {
           hudState={hudState}
           hudAnswer={hudAnswer}
           hudError={hudError}
+          hudEvidence={hudEvidence}
+          language={language}
+          onLanguageChange={changeLanguage}
+          isListening={isListening}
+          onListeningChange={changeListening}
+          voiceInputSupported={voiceInputSupported}
+          speakAnswers={speakAnswers}
+          onSpeakAnswersChange={(enabled) => {
+            setSpeakAnswers(enabled);
+            if (!enabled) {
+              stopSpeaking();
+            }
+          }}
+          speechOutputSupported={speechOutputSupported}
           proactiveCue={proactiveCue}
           proactiveCuesEnabled={proactiveCuesEnabled}
           onProactiveCueVisibilityChange={handleProactiveCueVisibilityChange}

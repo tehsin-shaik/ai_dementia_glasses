@@ -156,6 +156,14 @@ While the webcam is active, the simulator also provides a compact glasses-style 
 
 The cue shows the existing answer directly, including a clear unknown state when MemoryCue has no matching context. Choose **Dismiss** to clear it without stopping the camera. MemoryCue does not continuously analyze video or run background queries. Face recognition is a separate, manually triggered action described below.
 
+### Voice, answer language, and provenance
+
+The HUD can be used hands-free. Choose **Speak** to dictate one question through the browser Web Speech API; the recognized text runs through the same `/api/query` path, and the answer is read back with speech synthesis unless **Speak answers** is turned off. Dictation is one explicit turn per press: there is no wake word, no background listening, and no audio leaves the browser or is stored. Browsers without Web Speech support hide the voice controls and keep the typed HUD.
+
+The **English / العربية** toggle sets the answer language. Arabic answers are built from the same stored records using Arabic templates, so the language never changes what MemoryCue claims to know; stored details such as a saved location are shown as they were entered rather than machine-translated.
+
+A HUD answer lists the records behind it — a readable label, the stored detail, and when it was recorded — so a viewer can see which saved memory, person, object observation, or schedule item produced it. When nothing matches, the HUD shows no sources and states that MemoryCue does not guess.
+
 ### Approved known-person recognition
 
 Known-person recognition is opt-in and begins in the existing caregiver **People** section. A caregiver chooses an existing person, uploads a reference photo containing exactly one face, and selects **Enroll reference**. The upload does not create a person automatically. **Replace reference** updates the enrollment and **Remove reference** deletes it.
