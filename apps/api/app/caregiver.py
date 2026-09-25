@@ -8,11 +8,18 @@ from sqlalchemy.orm import Session
 
 from .authorization import get_current_caregiver, require_caregiver_access
 from .database import get_db
+from .correction_service import (
+    apply_correction,
+    get_memory,
+    required_permission,
+    saved_moment,
+)
 from .models import (
     Caregiver,
     CaregiverNote,
     CaregiverPatientAccess,
     ImportantObject,
+    Memory,
     PatientProfile,
     Person,
     PersonFaceEnrollment,
@@ -27,12 +34,15 @@ from .schemas import (
     ImportantObjectCreate,
     ImportantObjectPatch,
     ImportantObjectResponse,
+    MemoryCorrectionCreate,
+    MemoryCorrectionResponse,
     PatientProfilePatch,
     PatientProfileResponse,
     PatientSummary,
     PersonCreate,
     PersonPatch,
     PersonResponse,
+    SavedMomentResponse,
     ScheduleCreate,
     SchedulePatch,
     ScheduleResponse,
@@ -564,6 +574,66 @@ def create_note(
         note=note.note,
         created_at=note.created_at,
     )
+
+
+@router.get(
+    "/patients/{patient_user_id}/moments",
+    response_model=list[SavedMomentResponse],
+)
+def list_saved_moments(
+    patient_user_id: int,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_caregiver: Caregiver = Depends(get_current_caregiver),
+) -> list[SavedMomentResponse]:
+    require_caregiver_access(db, current_caregiver, patient_user_id, "view")
+    memories = db.scalars(
+        select(Memory)
+        .where(Memory.user_id == patient_user_id)
+        .order_by(Memory.timestamp.desc(), Memory.id.desc())
+        .limit(max(1, min(limit, 50)))
+    )
+    return [saved_moment(db, memory) for memory in memories]
+
+
+@router.post(
+    "/patients/{patient_user_id}/moments/{memory_id}/corrections",
+    response_model=SavedMomentResponse,
+    status_code=201,
+)
+def correct_saved_moment(
+    patient_user_id: int,
+    memory_id: int,
+    payload: MemoryCorrectionCreate,
+    db: Session = Depends(get_db),
+    current_caregiver: Caregiver = Depends(get_current_caregiver),
+) -> SavedMomentResponse:
+    require_caregiver_access(
+        db, current_caregiver, patient_user_id, required_permission(payload.field)
+    )
+    memory = get_memory(db, patient_user_id, memory_id)
+    return apply_correction(
+        db,
+        patient_user_id,
+        memory,
+        current_caregiver.id,
+        payload.field,
+        payload.value,
+    )
+
+
+@router.get(
+    "/patients/{patient_user_id}/moments/{memory_id}/corrections",
+    response_model=list[MemoryCorrectionResponse],
+)
+def list_moment_corrections(
+    patient_user_id: int,
+    memory_id: int,
+    db: Session = Depends(get_db),
+    current_caregiver: Caregiver = Depends(get_current_caregiver),
+) -> list[MemoryCorrectionResponse]:
+    require_caregiver_access(db, current_caregiver, patient_user_id, "view")
+    return saved_moment(db, get_memory(db, patient_user_id, memory_id)).corrections
 
 
 @router.delete("/patients/{patient_user_id}/notes/{note_id}", status_code=204)

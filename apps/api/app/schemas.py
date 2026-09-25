@@ -151,6 +151,8 @@ class QueryEvidence(BaseModel):
     detail: str
     recorded_at: datetime | None
     image_url: str | None = None
+    corrected_at: datetime | None = None
+    corrected_by: str | None = None
 
 
 MomentSource = Literal["capture", "sample"]
@@ -166,6 +168,8 @@ class RewindMoment(BaseModel):
     description: str
     image_url: str | None
     source: MomentSource
+    corrected_at: datetime | None = None
+    corrected_by: str | None = None
 
 
 class RewindResponse(BaseModel):
@@ -175,6 +179,38 @@ class RewindResponse(BaseModel):
     within_window: bool
     has_earlier: bool
     language: Language = "en"
+
+
+CorrectionField = Literal["description", "object_name", "object_location"]
+
+
+class MemoryCorrectionCreate(BaseModel):
+    field: CorrectionField
+    value: str = Field(min_length=1, max_length=200)
+
+
+class MemoryCorrectionResponse(BaseModel):
+    id: int
+    memory_id: int
+    caregiver_id: int
+    caregiver_name: str
+    field: CorrectionField
+    old_value: str
+    new_value: str
+    corrected_at: datetime
+
+
+class SavedMomentResponse(BaseModel):
+    """A saved moment as the caregiver reviews it, with its correction history."""
+
+    memory_id: int
+    recorded_at: datetime
+    location: str
+    description: str
+    image_url: str | None
+    object_name: str | None
+    object_location: str | None
+    corrections: list[MemoryCorrectionResponse] = Field(default_factory=list)
 
 
 class QueryResponse(BaseModel):

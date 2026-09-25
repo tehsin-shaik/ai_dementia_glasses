@@ -12,6 +12,8 @@ export type QueryEvidence = {
   detail: string;
   recorded_at: string | null;
   image_url: string | null;
+  corrected_at: string | null;
+  corrected_by: string | null;
 };
 
 export type ProactiveCue = {
@@ -103,6 +105,7 @@ const OVERLAY_COPY = {
     fallback: "I couldn't find matching saved information.",
     sources: "Answered from saved records",
     photo: "Saved photo on file",
+    corrected: "Caregiver corrected",
     noSources: "No saved record matches this. MemoryCue does not guess about your life.",
   },
   ar: {
@@ -115,6 +118,7 @@ const OVERLAY_COPY = {
     fallback: "لا أملك معلومات محفوظة عن ذلك.",
     sources: "الإجابة مأخوذة من سجلات محفوظة",
     photo: "توجد صورة محفوظة",
+    corrected: "صحّحه مقدّم الرعاية",
     noSources: "لا يوجد سجل محفوظ يطابق ذلك. MemoryCue لا يخمّن عن حياتك.",
   },
 } as const;
@@ -192,6 +196,12 @@ export function MemoryHudOverlay({
                   {recordedAt && <span className="hud-provenance-time">{recordedAt}</span>}
                   {item.image_url && (
                     <span className="hud-provenance-photo">{copy.photo}</span>
+                  )}
+                  {item.corrected_at && (
+                    <span className="hud-provenance-corrected">
+                      {copy.corrected} · {item.corrected_by} ·{" "}
+                      {formatRecordedAt(item.corrected_at, language)}
+                    </span>
                   )}
                 </li>
               );

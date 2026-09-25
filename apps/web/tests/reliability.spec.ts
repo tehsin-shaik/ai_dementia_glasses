@@ -109,6 +109,20 @@ async function fulfillPatientDetail(route: Route, patientId: number) {
   if (path.endsWith("/notes")) {
     return fulfillJson(route, [{ id: patientId * 40, caregiver_id: 1, note: `${name} note`, created_at: "2026-09-12T10:00:00" }]);
   }
+  if (path.endsWith("/moments")) {
+    return fulfillJson(route, [
+      {
+        memory_id: patientId * 50,
+        recorded_at: "2026-09-12T10:05:00",
+        location: "Kitchen",
+        description: `${name} moment`,
+        image_url: null,
+        object_name: "keys",
+        object_location: "kitchen counter",
+        corrections: [],
+      },
+    ]);
+  }
   return fulfillJson(route, { detail: "Not found" }, 404);
 }
 

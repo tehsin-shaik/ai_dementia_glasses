@@ -74,6 +74,21 @@ class ObjectObservation(Base):
     memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id"), nullable=False)
 
 
+class MemoryCorrection(Base):
+    """One caregiver correction of a saved detail, kept beside the original."""
+
+    __tablename__ = "memory_corrections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id"), nullable=False, index=True)
+    patient_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    caregiver_id: Mapped[int] = mapped_column(ForeignKey("caregivers.id"), nullable=False, index=True)
+    field: Mapped[str] = mapped_column(String(40), nullable=False)
+    old_value: Mapped[str] = mapped_column(Text, nullable=False)
+    new_value: Mapped[str] = mapped_column(Text, nullable=False)
+    corrected_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+
 class Person(Base):
     __tablename__ = "people"
 

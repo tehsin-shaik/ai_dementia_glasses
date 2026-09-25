@@ -7,7 +7,7 @@ import {
 } from "../api";
 import SiteNav from "../SiteNav";
 
-type Tab = "profile" | "people" | "objects" | "schedule" | "notes";
+type Tab = "profile" | "people" | "objects" | "schedule" | "moments" | "notes";
 
 type PatientSummary = {
   user_id: number;
@@ -54,6 +54,28 @@ type ScheduleItem = {
   scheduled_at: string;
 };
 
+type MomentCorrection = {
+  id: number;
+  memory_id: number;
+  caregiver_id: number;
+  caregiver_name: string;
+  field: "description" | "object_name" | "object_location";
+  old_value: string;
+  new_value: string;
+  corrected_at: string;
+};
+
+type SavedMoment = {
+  memory_id: number;
+  recorded_at: string;
+  location: string;
+  description: string;
+  image_url: string | null;
+  object_name: string | null;
+  object_location: string | null;
+  corrections: MomentCorrection[];
+};
+
 type CaregiverNote = {
   id: number;
   caregiver_id: number;
@@ -72,6 +94,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "people", label: "People" },
   { id: "objects", label: "Important objects" },
   { id: "schedule", label: "Schedule" },
+  { id: "moments", label: "Saved moments" },
   { id: "notes", label: "Notes" },
 ];
 
@@ -171,6 +194,23 @@ function parseSchedule(payload: unknown): ScheduleItem[] {
   return payload as ScheduleItem[];
 }
 
+function parseMoments(payload: unknown): SavedMoment[] {
+  if (
+    !Array.isArray(payload) ||
+    !payload.every(
+      (moment) =>
+        isRecord(moment) &&
+        typeof moment.memory_id === "number" &&
+        typeof moment.recorded_at === "string" &&
+        typeof moment.description === "string" &&
+        Array.isArray(moment.corrections),
+    )
+  ) {
+    throw new Error("The saved moments returned an invalid response.");
+  }
+  return payload as SavedMoment[];
+}
+
 function parseNotes(payload: unknown): CaregiverNote[] {
   if (
     !Array.isArray(payload) ||
@@ -223,6 +263,8 @@ export default function CaregiverPage() {
   const [objects, setObjects] = useState<ImportantObject[]>([]);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [notes, setNotes] = useState<CaregiverNote[]>([]);
+  const [moments, setMoments] = useState<SavedMoment[]>([]);
+  const [correctionDrafts, setCorrectionDrafts] = useState<Record<number, string>>({});
   const [faceFiles, setFaceFiles] = useState<Record<number, File | null>>({});
   const [personName, setPersonName] = useState("");
   const [personRelationship, setPersonRelationship] = useState("");
@@ -264,6 +306,7 @@ export default function CaregiverPage() {
         people: canManagePeople,
         objects: canManageObjects,
         schedule: canManageSchedule,
+        moments: canManageObjects || canManageNotes,
         notes: canManageNotes,
       }[activeTab]
     : false;
@@ -281,6 +324,8 @@ export default function CaregiverPage() {
     setObjects([]);
     setSchedule([]);
     setNotes([]);
+    setMoments([]);
+    setCorrectionDrafts({});
     setFaceFiles({});
     setPersonName("");
     setPersonRelationship("");
@@ -404,6 +449,8 @@ export default function CaregiverPage() {
     setObjects([]);
     setSchedule([]);
     setNotes([]);
+    setMoments([]);
+    setCorrectionDrafts({});
     setFaceFiles({});
     setIsLoadingPatient(true);
     setError(null);
@@ -416,18 +463,21 @@ export default function CaregiverPage() {
           caregiverFetch(`${baseUrl}/objects`, requestCaregiverId, { signal: controller.signal }),
           caregiverFetch(`${baseUrl}/schedule`, requestCaregiverId, { signal: controller.signal }),
           caregiverFetch(`${baseUrl}/notes`, requestCaregiverId, { signal: controller.signal }),
+          caregiverFetch(`${baseUrl}/moments`, requestCaregiverId, { signal: controller.signal }),
         ]);
         const failedResponse = responses.find((response) => !response.ok);
         if (failedResponse) {
           throw new Error(await errorMessage(failedResponse, "The selected profile could not be loaded."));
         }
-        const [nextProfile, nextPeople, nextObjects, nextSchedule, nextNotes] = await Promise.all([
-          responses[0].json(),
-          responses[1].json(),
-          responses[2].json(),
-          responses[3].json(),
-          responses[4].json(),
-        ]);
+        const [nextProfile, nextPeople, nextObjects, nextSchedule, nextNotes, nextMoments] =
+          await Promise.all([
+            responses[0].json(),
+            responses[1].json(),
+            responses[2].json(),
+            responses[3].json(),
+            responses[4].json(),
+            responses[5].json(),
+          ]);
         const scope = { caregiverId: requestCaregiverId, patientId: requestPatientId, generation: requestGeneration };
         if (!scopeIsCurrent(scope)) {
           return;
@@ -437,6 +487,7 @@ export default function CaregiverPage() {
         const parsedObjects = parseObjects(nextObjects);
         const parsedSchedule = parseSchedule(nextSchedule);
         const parsedNotes = parseNotes(nextNotes);
+        const parsedMoments = parseMoments(nextMoments);
         setProfile(parsedProfile);
         setProfileForm({
           preferred_name: parsedProfile.preferred_name,
@@ -448,6 +499,7 @@ export default function CaregiverPage() {
         setObjects(parsedObjects);
         setSchedule(parsedSchedule);
         setNotes(parsedNotes);
+        setMoments(parsedMoments);
       } catch (requestError) {
         const scope = { caregiverId: requestCaregiverId, patientId: requestPatientId, generation: requestGeneration };
         if (
@@ -1095,6 +1147,91 @@ export default function CaregiverPage() {
     );
   }
 
+  async function correctMoment(moment: SavedMoment) {
+    const scope = currentPatientScope();
+    if (!scope) return;
+    const value = (correctionDrafts[moment.memory_id] ?? "").trim();
+    if (!value) return;
+    const field = moment.object_location === null ? "description" : "object_location";
+    const saved = await sendMutation(
+      scope,
+      `moment-${moment.memory_id}`,
+      `${API_URL}/api/caregiver/patients/${scope.patientId}/moments/${moment.memory_id}/corrections`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field, value }),
+      },
+      "Saved detail corrected. The original capture and its time are unchanged.",
+    );
+    if (saved) {
+      setCorrectionDrafts((drafts) => ({ ...drafts, [moment.memory_id]: "" }));
+      reloadPatient(scope);
+    }
+  }
+
+  function renderMoments() {
+    return (
+      <div className="caregiver-section-stack">
+        <p className="caregiver-muted">
+          Corrections change what the wearer is told next time. The original photo and the time it was observed stay as
+          recorded; if an object moved, save a new observation instead of rewriting this one.
+        </p>
+        <div className="caregiver-moment-list" data-testid="caregiver-moments">
+          {moments.map((moment) => (
+            <article className="caregiver-moment" key={moment.memory_id}>
+              <div className="caregiver-moment-detail">
+                <p>{moment.description}</p>
+                <small>Observed {displayDateTime(moment.recorded_at)}</small>
+                {moment.object_location !== null && (
+                  <small>
+                    Recorded object: {moment.object_name} · {moment.object_location}
+                  </small>
+                )}
+              </div>
+              <form
+                className="caregiver-moment-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void correctMoment(moment);
+                }}
+              >
+                <label>
+                  <span>
+                    {moment.object_location === null ? "Correct the description" : "Correct the recorded location"}
+                  </span>
+                  <input
+                    value={correctionDrafts[moment.memory_id] ?? ""}
+                    onChange={(event) =>
+                      setCorrectionDrafts((drafts) => ({ ...drafts, [moment.memory_id]: event.target.value }))
+                    }
+                    placeholder={moment.object_location ?? moment.description}
+                    disabled={!activeTabCanManage || savingKey !== null}
+                  />
+                </label>
+                <button className="secondary-button" type="submit" disabled={!activeTabCanManage || savingKey !== null}>
+                  Correct saved detail
+                </button>
+              </form>
+              {moment.corrections.length > 0 && (
+                <ul className="caregiver-moment-history">
+                  {moment.corrections.map((correction) => (
+                    <li key={correction.id}>
+                      <strong>Caregiver corrected</strong> {correction.field.replace("_", " ")}: “{correction.old_value}”
+                      → “{correction.new_value}” · {correction.caregiver_name} ·{" "}
+                      {displayDateTime(correction.corrected_at)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          ))}
+          {moments.length === 0 && <p className="caregiver-muted">No moments have been saved for this profile.</p>}
+        </div>
+      </div>
+    );
+  }
+
   function renderNotes() {
     return (
       <div className="caregiver-section-stack">
@@ -1244,6 +1381,7 @@ export default function CaregiverPage() {
                     {activeTab === "people" && renderPeople()}
                     {activeTab === "objects" && renderObjects()}
                     {activeTab === "schedule" && renderSchedule()}
+                    {activeTab === "moments" && renderMoments()}
                     {activeTab === "notes" && renderNotes()}
                   </div>
                 )}

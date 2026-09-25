@@ -1936,3 +1936,148 @@ def test_object_answer_uses_the_newest_observation(client: TestClient) -> None:
     assert "front door hook" in body["answer"]
     assert "kitchen counter" not in body["answer"]
     assert body["evidence"][0]["image_url"] == newer.json()["image_url"]
+
+
+def test_caregiver_correction_changes_later_answers_and_keeps_history(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-6),
+        location="kitchen counter",
+        description="Keys on the kitchen counter.",
+        object_name="keys",
+        filename="keys.jpg",
+    )
+    assert created.status_code == 201
+    memory_id = created.json()["id"]
+
+    corrected = client.post(
+        f"/api/caregiver/patients/1/moments/{memory_id}/corrections",
+        json={"field": "object_location", "value": "hallway shelf"},
+        headers=caregiver_headers(1),
+    )
+    assert corrected.status_code == 201
+    body = corrected.json()
+    assert body["object_location"] == "hallway shelf"
+    assert body["recorded_at"] == created.json()["timestamp"]
+    assert body["image_url"] == created.json()["image_url"]
+
+    history = body["corrections"]
+    assert len(history) == 1
+    assert history[0]["old_value"] == "kitchen counter"
+    assert history[0]["new_value"] == "hallway shelf"
+    assert history[0]["caregiver_name"] == "Maya"
+    assert history[0]["corrected_at"] != body["recorded_at"]
+
+    answer = client.post("/api/query", json={"question": "Where are my keys?"}).json()
+    assert "hallway shelf" in answer["answer"]
+    assert "kitchen counter" not in answer["answer"]
+    assert answer["evidence"][0]["corrected_by"] == "Maya"
+
+    moment = client.get("/api/rewind", headers=user_headers(1)).json()["moments"][-1]
+    assert moment["corrected_by"] == "Maya"
+    assert moment["recorded_at"] == created.json()["timestamp"]
+
+
+def test_a_viewer_caregiver_cannot_correct_a_saved_moment(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-6),
+        location="kitchen counter",
+        description="Keys on the kitchen counter.",
+        object_name="keys",
+        filename="keys.jpg",
+    )
+    memory_id = created.json()["id"]
+
+    rejected = client.post(
+        f"/api/caregiver/patients/1/moments/{memory_id}/corrections",
+        json={"field": "object_location", "value": "hallway shelf"},
+        headers=caregiver_headers(3),
+    )
+
+    assert rejected.status_code == 403
+    answer = client.post("/api/query", json={"question": "Where are my keys?"}).json()
+    assert "kitchen counter" in answer["answer"]
+
+
+def test_a_caregiver_cannot_correct_another_patients_moment(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-6),
+        location="kitchen counter",
+        description="Keys on the kitchen counter.",
+        object_name="keys",
+        filename="keys.jpg",
+    )
+    memory_id = created.json()["id"]
+
+    rejected = client.post(
+        f"/api/caregiver/patients/1/moments/{memory_id}/corrections",
+        json={"field": "object_location", "value": "hallway shelf"},
+        headers=caregiver_headers(2),
+    )
+
+    assert rejected.status_code == 404
+
+
+def test_a_new_observation_supersedes_a_corrected_one(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-30),
+        location="kitchen counter",
+        description="Keys on the kitchen counter.",
+        object_name="keys",
+        filename="keys-old.jpg",
+    )
+    memory_id = created.json()["id"]
+    client.post(
+        f"/api/caregiver/patients/1/moments/{memory_id}/corrections",
+        json={"field": "object_location", "value": "hallway shelf"},
+        headers=caregiver_headers(1),
+    )
+    moved = upload_memory(
+        client,
+        timestamp=timestamp_in(-2),
+        location="coat pocket",
+        description="Keys in the coat pocket.",
+        object_name="keys",
+        filename="keys-new.jpg",
+    )
+    assert moved.status_code == 201
+
+    answer = client.post("/api/query", json={"question": "Where are my keys?"}).json()
+
+    assert "coat pocket" in answer["answer"]
+    history = client.get(
+        f"/api/caregiver/patients/1/moments/{memory_id}/corrections",
+        headers=caregiver_headers(3),
+    ).json()
+    assert [entry["new_value"] for entry in history] == ["hallway shelf"]
+
+
+def test_a_corrected_description_keeps_the_original_capture(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-4),
+        location="Kitchen",
+        description="Making tea.",
+        activity="making tea",
+        filename="tea.jpg",
+    )
+    memory_id = created.json()["id"]
+
+    corrected = client.post(
+        f"/api/caregiver/patients/1/moments/{memory_id}/corrections",
+        json={"field": "description", "value": "Making coffee."},
+        headers=caregiver_headers(1),
+    ).json()
+
+    assert corrected["description"] == "Making coffee."
+    assert corrected["image_url"] == created.json()["image_url"]
+    assert corrected["recorded_at"] == created.json()["timestamp"]
+    assert corrected["corrections"][0]["old_value"] == "Making tea."

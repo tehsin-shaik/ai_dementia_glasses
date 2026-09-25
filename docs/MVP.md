@@ -69,6 +69,16 @@ Stage 10 adds `GET /api/rewind` and a saved-moments strip on the wearer screen.
 
 Rewind does not add background recording, continuous capture, or any new inference: it re-reads rows the wearer already saved.
 
+## Caregiver Correction of Saved Details
+
+Stage 11 lets a linked caregiver correct one saved detail and have the wearer's next answer reflect it.
+
+* **Scope.** A **Saved moments** tab lists the profile's saved moments. A caregiver with `manage_objects` can correct a recorded object location or name; a caregiver with `manage_notes` can correct a short reviewed description. Viewer-only caregivers see the same records with every control disabled, and the backend rejects their corrections.
+* **The original is kept.** A correction never rewrites the capture, its photo, or the time it was observed. Each change is stored as its own row with the caregiver, the correction time, and the old and new values, and is shown as **Caregiver corrected** beside the untouched observation time.
+* **Corrections flow forward.** Object answers, provenance, and rewind recaps read the corrected value. A moved object is still recorded as a new observation, and retrieval picks the newest observation, so history is never rewritten to hide a move.
+
+Correction is caregiver-initiated only. There is no automatic learning, no inference of what a record "should" say, and no deletion of saved moments.
+
 ## Proactive Context Cues
 
 Stage 8 adds a small rule-based `CueEngine` behind `GET /api/cues`. The endpoint uses the current `X-MemoryCue-User-Id` and returns at most one current cue for that patient. Cues are normalized, explainable records with a source ID, priority, and optional expiration.

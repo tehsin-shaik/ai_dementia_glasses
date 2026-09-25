@@ -6,6 +6,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .correction_service import latest_correction
 from .formatting import format_time, media_url
 from .models import ImportantObject, Memory, ObjectObservation, Person, ScheduleItem
 from .schemas import Intent, Language, QueryEvidence, QueryResponse
@@ -220,6 +221,7 @@ def answer_question(
         observation_photo = (
             media_url(observation_memory.image_path) if observation_memory else None
         )
+        correction = latest_correction(db, observation.memory_id)
         observed_time = format_time(observation.observed_at, language)
         answer = (
             f"آخر تسجيل: {object_name} في {observation.location} الساعة {observed_time}."
@@ -240,6 +242,8 @@ def answer_question(
                     detail=observation.location,
                     recorded_at=observation.observed_at,
                     image_url=observation_photo,
+                    corrected_at=correction[0] if correction else None,
+                    corrected_by=correction[1] if correction else None,
                 ),
                 QueryEvidence(
                     source_id=f"memory:{observation.memory_id}",
@@ -247,6 +251,8 @@ def answer_question(
                     detail=observation.location,
                     recorded_at=observation.observed_at,
                     image_url=observation_photo,
+                    corrected_at=correction[0] if correction else None,
+                    corrected_by=correction[1] if correction else None,
                 ),
             ],
             language=language,

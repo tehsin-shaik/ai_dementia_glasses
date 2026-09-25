@@ -107,6 +107,8 @@ function parseEvidence(payload: unknown): QueryEvidence[] {
         detail: item.detail,
         recorded_at: (item.recorded_at as string | null) ?? null,
         image_url: typeof item.image_url === "string" ? item.image_url : null,
+        corrected_at: typeof item.corrected_at === "string" ? item.corrected_at : null,
+        corrected_by: typeof item.corrected_by === "string" ? item.corrected_by : null,
       },
     ];
   });

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .correction_service import latest_correction
 from .formatting import format_time, media_url
 from .models import Memory
 from .schemas import Language, RewindMoment, RewindResponse
@@ -19,7 +20,8 @@ def moment_source(memory: Memory) -> str:
     return "capture" if memory.image_path else "sample"
 
 
-def to_moment(memory: Memory) -> RewindMoment:
+def to_moment(db: Session, memory: Memory) -> RewindMoment:
+    correction = latest_correction(db, memory.id)
     return RewindMoment(
         memory_id=memory.id,
         recorded_at=memory.timestamp,
@@ -28,6 +30,8 @@ def to_moment(memory: Memory) -> RewindMoment:
         description=memory.description,
         image_url=media_url(memory.image_path),
         source=moment_source(memory),
+        corrected_at=correction[0] if correction else None,
+        corrected_by=correction[1] if correction else None,
     )
 
 
@@ -96,7 +100,7 @@ def build_rewind(
     if not in_window and include_earlier:
         memories = recent_memories(db, user_id, None, MAX_MOMENTS)
 
-    moments = [to_moment(memory) for memory in reversed(memories)]
+    moments = [to_moment(db, memory) for memory in reversed(memories)]
     summary = (
         build_summary(moments, language)
         if moments

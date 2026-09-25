@@ -11,6 +11,8 @@ export type RewindMoment = {
   description: string;
   image_url: string | null;
   source: "capture" | "sample";
+  corrected_at: string | null;
+  corrected_by: string | null;
 };
 
 export type Rewind = {
@@ -48,6 +50,8 @@ function parseMoment(payload: unknown): RewindMoment[] {
       description: payload.description,
       image_url: typeof payload.image_url === "string" ? payload.image_url : null,
       source: payload.source,
+      corrected_at: typeof payload.corrected_at === "string" ? payload.corrected_at : null,
+      corrected_by: typeof payload.corrected_by === "string" ? payload.corrected_by : null,
     },
   ];
 }
