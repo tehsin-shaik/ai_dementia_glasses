@@ -932,8 +932,15 @@ def test_vision_analysis_handles_provider_not_configured(client: TestClient) -> 
     assert response.json() == {"detail": "Vision analysis is not configured."}
 
 
-def test_vision_analysis_uses_grounded_fallback_for_bundled_demo_scene(client: TestClient) -> None:
+def test_vision_analysis_uses_grounded_fallback_for_bundled_demo_scene(
+    client: TestClient, monkeypatch
+) -> None:
     seed(client)
+    monkeypatch.setattr(
+        vision_provider,
+        "get_vision_analyzer",
+        lambda: (_ for _ in ()).throw(AssertionError("provider must not be called")),
+    )
     response = client.post(
         "/api/vision/analyze",
         files={"image": ("keys-on-table.jpg", b"fake-image-content", "image/jpeg")},
