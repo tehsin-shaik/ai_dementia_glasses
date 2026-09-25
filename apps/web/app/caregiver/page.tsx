@@ -54,12 +54,20 @@ type ScheduleItem = {
   scheduled_at: string;
 };
 
+type CorrectionField = "description" | "object_name" | "object_location";
+
+const CORRECTION_LABELS: Record<CorrectionField, string> = {
+  object_location: "Correct the recorded location",
+  object_name: "Correct the recorded object name",
+  description: "Correct the description",
+};
+
 type MomentCorrection = {
   id: number;
   memory_id: number;
   caregiver_id: number;
   caregiver_name: string;
-  field: "description" | "object_name" | "object_location";
+  field: CorrectionField;
   old_value: string;
   new_value: string;
   corrected_at: string;
@@ -265,6 +273,7 @@ export default function CaregiverPage() {
   const [notes, setNotes] = useState<CaregiverNote[]>([]);
   const [moments, setMoments] = useState<SavedMoment[]>([]);
   const [correctionDrafts, setCorrectionDrafts] = useState<Record<number, string>>({});
+  const [correctionFields, setCorrectionFields] = useState<Record<number, CorrectionField>>({});
   const [faceFiles, setFaceFiles] = useState<Record<number, File | null>>({});
   const [personName, setPersonName] = useState("");
   const [personRelationship, setPersonRelationship] = useState("");
@@ -326,6 +335,7 @@ export default function CaregiverPage() {
     setNotes([]);
     setMoments([]);
     setCorrectionDrafts({});
+    setCorrectionFields({});
     setFaceFiles({});
     setPersonName("");
     setPersonRelationship("");
@@ -451,6 +461,7 @@ export default function CaregiverPage() {
     setNotes([]);
     setMoments([]);
     setCorrectionDrafts({});
+    setCorrectionFields({});
     setFaceFiles({});
     setIsLoadingPatient(true);
     setError(null);
@@ -1147,12 +1158,34 @@ export default function CaregiverPage() {
     );
   }
 
+  function allowedCorrectionFields(moment: SavedMoment): CorrectionField[] {
+    const hasObject = moment.object_location !== null;
+    const fields: CorrectionField[] = [];
+    if (hasObject && canManageObjects) fields.push("object_location", "object_name");
+    if (canManageNotes) fields.push("description");
+    return fields;
+  }
+
+  function selectedCorrectionField(moment: SavedMoment): CorrectionField | null {
+    const fields = allowedCorrectionFields(moment);
+    const chosen = correctionFields[moment.memory_id];
+    if (chosen && fields.includes(chosen)) return chosen;
+    return fields[0] ?? null;
+  }
+
+  function correctionPlaceholder(moment: SavedMoment, field: CorrectionField): string {
+    if (field === "object_location") return moment.object_location ?? "";
+    if (field === "object_name") return moment.object_name ?? "";
+    return moment.description;
+  }
+
   async function correctMoment(moment: SavedMoment) {
     const scope = currentPatientScope();
     if (!scope) return;
     const value = (correctionDrafts[moment.memory_id] ?? "").trim();
     if (!value) return;
-    const field = moment.object_location === null ? "description" : "object_location";
+    const field = selectedCorrectionField(moment);
+    if (field === null) return;
     const saved = await sendMutation(
       scope,
       `moment-${moment.memory_id}`,
@@ -1178,7 +1211,11 @@ export default function CaregiverPage() {
           recorded; if an object moved, save a new observation instead of rewriting this one.
         </p>
         <div className="caregiver-moment-list" data-testid="caregiver-moments">
-          {moments.map((moment) => (
+          {moments.map((moment) => {
+            const fields = allowedCorrectionFields(moment);
+            const field = selectedCorrectionField(moment);
+            const disabled = field === null || savingKey !== null;
+            return (
             <article className="caregiver-moment" key={moment.memory_id}>
               <div className="caregiver-moment-detail">
                 <p>{moment.description}</p>
@@ -1197,19 +1234,37 @@ export default function CaregiverPage() {
                 }}
               >
                 <label>
-                  <span>
-                    {moment.object_location === null ? "Correct the description" : "Correct the recorded location"}
-                  </span>
+                  <span>Detail to correct</span>
+                  <select
+                    value={field ?? ""}
+                    onChange={(event) =>
+                      setCorrectionFields((selection) => ({
+                        ...selection,
+                        [moment.memory_id]: event.target.value as CorrectionField,
+                      }))
+                    }
+                    disabled={disabled}
+                  >
+                    {fields.length === 0 && <option value="">Nothing you can correct here</option>}
+                    {fields.map((option) => (
+                      <option key={option} value={option}>
+                        {CORRECTION_LABELS[option]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>{field === null ? "Correction" : CORRECTION_LABELS[field]}</span>
                   <input
                     value={correctionDrafts[moment.memory_id] ?? ""}
                     onChange={(event) =>
                       setCorrectionDrafts((drafts) => ({ ...drafts, [moment.memory_id]: event.target.value }))
                     }
-                    placeholder={moment.object_location ?? moment.description}
-                    disabled={!activeTabCanManage || savingKey !== null}
+                    placeholder={field === null ? "" : correctionPlaceholder(moment, field)}
+                    disabled={disabled}
                   />
                 </label>
-                <button className="secondary-button" type="submit" disabled={!activeTabCanManage || savingKey !== null}>
+                <button className="secondary-button" type="submit" disabled={disabled}>
                   Correct saved detail
                 </button>
               </form>
@@ -1225,7 +1280,8 @@ export default function CaregiverPage() {
                 </ul>
               )}
             </article>
-          ))}
+            );
+          })}
           {moments.length === 0 && <p className="caregiver-muted">No moments have been saved for this profile.</p>}
         </div>
       </div>

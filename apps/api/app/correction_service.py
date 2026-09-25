@@ -26,6 +26,13 @@ def required_permission(field: CorrectionField) -> CaregiverPermission:
     return FIELD_PERMISSIONS[field]
 
 
+def activity_from_description(description: str) -> str:
+    """The activity wording a description implies, so recaps never read stale text."""
+
+    text = description.strip().rstrip(".")
+    return text[:1].lower() + text[1:] if text else text
+
+
 def get_memory(db: Session, patient_user_id: int, memory_id: int) -> Memory:
     memory = db.scalar(
         select(Memory).where(Memory.id == memory_id, Memory.user_id == patient_user_id)
@@ -104,10 +111,14 @@ def apply_correction(
     cleaned = value.strip()
     if not cleaned:
         raise HTTPException(status_code=422, detail="Correction cannot be empty.")
+    if field == "object_name":
+        cleaned = cleaned.casefold()
 
     if field == "description":
         old_value = memory.description
         memory.description = cleaned
+        if memory.activity:
+            memory.activity = activity_from_description(cleaned)
     else:
         observation = memory_observation(db, memory.id)
         if observation is None:

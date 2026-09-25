@@ -2081,3 +2081,78 @@ def test_a_corrected_description_keeps_the_original_capture(client: TestClient) 
     assert corrected["image_url"] == created.json()["image_url"]
     assert corrected["recorded_at"] == created.json()["timestamp"]
     assert corrected["corrections"][0]["old_value"] == "Making tea."
+
+
+def test_a_corrected_description_reaches_the_recap_and_activity_answer(
+    client: TestClient,
+) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-4),
+        location="Kitchen",
+        description="Making tea.",
+        activity="making tea",
+        filename="tea-recap.jpg",
+    )
+    client.post(
+        f"/api/caregiver/patients/1/moments/{created.json()['id']}/corrections",
+        json={"field": "description", "value": "Making coffee."},
+        headers=caregiver_headers(1),
+    )
+
+    recap = client.get("/api/rewind").json()
+    activity = client.post(
+        "/api/query", json={"question": "What was I just doing?"}
+    ).json()
+
+    assert "making coffee" in recap["summary"]
+    assert "making tea" not in recap["summary"]
+    assert "making coffee" in activity["answer"]
+
+
+def test_a_mixed_case_object_correction_still_answers(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-5),
+        location="kitchen counter",
+        description="Keys on the kitchen counter.",
+        object_name="keys",
+        filename="keys-case.jpg",
+    )
+    client.post(
+        f"/api/caregiver/patients/1/moments/{created.json()['id']}/corrections",
+        json={"field": "object_name", "value": "Keys"},
+        headers=caregiver_headers(1),
+    )
+
+    answer = client.post("/api/query", json={"question": "Where are my keys?"}).json()
+
+    assert answer["intent"] == "object_location"
+    assert "kitchen counter" in answer["answer"]
+
+
+def test_the_demo_can_be_reseeded_after_a_correction(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-5),
+        location="kitchen counter",
+        description="Keys on the kitchen counter.",
+        object_name="keys",
+        filename="keys-reseed.jpg",
+    )
+    client.post(
+        f"/api/caregiver/patients/1/moments/{created.json()['id']}/corrections",
+        json={"field": "object_location", "value": "hallway shelf"},
+        headers=caregiver_headers(1),
+    )
+
+    reseeded = client.post("/api/demo/seed")
+
+    assert reseeded.status_code == 200
+    moments = client.get(
+        "/api/caregiver/patients/1/moments", headers=caregiver_headers(1)
+    ).json()
+    assert all(moment["corrections"] == [] for moment in moments)

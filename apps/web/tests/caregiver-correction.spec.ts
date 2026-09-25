@@ -41,7 +41,15 @@ async function fulfillJson(route: Route, payload: unknown, status = 200) {
   });
 }
 
-async function routeCaregiver(page: Page, moments: Moment[], canManage = true) {
+type Permissions = { objects: boolean; notes: boolean };
+
+async function routeCaregiver(
+  page: Page,
+  moments: Moment[],
+  permissions: Permissions = { objects: true, notes: true },
+  sent: { field?: string } = {},
+) {
+  const canManage = permissions.objects || permissions.notes;
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     if (request.method() === "OPTIONS") {
@@ -60,6 +68,7 @@ async function routeCaregiver(page: Page, moments: Moment[], canManage = true) {
         return fulfillJson(route, { detail: "Caregiver permission required." }, 403);
       }
       const body = request.postDataJSON() as { field: string; value: string };
+      sent.field = body.field;
       const target = moments[0];
       target.corrections = [
         {
@@ -74,7 +83,13 @@ async function routeCaregiver(page: Page, moments: Moment[], canManage = true) {
         },
         ...target.corrections,
       ];
-      target.object_location = body.value;
+      if (body.field === "description") {
+        target.description = body.value;
+      } else if (body.field === "object_name") {
+        target.object_name = body.value;
+      } else {
+        target.object_location = body.value;
+      }
       return fulfillJson(route, target, 201);
     }
     if (url.pathname.endsWith("/moments")) {
@@ -82,7 +97,7 @@ async function routeCaregiver(page: Page, moments: Moment[], canManage = true) {
     }
     if (url.pathname.endsWith("/patients")) {
       return fulfillJson(route, [
-        { ...PATIENT, can_manage_objects: canManage, can_manage_notes: canManage },
+        { ...PATIENT, can_manage_objects: permissions.objects, can_manage_notes: permissions.notes },
       ]);
     }
     if (url.pathname.endsWith("/profile")) {
@@ -123,7 +138,7 @@ test("a caregiver corrects a saved detail and the history records who changed it
 
   const moments = page.getByTestId("caregiver-moments");
   await expect(moments).toContainText("kitchen counter");
-  await moments.getByLabel("Correct the recorded location").fill("hallway shelf");
+  await moments.getByRole("textbox", { name: "Correct the recorded location" }).fill("hallway shelf");
   await moments.getByRole("button", { name: "Correct saved detail" }).click();
 
   await expect(page.getByRole("status")).toContainText("corrected");
@@ -134,9 +149,41 @@ test("a caregiver corrects a saved detail and the history records who changed it
 });
 
 test("a read-only caregiver cannot correct a saved detail", async ({ page }) => {
-  await routeCaregiver(page, [savedMoment()], false);
+  await routeCaregiver(page, [savedMoment()], { objects: false, notes: false });
   await openMoments(page);
 
   const moments = page.getByTestId("caregiver-moments");
   await expect(moments.getByRole("button", { name: "Correct saved detail" })).toBeDisabled();
+});
+
+test("a notes-only caregiver is offered the description, not the object detail", async ({ page }) => {
+  const sent: { field?: string } = {};
+  await routeCaregiver(page, [savedMoment()], { objects: false, notes: true }, sent);
+  await openMoments(page);
+
+  const moments = page.getByTestId("caregiver-moments");
+  const selector = moments.getByRole("combobox");
+  await expect(selector).toHaveValue("description");
+  await expect(selector.getByRole("option")).toHaveText(["Correct the description"]);
+
+  await moments.getByRole("textbox", { name: "Correct the description" }).fill("Making coffee.");
+  await moments.getByRole("button", { name: "Correct saved detail" }).click();
+
+  await expect(page.getByRole("status")).toContainText("corrected");
+  expect(sent.field).toBe("description");
+});
+
+test("an objects caregiver can choose the object name instead of its location", async ({ page }) => {
+  const sent: { field?: string } = {};
+  await routeCaregiver(page, [savedMoment()], { objects: true, notes: false }, sent);
+  await openMoments(page);
+
+  const moments = page.getByTestId("caregiver-moments");
+  await moments.getByRole("combobox").selectOption("object_name");
+  await moments.getByRole("textbox", { name: "Correct the recorded object name" }).fill("house keys");
+  await moments.getByRole("button", { name: "Correct saved detail" }).click();
+
+  await expect(page.getByRole("status")).toContainText("corrected");
+  expect(sent.field).toBe("object_name");
+  await expect(moments).toContainText("house keys");
 });
