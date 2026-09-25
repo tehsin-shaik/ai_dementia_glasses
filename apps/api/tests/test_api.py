@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.database import Base, create_database_engine, get_db
+from app.database import Base, create_database_engine, get_db, normalize_database_url
 from app.authorization import CAREGIVER_ID_HEADER
 from app.cues import routes as cue_routes
 from app.cues import service as cue_service
@@ -2254,3 +2254,14 @@ def test_an_empty_database_is_seeded_once(tmp_path) -> None:
         assert second_session.query(User).count() > 0
 
     engine.dispose()
+
+
+def test_postgres_urls_are_pointed_at_the_installed_driver() -> None:
+    assert (
+        normalize_database_url("postgres://user:pw@host/db") == "postgresql+psycopg://user:pw@host/db"
+    )
+    assert (
+        normalize_database_url("postgresql://user:pw@host/db")
+        == "postgresql+psycopg://user:pw@host/db"
+    )
+    assert normalize_database_url("sqlite:///./memorycue.db") == "sqlite:///./memorycue.db"
