@@ -1,16 +1,19 @@
 # Deploying the demo to Vercel
 
-The demo runs as two Vercel projects from this one repository: the Next.js
-frontend and the FastAPI backend. Both are free-tier friendly.
+The Next.js frontend and the FastAPI backend deploy together as one Vercel
+project on a single domain, using [Vercel Services](https://vercel.com/docs/services).
+The root `vercel.json` builds each app separately and routes `/api/*` to the
+API and everything else to the web app, so the browser only ever talks to its
+own origin.
 
 This is a hosted **demo**, not production hosting. Read the storage note at the
 end before relying on it.
 
-## 1. Backend project
+## Project settings
 
 1. Vercel → **Add New… → Project** → import `tehsin-shaik/ai_dementia_glasses`.
-2. Set **Root Directory** to `apps/api`. Vercel detects FastAPI and loads
-   `app/main.py`.
+2. Leave **Root Directory** empty (the repository root) and the framework
+   preset on **Other**; `vercel.json` drives both builds.
 3. Add environment variables:
 
    | Name | Value |
@@ -18,29 +21,19 @@ end before relying on it.
    | `DATABASE_URL` | `sqlite:////tmp/memorycue.db` (four slashes — absolute path) |
    | `MEDIA_DIR` | `/tmp/media` |
    | `SEED_ON_STARTUP` | `1` |
-   | `ALLOWED_ORIGINS` | the frontend URL, e.g. `https://memorycue.vercel.app` |
+   | `NEXT_PUBLIC_API_URL` | the project's own URL, e.g. `https://memorycue.vercel.app` |
 
-4. Deploy, then check `https://<backend>.vercel.app/api/health` returns
-   `{"status":"ok"}`.
-
-## 2. Frontend project
-
-The existing project that already builds pull-request previews. Add one
-environment variable and redeploy:
-
-| Name | Value |
-| --- | --- |
-| `NEXT_PUBLIC_API_URL` | the backend URL, e.g. `https://memorycue-api.vercel.app` |
+4. Deploy, then check `https://<project>.vercel.app/api/health` returns
+   `{"status":"ok"}` and that `/`, `/app`, and `/caregiver` load.
 
 `NEXT_PUBLIC_API_URL` is read at build time, so a redeploy is required after
-changing it.
+changing it. `ALLOWED_ORIGINS` is only needed when the frontend runs on a
+different origin than the API (for example a locally run web app pointed at the
+hosted API); requests from an unlisted origin are rejected by CORS.
 
-Set `ALLOWED_ORIGINS` on the backend to the frontend's final domain, including
-any custom domain; requests from an unlisted origin are rejected by CORS.
-
-Both projects deploy their production URL from the repository's production
-branch. The demo work lives on `demo`, so set **Settings → Git → Production
-Branch** to `demo` in both projects (or merge `demo` into `main` first).
+The production URL is built from the repository's production branch. The demo
+work lives on `demo`, so set **Settings → Git → Production Branch** to `demo`
+(or merge `demo` into `main` first).
 
 ## Dependencies
 
