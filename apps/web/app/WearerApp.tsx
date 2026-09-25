@@ -69,6 +69,11 @@ const DEMO_PROFILES = [
   { id: 1, name: "Alex" },
   { id: 2, name: "Jordan" },
 ] as const;
+const DEMO_IMAGES = [
+  { path: "/demo-assets/keys-on-table.jpg", name: "keys-on-table.jpg", label: "Keys on a table" },
+  { path: "/demo-assets/tea-in-kitchen.jpg", name: "tea-in-kitchen.jpg", label: "Tea in the kitchen" },
+  { path: "/demo-assets/reading-at-home.jpg", name: "reading-at-home.jpg", label: "Reading at home" },
+] as const;
 
 function localDateTimeValue(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -804,8 +809,7 @@ export default function WearerApp() {
     setError("A memory image could not be displayed.");
   }
 
-  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
-    const nextFile = event.target.files?.[0] ?? null;
+  function selectUploadedImage(nextFile: File | null) {
     setMemoryImage(nextFile);
     setMemoryImageSource(nextFile ? "upload" : null);
     setSaveMessage(null);
@@ -816,6 +820,19 @@ export default function WearerApp() {
     setCameraSaved(false);
     setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
     clearHud();
+  }
+
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    selectUploadedImage(event.target.files?.[0] ?? null);
+  }
+
+  async function selectDemoImage(path: string, name: string) {
+    const response = await fetch(path);
+    if (!response.ok) {
+      setError("The demo image could not be loaded.");
+      return;
+    }
+    selectUploadedImage(new File([await response.blob()], name, { type: "image/jpeg" }));
   }
 
   function handleCameraCapture(file: File) {
@@ -1015,6 +1032,22 @@ export default function WearerApp() {
                 onChange={handleImageChange}
               />
             </label>
+            <div className="demo-image-picker" aria-label="Demo images">
+              <span>Or choose a demo scene</span>
+              <div>
+                {DEMO_IMAGES.map((image) => (
+                  <button
+                    className="demo-image-button"
+                    type="button"
+                    key={image.path}
+                    onClick={() => void selectDemoImage(image.path, image.name)}
+                  >
+                    <img src={image.path} alt="" />
+                    <span>{image.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             {memoryImage && (
               <div className="selected-image">
                 {previewUrl && (
