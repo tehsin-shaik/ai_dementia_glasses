@@ -2156,3 +2156,74 @@ def test_the_demo_can_be_reseeded_after_a_correction(client: TestClient) -> None
         "/api/caregiver/patients/1/moments", headers=caregiver_headers(1)
     ).json()
     assert all(moment["corrections"] == [] for moment in moments)
+
+
+def test_a_corrected_location_reaches_the_recap_and_its_card(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-3),
+        location="kitchen counter",
+        description="Keys on the kitchen counter.",
+        object_name="keys",
+        filename="keys-recap.jpg",
+    )
+    client.post(
+        f"/api/caregiver/patients/1/moments/{created.json()['id']}/corrections",
+        json={"field": "object_location", "value": "blue drawer"},
+        headers=caregiver_headers(1),
+    )
+
+    rewind = client.get("/api/rewind").json()
+
+    assert "Keys on the blue drawer" in rewind["summary"]
+    assert rewind["moments"][-1]["description"] == "Keys on the blue drawer."
+    assert rewind["moments"][-1]["recorded_at"] == created.json()["timestamp"]
+
+
+def test_a_corrected_activity_answer_names_the_caregiver(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-3),
+        location="Kitchen",
+        description="Making tea.",
+        activity="making tea",
+        filename="tea-attribution.jpg",
+    )
+    client.post(
+        f"/api/caregiver/patients/1/moments/{created.json()['id']}/corrections",
+        json={"field": "description", "value": "Making coffee."},
+        headers=caregiver_headers(1),
+    )
+
+    answer = client.post(
+        "/api/query", json={"question": "What was I just doing?"}
+    ).json()
+
+    assert answer["evidence"][0]["corrected_by"] == "Maya"
+    assert answer["evidence"][0]["corrected_at"] is not None
+    assert answer["evidence"][0]["recorded_at"] == created.json()["timestamp"]
+
+
+def test_a_correction_keeps_an_initialism_uppercase(client: TestClient) -> None:
+    seed(client)
+    created = upload_memory(
+        client,
+        timestamp=timestamp_in(-3),
+        location="Kitchen",
+        description="Making tea.",
+        activity="making tea",
+        filename="tea-initialism.jpg",
+    )
+    client.post(
+        f"/api/caregiver/patients/1/moments/{created.json()['id']}/corrections",
+        json={"field": "description", "value": "QA checking the kettle."},
+        headers=caregiver_headers(1),
+    )
+
+    answer = client.post(
+        "/api/query", json={"question": "What was I just doing?"}
+    ).json()
+
+    assert "QA checking the kettle" in answer["answer"]

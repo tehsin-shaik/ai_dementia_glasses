@@ -4187,3 +4187,538 @@ h3 { text-wrap: balance; }
 
   .hero-mockup { animation: none; }
 }
+
+/* ==========================================================================
+   Spatial theme — a Vision Pro reading of the wearer HUD and caregiver desk.
+   ========================================================================== */
+
+:root {
+  --spatial-ink: #f5f7fa;
+  --spatial-dim: rgba(245, 247, 250, 0.62);
+  --spatial-faint: rgba(245, 247, 250, 0.42);
+  --spatial-edge: rgba(255, 255, 255, 0.14);
+  --spatial-glass: rgba(255, 255, 255, 0.07);
+  --spatial-glass-strong: rgba(18, 22, 30, 0.62);
+  --spatial-accent: #9fd9ff;
+  --spatial-mint: #86e7c4;
+  --spatial-blur: saturate(180%) blur(30px);
+  --spatial-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --spatial-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Inter", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+.wearer-shell.wearer-experience {
+  color: var(--spatial-ink);
+  background:
+    radial-gradient(120% 85% at 72% 8%, rgba(96, 148, 214, 0.2), transparent 62%),
+    radial-gradient(90% 70% at 14% 82%, rgba(126, 214, 196, 0.13), transparent 60%),
+    radial-gradient(60% 60% at 50% 50%, rgba(255, 255, 255, 0.03), transparent 70%),
+    #05070b;
+  font-family: var(--spatial-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.wearer-shell.wearer-experience h1,
+.wearer-shell.wearer-experience h2,
+.wearer-shell.wearer-experience h3,
+.wearer-shell.wearer-experience .app-header h1,
+.wearer-shell.wearer-experience .question-panel h2,
+.wearer-shell.wearer-experience .camera-panel-heading h2,
+.wearer-shell.wearer-experience .hud-controls h3 {
+  color: #fff;
+  font-family: var(--spatial-font);
+  font-weight: 600;
+  letter-spacing: -0.028em;
+}
+
+.wearer-shell.wearer-experience .app-header h1 {
+  font-size: clamp(2.5rem, 5vw, 4.4rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.wearer-shell.wearer-experience .app-header {
+  border-color: var(--spatial-edge);
+}
+
+.wearer-shell.wearer-experience .app-header .eyebrow,
+.wearer-shell.wearer-experience .camera-panel .section-kicker,
+.wearer-shell.wearer-experience .question-panel .section-kicker,
+.wearer-shell.wearer-experience .memory-panel .section-kicker,
+.wearer-shell.wearer-experience .hud-provenance-heading,
+.wearer-shell.wearer-experience .rewind-heading .section-kicker {
+  color: var(--spatial-faint);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.wearer-shell.wearer-experience .subtitle,
+.wearer-shell.wearer-experience .camera-helper,
+.wearer-shell.wearer-experience .hud-controls-helper,
+.wearer-shell.wearer-experience .profile-selector,
+.wearer-shell.wearer-experience .profile-selector small {
+  color: var(--spatial-dim);
+}
+
+/* Viewfinder ------------------------------------------------------------- */
+
+.wearer-shell.wearer-experience .camera-view {
+  border: 1px solid var(--spatial-edge);
+  border-radius: 42px;
+  background: radial-gradient(90% 90% at 50% 12%, rgba(255, 255, 255, 0.06), rgba(6, 9, 14, 0.9));
+  box-shadow:
+    0 60px 120px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.wearer-shell.wearer-experience .camera-view::before {
+  inset: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+}
+
+.wearer-shell.wearer-experience .camera-view::after {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.wearer-shell.wearer-experience .camera-status {
+  border-color: var(--spatial-edge);
+  color: var(--spatial-ink);
+  background: var(--spatial-glass);
+  backdrop-filter: var(--spatial-blur);
+  -webkit-backdrop-filter: var(--spatial-blur);
+}
+
+.wearer-shell.wearer-experience .camera-placeholder,
+.wearer-shell.wearer-experience .camera-placeholder p {
+  color: var(--spatial-dim);
+}
+
+.wearer-shell.wearer-experience .camera-placeholder span {
+  color: var(--spatial-accent);
+}
+
+/* Floating HUD card ------------------------------------------------------ */
+
+.wearer-shell.wearer-experience .hud-overlay {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 26px;
+  padding: 20px 22px;
+  background: var(--spatial-glass-strong);
+  backdrop-filter: var(--spatial-blur);
+  -webkit-backdrop-filter: var(--spatial-blur);
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  animation: spatial-rise 420ms var(--spatial-ease) both;
+}
+
+.wearer-shell.wearer-experience .hud-overlay-label,
+.wearer-shell.wearer-experience .hud-overlay-heading .hud-overlay-label {
+  color: var(--spatial-faint);
+  letter-spacing: 0.2em;
+}
+
+.wearer-shell.wearer-experience .hud-overlay-message {
+  color: #fff;
+  font-size: 1.22rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.38;
+}
+
+.wearer-shell.wearer-experience .hud-overlay-cue-title,
+.wearer-shell.wearer-experience .hud-provenance-label {
+  color: var(--spatial-accent);
+}
+
+.wearer-shell.wearer-experience .hud-dismiss-button {
+  border-color: rgba(255, 255, 255, 0.24);
+  color: var(--spatial-ink);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wearer-shell.wearer-experience .hud-provenance {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.wearer-shell.wearer-experience .hud-provenance-detail {
+  color: var(--spatial-ink);
+}
+
+.wearer-shell.wearer-experience .hud-provenance-time,
+.wearer-shell.wearer-experience .hud-provenance-photo,
+.wearer-shell.wearer-experience .hud-provenance-empty {
+  color: var(--spatial-dim);
+}
+
+.wearer-shell.wearer-experience .hud-provenance-corrected {
+  color: var(--spatial-mint);
+}
+
+/* Controls --------------------------------------------------------------- */
+
+.wearer-shell.wearer-experience .hud-controls,
+.wearer-shell.wearer-experience .question-panel {
+  border-color: var(--spatial-edge);
+}
+
+.wearer-shell.wearer-experience .hud-query-input-row input,
+.wearer-shell.wearer-experience .question-form input,
+.wearer-shell.wearer-experience .memory-form input[type="text"],
+.wearer-shell.wearer-experience .memory-form input[type="datetime-local"],
+.wearer-shell.wearer-experience .memory-form textarea,
+.wearer-shell.wearer-experience .profile-selector select {
+  border-color: rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: var(--spatial-blur);
+  -webkit-backdrop-filter: var(--spatial-blur);
+  transition: border-color 200ms var(--spatial-ease), box-shadow 200ms var(--spatial-ease);
+}
+
+.wearer-shell.wearer-experience .hud-query-input-row input:focus,
+.wearer-shell.wearer-experience .question-form input:focus,
+.wearer-shell.wearer-experience .memory-form input:focus,
+.wearer-shell.wearer-experience .memory-form textarea:focus {
+  border-color: rgba(159, 217, 255, 0.7);
+  box-shadow: 0 0 0 4px rgba(159, 217, 255, 0.14);
+  outline: none;
+}
+
+.wearer-shell.wearer-experience .primary-button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  color: #06121b;
+  background: linear-gradient(180deg, #ffffff, #d8e9f6);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+  transition: transform 180ms var(--spatial-ease), box-shadow 180ms var(--spatial-ease);
+}
+
+.wearer-shell.wearer-experience .primary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.45);
+}
+
+.wearer-shell.wearer-experience .secondary-button,
+.wearer-shell.wearer-experience .hud-quick-button,
+.wearer-shell.wearer-experience .suggestion-button,
+.wearer-shell.wearer-experience .hud-language-button,
+.wearer-shell.wearer-experience .hud-voice-button,
+.wearer-shell.wearer-experience .camera-controls .secondary-button {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: var(--spatial-ink);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: var(--spatial-blur);
+  -webkit-backdrop-filter: var(--spatial-blur);
+  transition: background 180ms var(--spatial-ease), border-color 180ms var(--spatial-ease),
+    transform 180ms var(--spatial-ease);
+}
+
+.wearer-shell.wearer-experience .secondary-button:hover:not(:disabled),
+.wearer-shell.wearer-experience .hud-quick-button:hover:not(:disabled),
+.wearer-shell.wearer-experience .suggestion-button:hover:not(:disabled),
+.wearer-shell.wearer-experience .hud-language-button:hover:not(:disabled),
+.wearer-shell.wearer-experience .camera-controls .secondary-button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.wearer-shell.wearer-experience .hud-language-button.is-selected {
+  border-color: transparent;
+  color: #06121b;
+  background: #fff;
+}
+
+.wearer-shell.wearer-experience .hud-voice-button.is-listening {
+  border-color: rgba(159, 217, 255, 0.8);
+  color: #06121b;
+  background: var(--spatial-accent);
+  animation: spatial-listening 1.8s ease-in-out infinite;
+}
+
+.wearer-shell.wearer-experience .hud-mode-label {
+  border-color: var(--spatial-edge);
+  color: var(--spatial-dim);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.wearer-shell.wearer-experience .hud-speak-toggle,
+.wearer-shell.wearer-experience .hud-proactive-toggle,
+.wearer-shell.wearer-experience .hud-query-form > label,
+.wearer-shell.wearer-experience .hud-quick-actions > span,
+.wearer-shell.wearer-experience .memory-form label,
+.wearer-shell.wearer-experience .memory-helper,
+.wearer-shell.wearer-experience .suggestions > p {
+  color: var(--spatial-dim);
+}
+
+.wearer-shell.wearer-experience .hud-speak-toggle input,
+.wearer-shell.wearer-experience .hud-proactive-toggle input {
+  accent-color: var(--spatial-accent);
+}
+
+/* Answer and saved moments ----------------------------------------------- */
+
+.wearer-shell.wearer-experience .answer-panel,
+.wearer-shell.wearer-experience .memory-review,
+.wearer-shell.wearer-experience .rewind-panel {
+  border: 1px solid var(--spatial-edge);
+  border-radius: 28px;
+  background: var(--spatial-glass);
+  backdrop-filter: var(--spatial-blur);
+  -webkit-backdrop-filter: var(--spatial-blur);
+  box-shadow: 0 32px 70px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.wearer-shell.wearer-experience .answer-panel {
+  animation: spatial-rise 420ms var(--spatial-ease) both;
+}
+
+.wearer-shell.wearer-experience .answer-text {
+  color: #fff;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.wearer-shell.wearer-experience .empty-answer,
+.wearer-shell.wearer-experience .memory-review-summary small {
+  color: var(--spatial-faint);
+}
+
+.wearer-shell.wearer-experience .rewind-panel {
+  padding: 26px 28px 30px;
+}
+
+.wearer-shell.wearer-experience .rewind-card {
+  border: 1px solid var(--spatial-edge);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform 220ms var(--spatial-ease), background 220ms var(--spatial-ease);
+  animation: spatial-rise 380ms var(--spatial-ease) both;
+}
+
+.wearer-shell.wearer-experience .rewind-card:hover {
+  background: rgba(255, 255, 255, 0.09);
+  transform: translateY(-2px);
+}
+
+.wearer-shell.wearer-experience .rewind-card-description {
+  color: #fff;
+}
+
+.wearer-shell.wearer-experience .rewind-card-time,
+.wearer-shell.wearer-experience .rewind-card-source,
+.wearer-shell.wearer-experience .rewind-empty,
+.wearer-shell.wearer-experience .rewind-note,
+.wearer-shell.wearer-experience .rewind-recap-summary {
+  color: var(--spatial-dim);
+}
+
+.wearer-shell.wearer-experience .rewind-photo.is-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  color: var(--spatial-dim);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.wearer-shell.wearer-experience .rewind-card-corrected {
+  color: var(--spatial-mint);
+}
+
+.wearer-shell.wearer-experience .rewind-recap {
+  border: 1px solid rgba(159, 217, 255, 0.24);
+  border-radius: 22px;
+  background: rgba(159, 217, 255, 0.08);
+}
+
+.wearer-shell.wearer-experience .rewind-recap-heading h3 {
+  color: #fff;
+}
+
+.wearer-shell.wearer-experience .rewind-recap-badge {
+  border-color: rgba(159, 217, 255, 0.4);
+  color: var(--spatial-accent);
+  background: rgba(159, 217, 255, 0.12);
+}
+
+@keyframes spatial-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spatial-listening {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(159, 217, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(159, 217, 255, 0);
+  }
+}
+
+/* Caregiver desk — the same language, lit from the other side ------------- */
+
+.caregiver-page-shell.caregiver-experience {
+  background:
+    radial-gradient(90% 70% at 82% 4%, rgba(159, 217, 255, 0.22), transparent 58%),
+    radial-gradient(70% 60% at 6% 92%, rgba(134, 231, 196, 0.16), transparent 58%),
+    #f4f6f9;
+  font-family: var(--spatial-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.caregiver-page-shell.caregiver-experience h1,
+.caregiver-page-shell.caregiver-experience h2,
+.caregiver-page-shell.caregiver-experience h3 {
+  font-family: var(--spatial-font);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-header h1 {
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.caregiver-page-shell.caregiver-experience .management-panel {
+  border: 1px solid rgba(15, 32, 54, 0.08);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: var(--spatial-blur);
+  -webkit-backdrop-filter: var(--spatial-blur);
+  box-shadow: 0 30px 70px rgba(18, 38, 63, 0.1);
+}
+
+.caregiver-page-shell.caregiver-experience .patient-button {
+  border-radius: 14px;
+  transition: background 180ms var(--spatial-ease);
+}
+
+.caregiver-page-shell.caregiver-experience .patient-button.is-selected {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 24px rgba(18, 38, 63, 0.08);
+}
+
+.caregiver-page-shell.caregiver-experience .management-tab {
+  border-radius: 999px;
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-form input,
+.caregiver-page-shell.caregiver-experience .caregiver-form textarea,
+.caregiver-page-shell.caregiver-experience .caregiver-inline-form input,
+.caregiver-page-shell.caregiver-experience .caregiver-note-form textarea,
+.caregiver-page-shell.caregiver-experience .caregiver-record input,
+.caregiver-page-shell.caregiver-experience .caregiver-moment-form select,
+.caregiver-page-shell.caregiver-experience .caregiver-moment-form input {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-moment {
+  border-radius: 20px;
+  border-top: 0;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(15, 32, 54, 0.06);
+}
+
+.caregiver-page-shell.caregiver-experience .primary-button {
+  border-radius: 999px;
+  transition: transform 180ms var(--spatial-ease), box-shadow 180ms var(--spatial-ease);
+}
+
+.caregiver-page-shell.caregiver-experience .primary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(18, 38, 63, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wearer-shell.wearer-experience .hud-overlay,
+  .wearer-shell.wearer-experience .answer-panel,
+  .wearer-shell.wearer-experience .rewind-card,
+  .wearer-shell.wearer-experience .hud-voice-button.is-listening {
+    animation: none;
+  }
+}
+
+.caregiver-page-shell.caregiver-experience .primary-button {
+  border: 1px solid rgba(9, 24, 44, 0.1);
+  color: #fff;
+  background: linear-gradient(180deg, #1d4f6d, #12354b);
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-header .eyebrow,
+.caregiver-page-shell.caregiver-experience .section-kicker {
+  color: #4d7d9b;
+  letter-spacing: 0.18em;
+}
+
+.caregiver-page-shell.caregiver-experience .access-badge,
+.caregiver-page-shell.caregiver-experience .management-tab:hover,
+.caregiver-page-shell.caregiver-experience .management-tab.is-active {
+  border-color: rgba(77, 125, 155, 0.28);
+  color: #1d4f6d;
+  background: rgba(159, 217, 255, 0.16);
+}
+
+.caregiver-page-shell.caregiver-experience .patient-button:hover,
+.caregiver-page-shell.caregiver-experience .patient-button.is-selected {
+  border-left-color: #4d7d9b;
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-form input:focus,
+.caregiver-page-shell.caregiver-experience .caregiver-form textarea:focus,
+.caregiver-page-shell.caregiver-experience .caregiver-inline-form input:focus,
+.caregiver-page-shell.caregiver-experience .caregiver-note-form textarea:focus,
+.caregiver-page-shell.caregiver-experience .caregiver-record input:focus {
+  border-color: #4d7d9b;
+  box-shadow: 0 0 0 4px rgba(159, 217, 255, 0.24);
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-moment-form {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.8fr) minmax(220px, 1.4fr) auto;
+  align-items: end;
+  gap: 14px;
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-moment-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-moment-form select,
+.caregiver-page-shell.caregiver-experience .caregiver-moment-form input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(15, 32, 54, 0.14);
+  padding: 0 12px;
+}
+
+.caregiver-page-shell.caregiver-experience .caregiver-moment-form .secondary-button {
+  min-height: 42px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .caregiver-page-shell.caregiver-experience .caregiver-moment-form {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}

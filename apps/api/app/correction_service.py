@@ -30,7 +30,21 @@ def activity_from_description(description: str) -> str:
     """The activity wording a description implies, so recaps never read stale text."""
 
     text = description.strip().rstrip(".")
-    return text[:1].lower() + text[1:] if text else text
+    if not text:
+        return text
+    first_word = text.split(" ", 1)[0]
+    if first_word.isupper() and len(first_word) > 1:
+        return text
+    return text[:1].lower() + text[1:]
+
+
+def description_with(description: str, old_value: str, new_value: str) -> str:
+    """The same reviewed sentence with a corrected object detail swapped in."""
+
+    index = description.casefold().find(old_value.casefold())
+    if index < 0:
+        return description
+    return description[:index] + new_value + description[index + len(old_value) :]
 
 
 def get_memory(db: Session, patient_user_id: int, memory_id: int) -> Memory:
@@ -132,6 +146,10 @@ def apply_correction(
         else:
             old_value = observation.location
             observation.location = cleaned
+        # The reviewed sentence is what recaps read, so keep it saying the same thing.
+        memory.description = description_with(memory.description, old_value, cleaned)
+        if memory.activity:
+            memory.activity = description_with(memory.activity, old_value, cleaned)
 
     db.add(
         MemoryCorrection(

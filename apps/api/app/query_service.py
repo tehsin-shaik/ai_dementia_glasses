@@ -181,6 +181,7 @@ def answer_question(
         if memory is None:
             return unknown_response(language)
         activity = memory.activity.rstrip(".")
+        activity_correction = latest_correction(db, memory.id)
         answer = (
             f"آخر ما كنت تفعله: {activity}."
             if language == "ar"
@@ -197,6 +198,8 @@ def answer_question(
                     detail=memory.location,
                     recorded_at=memory.timestamp,
                     image_url=media_url(memory.image_path),
+                    corrected_at=activity_correction[0] if activity_correction else None,
+                    corrected_by=activity_correction[1] if activity_correction else None,
                 )
             ],
             language=language,

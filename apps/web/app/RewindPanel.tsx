@@ -63,6 +63,7 @@ function formatMomentTime(recordedAt: string, language: VoiceLanguage): string {
   }
   return parsed.toLocaleString(language === "ar" ? "ar-AE" : "en-US", {
     weekday: "short",
+    year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
