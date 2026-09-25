@@ -1,4 +1,4 @@
-"""Database configuration for the local SQLite-backed prototype."""
+"""Database configuration for SQLite locally and Postgres in hosted demos."""
 
 from collections.abc import Generator
 import os
@@ -6,9 +6,19 @@ import os
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 
-DATABASE_URL = os.getenv("DATABASE_URL") or "sqlite:///./memorycue.db"
+def normalize_database_url(database_url: str) -> str:
+    """Point the bare `postgres`/`postgresql` schemes at the installed psycopg driver."""
+
+    for prefix in ("postgres://", "postgresql://"):
+        if database_url.startswith(prefix):
+            return "postgresql+psycopg://" + database_url[len(prefix) :]
+    return database_url
+
+
+DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL") or "sqlite:///./memorycue.db")
 
 
 def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
@@ -22,11 +32,13 @@ def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
 def create_database_engine(database_url: str) -> Engine:
     """Create an engine with SQLite integrity checks enabled for every connection."""
 
-    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-    database_engine = create_engine(database_url, connect_args=connect_args)
-    if database_engine.dialect.name == "sqlite":
+    database_url = normalize_database_url(database_url)
+    if database_url.startswith("sqlite"):
+        database_engine = create_engine(database_url, connect_args={"check_same_thread": False})
         event.listen(database_engine, "connect", _enable_sqlite_foreign_keys)
-    return database_engine
+        return database_engine
+    # Serverless instances are frozen between requests, so pooled connections go stale.
+    return create_engine(database_url, poolclass=NullPool, pool_pre_ping=True)
 
 
 engine = create_database_engine(DATABASE_URL)
