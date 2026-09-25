@@ -18,7 +18,7 @@ end before relying on it.
 
    | Name | Value |
    | --- | --- |
-   | `DATABASE_URL` | `sqlite:////tmp/memorycue.db` (four slashes — absolute path) |
+   | `DATABASE_URL` | a Postgres URL, e.g. `postgresql://user:pw@host/db` (see below) |
    | `MEDIA_DIR` | `/tmp/media` |
    | `SEED_ON_STARTUP` | `1` |
    | `NEXT_PUBLIC_API_URL` | the project's own URL, e.g. `https://memorycue.vercel.app` |
@@ -47,14 +47,20 @@ rewind, caregiver corrections — works.
 ## Storage on serverless
 
 A Vercel function only has a writable `/tmp`, and that disk belongs to one
-instance and disappears when the instance is recycled. So on the hosted demo:
+instance and disappears when the instance is recycled. A SQLite file there is
+therefore per-instance: a caregiver correction can land on one instance while
+the next question is answered by another that never saw it.
 
-- the demo profiles are seeded automatically on a cold start, meaning the demo
-  is always immediately usable;
-- moments and photos saved during a session are lost when the instance is
-  recycled.
+So the hosted demo uses a hosted Postgres database instead. Any provider works
+(Neon and Supabase both have a free tier); `DATABASE_URL` accepts the
+`postgres://` or `postgresql://` URL they hand out and the app routes it to the
+`psycopg` driver itself. The demo profiles are seeded on the first cold start
+against an empty database, and everything written afterwards — saved moments,
+caregiver corrections — is shared by every instance and survives redeploys.
 
-For a live pitch this is fine — rehearse and present within one session. For
-data that has to survive, run the backend on a host with a persistent disk
-(Render, Railway, Fly) and point `NEXT_PUBLIC_API_URL` at it instead; no code
-change is needed.
+Setting `DATABASE_URL` to `sqlite:////tmp/memorycue.db` still works for a
+throwaway deploy, with the caveat above.
+
+Photos are the remaining exception: `MEDIA_DIR` is a plain directory, so images
+saved on the hosted demo still live in `/tmp` and disappear with the instance
+while their text records remain.
