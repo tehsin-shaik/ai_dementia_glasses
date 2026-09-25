@@ -195,6 +195,9 @@ async def analyze_vision(
     try:
         analyzer = vision_provider.get_vision_analyzer()
     except VisionProviderNotConfiguredError as exc:
+        demo_analysis = vision_provider.demo_vision_analysis(image.filename)
+        if demo_analysis:
+            return demo_analysis
         raise HTTPException(
             status_code=503,
             detail="Vision analysis is not configured.",

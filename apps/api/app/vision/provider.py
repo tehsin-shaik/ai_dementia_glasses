@@ -158,6 +158,34 @@ def extract_response_text(response_payload: dict[str, Any]) -> str:
     raise ValueError("Missing provider output text")
 
 
+DEMO_ANALYSES = {
+    "keys-on-table.jpg": VisionAnalysis(
+        description="A set of keys is resting beside a phone and headphones on a dark table.",
+        location="Table",
+        activity="Preparing to leave",
+        objects=[{"name": "keys", "location": "dark table", "confidence": 0.99}],
+    ),
+    "tea-in-kitchen.jpg": VisionAnalysis(
+        description="A red kettle and cup are arranged on a kitchen counter for tea.",
+        location="Kitchen counter",
+        activity="Making tea",
+        objects=[{"name": "kettle", "location": "kitchen counter", "confidence": 0.99}],
+    ),
+    "reading-at-home.jpg": VisionAnalysis(
+        description="Two adults are seated on a sofa reading together at home.",
+        location="Living room",
+        activity="Reading",
+        objects=[{"name": "book", "location": "sofa", "confidence": 0.98}],
+    ),
+}
+
+
+def demo_vision_analysis(filename: str | None) -> VisionAnalysis | None:
+    """Return grounded suggestions for the bundled, known demo scenes only."""
+
+    return DEMO_ANALYSES.get(filename or "")
+
+
 def get_vision_analyzer() -> VisionAnalyzer:
     """Build the configured analyzer, or report that the optional feature is disabled."""
 

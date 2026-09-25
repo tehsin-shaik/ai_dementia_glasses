@@ -932,6 +932,22 @@ def test_vision_analysis_handles_provider_not_configured(client: TestClient) -> 
     assert response.json() == {"detail": "Vision analysis is not configured."}
 
 
+def test_vision_analysis_uses_grounded_fallback_for_bundled_demo_scene(client: TestClient) -> None:
+    seed(client)
+    response = client.post(
+        "/api/vision/analyze",
+        files={"image": ("keys-on-table.jpg", b"fake-image-content", "image/jpeg")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "description": "A set of keys is resting beside a phone and headphones on a dark table.",
+        "location": "Table",
+        "activity": "Preparing to leave",
+        "objects": [{"name": "keys", "location": "dark table", "confidence": 0.99}],
+    }
+
+
 def test_vision_analysis_handles_invalid_provider_response(client: TestClient, monkeypatch) -> None:
     seed(client)
     class InvalidVisionAnalyzer:
