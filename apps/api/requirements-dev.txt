@@ -1,0 +1,9 @@
+# Local development and testing: the runtime set plus the server, tests, and
+# the optional local face-recognition stack (too large for serverless hosting).
+-r requirements.txt
+uvicorn[standard]>=0.30,<1
+pytest>=8.0,<9
+dlib-bin==19.24.6
+face-recognition-models==0.3.0
+numpy>=1.26,<3
+Pillow>=10,<13

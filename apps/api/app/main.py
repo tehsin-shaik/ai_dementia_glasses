@@ -1,6 +1,7 @@
 """FastAPI entry point for the MemoryCue vertical slice."""
 
 from datetime import datetime
+import os
 
 from fastapi import Depends, File, Form, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 from . import models  # noqa: F401 - registers models before table creation
 from .caregiver import router as caregiver_router
 from .cues.routes import router as cues_router
-from .database import get_db, init_db
+from .database import SessionLocal, get_db, init_db
 from .face.routes import router as face_router
 from .identity import get_current_user
 from .media_storage import (
@@ -25,6 +26,7 @@ from .media_storage import (
 from .models import Memory, ObjectObservation, User
 from .query_service import answer_question
 from .rewind_service import DEFAULT_WINDOW_MINUTES, build_rewind
+from .runtime import allowed_origins, seed_if_empty
 from .schemas import (
     HealthResponse,
     Language,
@@ -43,10 +45,14 @@ from .vision.provider import VisionProviderError, VisionProviderNotConfiguredErr
 
 init_db()
 
+if os.getenv("SEED_ON_STARTUP") == "1":
+    with SessionLocal() as startup_session:
+        seed_if_empty(startup_session)
+
 app = FastAPI(title="MemoryCue API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=allowed_origins(),
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )

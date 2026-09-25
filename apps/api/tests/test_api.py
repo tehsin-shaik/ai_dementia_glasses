@@ -19,6 +19,8 @@ from app.face.base import MultipleFacesFoundError, NoFaceFoundError
 from app.identity import USER_ID_HEADER
 from app.main import app
 from app.media_storage import MAX_UPLOAD_BYTES, safe_media_path
+from app.models import User
+from app.runtime import allowed_origins, seed_if_empty
 from app.vision import VisionAnalysis
 from app.vision import provider as vision_provider
 from app.vision.provider import VisionProviderError
@@ -2227,3 +2229,28 @@ def test_a_correction_keeps_an_initialism_uppercase(client: TestClient) -> None:
     ).json()
 
     assert "QA checking the kettle" in answer["answer"]
+
+def test_deployed_origins_are_added_to_the_local_ones(monkeypatch) -> None:
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://memorycue.vercel.app/, http://localhost:3000")
+
+    origins = allowed_origins()
+
+    assert origins == [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://memorycue.vercel.app",
+    ]
+
+
+def test_an_empty_database_is_seeded_once(tmp_path) -> None:
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'startup.db'}")
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    with session_factory() as first_session:
+        assert seed_if_empty(first_session) is True
+    with session_factory() as second_session:
+        assert seed_if_empty(second_session) is False
+        assert second_session.query(User).count() > 0
+
+    engine.dispose()

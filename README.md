@@ -291,9 +291,11 @@ Start the backend from `apps/api`:
 cd apps/api
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 uvicorn app.main:app --reload
 ```
+
+`requirements.txt` holds the runtime dependencies alone so the API fits a serverless deployment; `requirements-dev.txt` adds the server, the test tools, and the local face-recognition stack. See [docs/DEPLOY.md](docs/DEPLOY.md) for hosting the demo on Vercel.
 
 The local face-recognition dependencies include a prebuilt `dlib-bin` runtime and roughly 100 MB of pretrained model data. It runs on CPU and avoids a Visual C++ build on supported Windows/Python combinations; no GPU or cloud face API is required. If it is not installed or cannot be configured, ordinary memory features still work and face enrollment reports a clear configuration error.
 
