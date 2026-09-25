@@ -188,6 +188,7 @@ export default function RewindPanel({ apiUrl, userId, language, refreshToken }: 
     <section
       className="rewind-panel"
       aria-label="MemoryCue saved moments"
+      lang={language}
       dir={language === "ar" ? "rtl" : "ltr"}
     >
       <div className="rewind-heading">

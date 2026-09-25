@@ -171,6 +171,7 @@ export function MemoryHudOverlay({
       className={`hud-overlay hud-overlay-${state}`}
       aria-live="polite"
       aria-label="MemoryCue camera cue"
+      lang={language}
       dir={language === "ar" ? "rtl" : "ltr"}
     >
       <div className="hud-overlay-heading">
@@ -251,6 +252,7 @@ export function MemoryHudControls({
     <div
       className="hud-controls"
       aria-label="MemoryCue camera cue controls"
+      lang={language}
       dir={language === "ar" ? "rtl" : "ltr"}
     >
       <div className="hud-controls-heading">
