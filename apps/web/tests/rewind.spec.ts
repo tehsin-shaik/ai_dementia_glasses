@@ -95,6 +95,32 @@ test("saved moments appear with their photo, time, and source", async ({ page })
   await expect(strip.locator("img")).toHaveCount(2);
 });
 
+test("each saved moment names where its photo came from", async ({ page }) => {
+  await routeRewind(page, () => ({
+    summary: "These are 4 saved moments, not continuous recording.",
+    moments: [
+      moment(1, "Camera moment", "2026-09-25T11:00:00", "capture"),
+      moment(2, "Uploaded moment", "2026-09-25T11:01:00", "upload"),
+      moment(3, "Unknown-origin moment", "2026-09-25T11:02:00", "photo"),
+      { ...moment(4, "Seeded moment", "2026-09-25T11:03:00", "sample"), image_url: null },
+    ],
+    window_minutes: 1440,
+    within_window: true,
+    has_earlier: false,
+  }));
+
+  await page.goto("/app");
+
+  const strip = page.getByTestId("rewind-strip");
+  const card = (text: string) => strip.locator("li", { hasText: text });
+  await expect(card("Camera moment")).toContainText("Live capture");
+  await expect(card("Uploaded moment")).toContainText("Uploaded photo");
+  await expect(card("Uploaded moment")).not.toContainText("Live capture");
+  await expect(card("Unknown-origin moment")).toContainText("Saved photo");
+  await expect(card("Seeded moment")).toContainText("Sample record");
+  await expect(strip.getByText("Live capture")).toHaveCount(1);
+});
+
 test("rewinding an empty window says so and can show earlier moments", async ({ page }) => {
   const queries: RewindQuery[] = [];
   await routeRewind(

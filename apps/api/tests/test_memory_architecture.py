@@ -31,8 +31,14 @@ from app.models import (
     ScheduleItem,
     User,
 )
-from app.observation_service import ObservationInput, ObservationValidationError, create_observation
+from app.observation_service import (
+    OBSERVATION_SOURCES,
+    ObservationInput,
+    ObservationValidationError,
+    create_observation,
+)
 from app.query_service import answer_question
+from app.rewind_service import PHOTO_ORIGINS, build_rewind
 
 
 @pytest.fixture
@@ -938,3 +944,81 @@ def test_captures_use_database_media_storage(client: TestClient, monkeypatch, tm
     )
     assert saved.status_code == 201
     assert client.get(saved.json()["image_url"]).content == b"captured-frame"
+
+
+# --- Rewind photo provenance --------------------------------------------------
+
+
+def rewind_sources(client: TestClient) -> dict[str, str]:
+    moments = client.get("/api/rewind", params={"window_minutes": 1440, "include_earlier": "true"}).json()["moments"]
+    return {moment["description"]: moment["source"] for moment in moments}
+
+
+def upload_reviewed(client: TestClient, description: str, minute: int, filename: str = "photo.jpg", **data) -> dict:
+    response = client.post(
+        "/api/memories",
+        files={"image": (filename, b"uploaded-photo", "image/jpeg")},
+        data={"timestamp": at(23, minute).isoformat(), "location": "Hall", "description": description, **data},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+@pytest.mark.parametrize("source", ["browser_camera", "iphone_camera", "meta_glasses"])
+def test_rewind_labels_a_saved_device_capture_as_live(client: TestClient, db: Session, source: str) -> None:
+    seed(client)
+    raw = capture(client, source)
+    saved = client.post(
+        "/api/memories",
+        data={"observation_id": str(raw["id"]), "timestamp": at(23, 55).isoformat(), "location": "Hall", "description": "Coat on hook."},
+    )
+    assert saved.status_code == 201
+
+    reviewed = db.scalars(
+        select(Observation).join(MemoryObservation).where(
+            MemoryObservation.memory_id == saved.json()["id"], Observation.reviewed.is_(True)
+        )
+    ).one()
+    assert reviewed.source == source
+    assert reviewed.extra["reviewed_from_observation_id"] == raw["id"]
+    assert rewind_sources(client)["Coat on hook."] == "capture"
+
+
+def test_rewind_does_not_call_uploaded_or_demo_scene_photos_live(client: TestClient) -> None:
+    seed(client)
+    upload_reviewed(client, "Uploaded photo.", 50, source="uploaded_image")
+    upload_reviewed(client, "Demo scene.", 51, filename="keys-on-table.jpg", source="uploaded_image")
+    upload_reviewed(client, "Unknown origin.", 52)
+
+    sources = rewind_sources(client)
+    assert sources["Uploaded photo."] == "upload"
+    assert sources["Demo scene."] == "upload"
+    assert sources["Unknown origin."] == "photo"
+
+
+def test_rewind_keeps_seeded_photo_less_moments_as_samples(client: TestClient) -> None:
+    seed(client)
+    moments = client.get("/api/rewind", params={"window_minutes": 1440, "include_earlier": "true"}).json()["moments"]
+    assert moments
+    assert all(moment["image_url"] is None and moment["source"] == "sample" for moment in moments)
+
+
+def test_rewind_labels_a_legacy_photo_of_unknown_origin_as_a_saved_photo(db: Session) -> None:
+    user = make_user(db)
+    memory = Memory(user_id=user.id, timestamp=at(9), location="Hall", activity="", description="Legacy.", image_path="legacy.jpg")
+    db.add(memory)
+    db.commit()
+    backfill_legacy_memories(db)
+    db.commit()
+
+    moments = build_rewind(db, user.id, window_minutes=1440, include_earlier=True, now=at(10)).moments
+    assert [moment.source for moment in moments] == ["photo"]
+
+
+def test_every_observation_source_has_a_rewind_label() -> None:
+    assert set(PHOTO_ORIGINS) == set(OBSERVATION_SOURCES)
+    assert {source for source, origin in PHOTO_ORIGINS.items() if origin == "capture"} == {
+        "browser_camera",
+        "iphone_camera",
+        "meta_glasses",
+    }
