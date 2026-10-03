@@ -1,9 +1,10 @@
 """Database configuration for SQLite locally and Postgres in hosted demos."""
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 import os
 
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -50,14 +51,28 @@ class Base(DeclarativeBase):
 
 
 def init_db() -> None:
-    """Create database tables if they do not exist yet."""
+    """Create database tables if they do not exist yet; see migrations for upgrades."""
 
     Base.metadata.create_all(bind=engine)
-    if engine.dialect.name == "sqlite":
-        memory_columns = {column["name"] for column in inspect(engine).get_columns("memories")}
-        if "image_path" not in memory_columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE memories ADD COLUMN image_path VARCHAR(255)"))
+
+
+@contextmanager
+def advisory_lock(db: Session, lock_id: int) -> Iterator[None]:
+    """Serialize work across concurrent cold starts on Postgres; a no-op on SQLite."""
+
+    bind = db.get_bind()
+    if bind.dialect.name != "postgresql":
+        yield
+        return
+    # The lock lives on its own connection so commits inside the block cannot release it.
+    with bind.connect() as connection:
+        connection.execute(text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": lock_id})
+        connection.commit()
+        try:
+            yield
+        finally:
+            connection.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
+            connection.commit()
 
 
 def get_db() -> Generator[Session, None, None]:

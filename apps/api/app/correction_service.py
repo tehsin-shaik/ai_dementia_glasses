@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .authorization import CaregiverPermission
 from .formatting import media_url
+from .memory_service import sync_memory_events
 from .models import Caregiver, Memory, MemoryCorrection, ObjectObservation
 from .schemas import (
     CorrectionField,
@@ -151,6 +152,7 @@ def apply_correction(
         if memory.activity:
             memory.activity = description_with(memory.activity, old_value, cleaned)
 
+    sync_memory_events(db, memory)
     db.add(
         MemoryCorrection(
             memory_id=memory.id,

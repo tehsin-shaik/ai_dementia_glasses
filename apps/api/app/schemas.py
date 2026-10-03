@@ -11,6 +11,7 @@ Intent = Literal[
     "object_location",
     "person_lookup",
     "schedule",
+    "day_summary",
     "unknown",
 ]
 
@@ -170,6 +171,8 @@ class RewindMoment(BaseModel):
     source: MomentSource
     corrected_at: datetime | None = None
     corrected_by: str | None = None
+    episode_id: int | None = None
+    episode_title: str | None = None
 
 
 class RewindResponse(BaseModel):
@@ -237,3 +240,76 @@ class MemoryListItem(BaseModel):
     location: str
     description: str
     image_url: str | None
+    title: str | None = None
+    episode_id: int | None = None
+    episode_title: str | None = None
+
+
+ObservationSource = Literal["browser_camera", "iphone_camera", "meta_glasses", "uploaded_image", "other"]
+
+
+class NamedEntity(BaseModel):
+    name: str
+    person_id: int | None = None
+    location: str | None = None
+    confidence: float | None = None
+
+
+class ObservationResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    source: str
+    image_url: str | None
+    transcript: str | None
+    latitude: float | None
+    longitude: float | None
+    location_label: str | None
+    description: str | None
+    activity: str | None
+    people: list[NamedEntity]
+    objects: list[NamedEntity]
+    reviewed: bool
+    analysis: str | None
+    metadata: dict
+    event_ids: list[int]
+    text: str
+    created_at: datetime | None
+
+
+class EventResponse(BaseModel):
+    id: int
+    start_time: datetime
+    end_time: datetime | None
+    event_type: str
+    title: str
+    description: str | None
+    confidence: float
+    inference: str
+    location: str | None
+    people: list[NamedEntity]
+    objects: list[NamedEntity]
+    observation_ids: list[int]
+    text: str
+    created_at: datetime | None
+
+
+class EpisodeResponse(BaseModel):
+    id: int
+    start_time: datetime
+    end_time: datetime | None
+    title: str
+    summary: str
+    inference: str
+    location: str | None
+    people: list[NamedEntity]
+    objects: list[NamedEntity]
+    confidence: float
+    event_ids: list[int]
+    representative_observation_ids: list[int]
+    text: str
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class ConsolidationResponse(BaseModel):
+    episode_ids: list[int]
