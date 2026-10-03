@@ -4,6 +4,8 @@
 
 MemoryCue is an experimental software prototype for capturing, saving, and retrieving everyday context. It explores how this experience could later extend to AI-assisted smart glasses; no physical MemoryCue glasses are available today.
 
+**Live demo:** https://ai-dementia-glasses.vercel.app — open **Try MemoryCue** for the wearer view or `/caregiver` for the caregiver portal. No account or API key is needed; the demo profiles and three demo photo scenes are preloaded.
+
 In the current prototype, a person uploads an image or captures one with a browser camera, reviews or edits the details, and chooses what to save. MemoryCue can later retrieve short answers from those saved records and from caregiver-provided people and schedule information.
 
 For example, a user could ask:
@@ -12,6 +14,8 @@ For example, a user could ask:
 * **Where did I leave my keys?**
 * **Who is Sarah?**
 * **What am I doing today?**
+* **What did I do today?**
+* **What was I doing at 10 AM?**
 
 Instead of relying on a general-purpose chatbot to guess, MemoryCue is designed to answer from information that was previously observed or explicitly added to the memory system.
 
@@ -59,7 +63,7 @@ The first version is a software-only prototype.
 
 No physical smart glasses are required.
 
-The MVP focuses on six core experiences:
+The MVP focuses on these core experiences:
 
 ### 1. Recent activity recall
 
@@ -111,9 +115,36 @@ Recognition cues take priority over schedule cues, which take priority over obje
 
 These are conservative, explainable reminders based on stored patient context. MemoryCue does not continuously analyze video, scan faces in the background, infer emotion or confusion, or create medical or medication reminders.
 
+### 7. Time-anchored and same-day recall
+
+The user can ask:
+
+> What was I doing at 10 AM?
+
+> What did I do today?
+
+The first returns the saved moment in progress at that time today (the latest one at or up to 30 minutes before it), stating that moment's own time. The second lists today's saved moments in order. When nothing was saved, both say so instead of guessing. Both work in English and Arabic.
+
+### 8. Rewind recent moments
+
+The wearer screen shows a strip of the latest saved moments, each with its photo, observation time, and a label saying where the photo came from:
+
+| Label | Photo source |
+| --- | --- |
+| **Live capture** | a camera capture (`browser_camera`, and later `iphone_camera` or `meta_glasses`) |
+| **Uploaded photo** | an uploaded file or a bundled demo scene (`uploaded_image`) |
+| **Saved photo** | an unknown origin, such as memories migrated from older versions |
+| **Sample record** | a seeded demo moment with no photo |
+
+**Rewind recent moments** summarizes up to three moments saved in the last ten minutes, in order, and says it is not continuous recording. If nothing was saved in that window, it offers **Show earlier saved moments** instead. Object answers carry the saved photo as evidence and say `Last recorded`, so they never claim an object is still there.
+
+### 9. Caregiver corrections with history
+
+In the caregiver portal's **Saved moments** tab, a linked caregiver can correct a saved object location or name, or a short description. The original capture, photo, and observation time are never rewritten: each correction is stored separately with who made it, when, and the old and new values, and shows as **Caregiver corrected**. The wearer's next answer and rewind use the corrected value. Viewer-only caregivers can see records but not change them.
+
 ## Creating Memories
 
-The prototype supports creating a memory from an uploaded image. Select an image, enter its time, location, description, and optional activity, then optionally provide an object name such as `keys`.
+The prototype supports creating a memory from an uploaded image, a browser camera capture, or one of three bundled demo scenes (**Or choose a demo scene**: keys on a table, tea in the kitchen, reading at home). Select an image, enter its time, location, description, and optional activity, then optionally provide an object name such as `keys`.
 
 Uploaded images are stored locally with generated filenames (or in the database when `MEDIA_STORAGE=database`, which the hosted demo uses). When an object is provided, MemoryCue records the observation so later questions use the newest matching memory. The current prototype accepts `.jpg`, `.jpeg`, `.png`, and `.webp` images up to 10 MB.
 
@@ -138,6 +169,8 @@ uvicorn --env-file ../../.env app.main:app --reload
 
 The API key is read only by the backend and must never be committed or exposed to the browser. If these variables are blank or missing, image analysis is disabled with a clear response and manual memory creation continues to work.
 
+The bundled demo scenes return fixed, pre-written suggestions without calling any provider, so **Analyze with AI** works for them with no API key, even when a configured key has no quota. Arbitrary photos need a configured provider.
+
 AI-generated metadata is a suggestion, not a fact. Review and edit it before saving.
 
 ## Glasses Simulator
@@ -150,7 +183,15 @@ The browser-based Glasses Simulator uses the laptop webcam as a stand-in for a f
 4. Choose **Save memory** to store the captured image through the normal memory flow.
 5. Ask a supported question such as **Where are my keys?** to retrieve the saved context.
 
-Use **Retake** to replace the captured image and **Stop camera** when finished. Capture and analysis are always user-triggered in this milestone. MemoryCue does not continuously record, analyze frames, or create memories in the background.
+Use **Retake** to replace the captured image and **Stop camera** when finished. Capture and analysis are always user-triggered. MemoryCue does not continuously record, analyze frames, or create memories in the background.
+
+Each capture is stored straight away as an unreviewed **Observation** (`source=browser_camera`, with its capture time) through `POST /api/observations`. Nothing becomes a memory until **Save memory**, which creates a reviewed copy linked to the original capture and reuses its photo. Unsaved captures are deleted with their photos after `OBSERVATION_RETENTION_HOURS` (default 168, i.e. 7 days) as long as nothing saved depends on them; reviewed data never expires.
+
+The browser camera is the first `CaptureSource` (`apps/web/app/capture.ts`). A future iPhone or Meta glasses client can send the same request with `source=iphone_camera` or `meta_glasses` without backend changes; no such client exists yet.
+
+### Layered memory
+
+Under each saved memory, MemoryCue keeps the chain **Observation → Event → Episode → Memory**: raw captures, rule-based events with confidence scores, and episodes that group nearby events. Spoken answers, rewind, and evidence labels use only reviewed or caregiver-provided records; unreviewed observations and inferred events are visible through `GET /api/observations`, `/api/events`, and `/api/episodes` but are never spoken as facts. See [docs/MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md).
 
 ### Glasses-style memory HUD
 
@@ -258,20 +299,21 @@ The software prototype allows the memory system to be developed and tested befor
 ```text
 .
 ├── apps/
-│   ├── web/
-│   └── api/
-├── wearable/
-│   ├── browser-simulator/
-│   └── meta/
+│   ├── web/          # Next.js app: product page, wearer HUD, caregiver portal, demo tools
+│   │   └── tests/    # Playwright browser tests
+│   └── api/          # FastAPI + SQLAlchemy backend
+│       └── tests/    # pytest suite
+├── wearable/         # placeholders for future device clients (no code yet)
 ├── fixtures/
 ├── docs/
+├── vercel.json       # single Vercel project for web + API
 ├── AGENTS.md
 └── README.md
 ```
 
 ## Project Status
 
-**Current stage:** Stage 8 proactive context cues prototype
+**Current stage:** layered memory with the browser camera as the first capture source (Stage 13), on top of voice, Arabic answers, rewind, caregiver corrections, and the hosted demo
 
 The project is currently focused on building the core memory loop:
 
@@ -285,6 +327,8 @@ See:
 * [Architecture](docs/architecture.md)
 * [Memory architecture (Observation → Event → Episode → Memory)](docs/MEMORY_ARCHITECTURE.md)
 * [Frontend audit](docs/AUDIT_FRONTEND.md)
+* [Deploying to Vercel](docs/DEPLOY.md)
+* [OurLife reference and licensing notes](docs/OURLIFE_REFERENCE.md)
 
 ## Run Locally
 
@@ -319,6 +363,18 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000) for the product page. Choose **Try MemoryCue** or open [http://localhost:3000/app](http://localhost:3000/app) for the wearer experience. Use [http://localhost:3000/demo](http://localhost:3000/demo) to choose **Alex** or **Jordan**, select **Reset all data and load demo**, and inspect saved answers. That reset replaces all prototype data before loading samples for both profiles. Open [http://localhost:3000/caregiver](http://localhost:3000/caregiver) for the caregiver setup page, select Maya, Sam, or Taylor, and manage only the linked profile information. The backend uses a local SQLite database by default. AI image understanding is optional and uses an external vision provider when configured; follow the configuration above when you want to enable it.
 
 The local prototype stores timestamps as naive local wall-clock values. The browser and backend use their local time for manual/camera entries and the demo schedule; timezone-aware API timestamps are converted to the backend's local time before storage.
+
+Copy `.env.example` to `.env` for the optional settings: `VISION_PROVIDER`/`VISION_MODEL`/`VISION_API_KEY` for photo analysis, `DATABASE_URL` for Postgres instead of SQLite, `MEDIA_STORAGE=database` to keep photos in the database, `OBSERVATION_RETENTION_HOURS`, and the `CUE_*` timings. None are required to run the demo.
+
+### Tests
+
+```bash
+cd apps/api && .venv/bin/python -m pytest -q          # backend
+cd apps/web && npx tsc --noEmit && npm run build       # frontend typecheck and build
+cd apps/web && npx playwright test                     # browser tests (mock the API)
+```
+
+The PostgreSQL tests in `apps/api/tests/test_memory_architecture_postgres.py` are skipped unless `MEMORYCUE_TEST_POSTGRES_URL` points at a Postgres database.
 
 To try optional cues locally, reset and load the demo data, then use `/caregiver` to add a schedule item within the next 30 minutes for Alex or Jordan. Open `/app`, select the same profile, start the camera, and leave **Optional cues** turned on. The cue appears over the camera preview, can be dismissed, and will not immediately repeat. `/demo` includes a **Current cue** panel for inspecting the profile-scoped result without using the camera.
 
