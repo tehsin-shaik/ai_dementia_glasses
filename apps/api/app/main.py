@@ -155,7 +155,9 @@ async def create_memory(
     capture: Observation | None = None
     if observation_id is not None:
         capture = db.scalar(
-            select(Observation).where(Observation.id == observation_id, Observation.user_id == current_user.id)
+            select(Observation)
+            .where(Observation.id == observation_id, Observation.user_id == current_user.id)
+            .with_for_update()
         )
         if capture is None:
             raise HTTPException(status_code=404, detail="Captured observation not found.")

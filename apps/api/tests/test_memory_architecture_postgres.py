@@ -6,7 +6,7 @@ MEMORYCUE_TEST_POSTGRES_URL=postgresql://postgres:pw@localhost:55432/postgres
 """
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 import os
 
 import pytest
@@ -17,9 +17,10 @@ from app.database import Base, advisory_lock, create_database_engine
 from app.episode_service import consolidate_episodes, consolidate_in_background
 from app.memory_service import save_reviewed_moment
 from app.migrations import run_migrations
-from app.models import Episode, EpisodeEvent, Event, Memory, Observation, User
+from app.models import Episode, EpisodeEvent, Event, MediaBlob, Memory, Observation, User
 from app.observation_service import ObservationInput, create_observation
 from app.query_service import answer_question
+from app.retention_service import cleanup_abandoned_observations
 from app.seed import seed_demo_data
 
 POSTGRES_URL = os.getenv("MEMORYCUE_TEST_POSTGRES_URL")
@@ -158,3 +159,78 @@ def test_legacy_migration_runs_concurrently_and_repeatedly(engine, session_facto
         assert {row.extra["original_source"] for row in db.scalars(select(Observation))} == {"unknown"}
         assert all(memory.episode_id is not None for memory in db.scalars(select(Memory)))
         assert "kitchen counter" in answer_question(db, 1, "Where are my keys?").answer
+
+
+def _abandoned_capture(db: Session, user_id: int, filename: str, hour: int = 9) -> Observation:
+    db.add(MediaBlob(filename=filename, user_id=user_id, content_type="image/jpeg", data=b"frame"))
+    observation = create_observation(
+        db,
+        user_id,
+        ObservationInput(
+            timestamp=at(hour),
+            source="browser_camera",
+            image_path=filename,
+            objects=[{"name": "umbrella", "location": "hall", "confidence": 0.9}],
+        ),
+    )
+    observation.created_at = datetime.now() - timedelta(days=30)
+    return observation
+
+
+def test_concurrent_cleanup_deletes_each_capture_and_photo_once(engine, session_factory) -> None:
+    Base.metadata.create_all(engine)
+    with session_factory() as db:
+        user = User(name="Alex")
+        db.add(user)
+        db.flush()
+        doomed = _abandoned_capture(db, user.id, "a" * 32 + ".jpg", hour=15)
+        source = _abandoned_capture(db, user.id, "b" * 32 + ".jpg")
+        create_observation(
+            db,
+            user.id,
+            ObservationInput(timestamp=at(9), description="Reviewed.", reviewed=True, metadata={"reviewed_from_observation_id": source.id}),
+        )
+        db.commit()
+        consolidate_episodes(db, user.id)
+        db.commit()
+        user_id, doomed_id, source_id = user.id, doomed.id, source.id
+
+    def run(_: int):
+        with session_factory() as db:
+            return cleanup_abandoned_observations(db, user_id)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(run, range(4)))
+
+    assert sorted(len(result.deleted_observation_ids) for result in results) == [0, 0, 0, 1]
+    assert sum(len(result.deleted_media) for result in results) == 1
+    assert all(result.errors == [] for result in results)
+    with session_factory() as db:
+        assert db.get(Observation, doomed_id) is None
+        assert db.get(Observation, source_id) is not None
+        assert db.get(MediaBlob, "a" * 32 + ".jpg") is None
+        assert db.get(MediaBlob, "b" * 32 + ".jpg") is not None
+        orphaned = select(func.count()).select_from(EpisodeEvent).where(EpisodeEvent.event_id.not_in(select(Event.id)))
+        assert db.scalar(orphaned) == 0
+
+
+def test_cleanup_skips_a_capture_that_is_being_saved(engine, session_factory) -> None:
+    Base.metadata.create_all(engine)
+    with session_factory() as db:
+        user = User(name="Alex")
+        db.add(user)
+        db.flush()
+        capture = _abandoned_capture(db, user.id, "c" * 32 + ".jpg")
+        db.commit()
+        user_id, capture_id = user.id, capture.id
+
+    with session_factory() as saving:
+        saving.scalar(select(Observation).where(Observation.id == capture_id).with_for_update())
+        with session_factory() as db:
+            result = cleanup_abandoned_observations(db, user_id)
+        assert (result.examined, result.deleted_observation_ids) == (0, [])
+        saving.rollback()
+
+    with session_factory() as db:
+        assert db.get(Observation, capture_id) is not None
+        assert cleanup_abandoned_observations(db, user_id).deleted_observation_ids == [capture_id]

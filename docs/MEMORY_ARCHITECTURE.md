@@ -46,6 +46,7 @@ device only needs to send the same fields with its own `source`.
 | `app/memory_text.py` | `observation_to_text()`, `event_to_text()`, `episode_to_text()`, `memory_to_text()` — deterministic canonical text for each level. |
 | `app/migrations.py` | Idempotent startup migration and backfill. |
 | `app/timeline_routes.py` | New HTTP endpoints. |
+| `app/retention_service.py` | `cleanup_abandoned_observations()` — deletes one user's abandoned captures; see below. |
 
 ## How a capture now flows
 
@@ -89,6 +90,34 @@ Only the owner's unreviewed captures with an image can be saved this way.
 `BrowserCamera` is the first `CaptureSource`; an iPhone or glasses client
 produces the same `Capture` with a different `source`, and the backend has no
 per-source path. Uploaded files still save directly with `source=uploaded_image`.
+
+## Abandoned captures
+
+A capture nobody saves stays an unreviewed Observation with its photo. After
+each new capture, a background task runs `cleanup_abandoned_observations()` for
+that user only. It deletes an Observation only when all of these hold:
+
+1. it belongs to that user and is unreviewed;
+2. it was stored (`created_at`) more than `OBSERVATION_RETENTION_HOURS` ago
+   (default 168, minimum 24; an invalid value stops cleanup); a missing
+   `created_at` keeps it;
+3. no Memory links to it (`memory_observations`);
+4. no Observation names it in `metadata.reviewed_from_observation_id`;
+5. every Event linked to it links only to other deletable captures, has no
+   `memory_events` row, and is in no episode or only in a deletable one;
+6. every Episode it or its events belong to holds only deletable events and
+   representative captures, and no `Memory.episode_id` points at it.
+
+Rules 5 and 6 repeat until nothing changes, because keeping one capture can
+keep another. Anything else is kept; reviewed data never expires.
+
+Deletion order, in one transaction under the user's consolidation advisory
+lock (candidate rows are locked `FOR UPDATE SKIP LOCKED` on Postgres, and saving
+a capture locks its row, so a capture being saved is skipped):
+episode links and episodes → event links and events → observations → that
+user's `media_blobs` no remaining Memory or Observation of any user references →
+commit → the matching local files (a missing file is fine). The photo of a capture
+that was saved, or shared with any kept record, is never deleted.
 
 ## Answers stay grounded
 
