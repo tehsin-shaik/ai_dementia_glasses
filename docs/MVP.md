@@ -62,7 +62,7 @@ Stage 9 makes the HUD usable hands-free and makes grounding visible.
 
 Stage 10 adds `GET /api/rewind` and a saved-moments strip on the wearer screen.
 
-* **Saved moments only.** The strip shows the latest saved memories for the selected profile with their photo, description, full observation date and time, and whether the record came from a live capture or a loaded sample. Nothing enters the strip before the wearer reviews and saves it.
+* **Saved moments only.** The strip shows the latest saved memories for the selected profile with their photo, description, full observation date and time, and where its photo came from, read from the source of the observation behind the memory: **Live capture** (`browser_camera`, `iphone_camera`, `meta_glasses`), **Uploaded photo** (`uploaded_image`, including the bundled demo scenes), **Saved photo** (`other` or unclear, such as migrated memories), or **Sample record** (no photo, the seeded demo rows). Nothing enters the strip before the wearer reviews and saves it.
 * **Ten-minute recap.** **Rewind recent moments** summarizes at most three saved moments from the last ten minutes in chronological order. The recap names how many moments it covers and states that it is not continuous recording.
 * **Empty window.** When nothing was saved in the window, the recap says so and offers **Show earlier saved moments**. Earlier moments are labelled as earlier, never described as recent.
 * **Evidence.** Object answers carry the saved photo alongside the stored detail and observation time, and last-seen answers say `Last recorded` so they never imply an object is still there.

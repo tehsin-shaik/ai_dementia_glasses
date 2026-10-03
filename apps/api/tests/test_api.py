@@ -1845,7 +1845,7 @@ def test_rewind_returns_the_three_newest_saved_moments_in_order(client: TestClie
     assert body["within_window"] is True
     assert [moment["location"] for moment in body["moments"]] == ["Porch", "Study", "Hallway"]
     assert all(moment["image_url"] for moment in body["moments"])
-    assert all(moment["source"] == "capture" for moment in body["moments"])
+    assert all(moment["source"] == "photo" for moment in body["moments"])
     assert "3 saved moments" in body["summary"]
     assert "Hallway" in body["summary"]
 

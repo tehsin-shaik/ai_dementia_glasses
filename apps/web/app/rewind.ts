@@ -3,6 +3,14 @@
 import { memoryCueFetch } from "./api";
 import type { VoiceLanguage } from "./voice";
 
+export type MomentSource = "capture" | "upload" | "photo" | "sample";
+
+const MOMENT_SOURCES: readonly string[] = ["capture", "upload", "photo", "sample"];
+
+function isMomentSource(value: unknown): value is MomentSource {
+  return typeof value === "string" && MOMENT_SOURCES.includes(value);
+}
+
 export type RewindMoment = {
   memory_id: number;
   recorded_at: string;
@@ -10,7 +18,7 @@ export type RewindMoment = {
   activity: string | null;
   description: string;
   image_url: string | null;
-  source: "capture" | "sample";
+  source: MomentSource;
   corrected_at: string | null;
   corrected_by: string | null;
   episode_title?: string | null;
@@ -38,7 +46,7 @@ function parseMoment(payload: unknown): RewindMoment[] {
     typeof payload.recorded_at !== "string" ||
     typeof payload.location !== "string" ||
     typeof payload.description !== "string" ||
-    (payload.source !== "capture" && payload.source !== "sample")
+    !isMomentSource(payload.source)
   ) {
     return [];
   }

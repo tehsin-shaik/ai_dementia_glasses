@@ -156,7 +156,7 @@ class QueryEvidence(BaseModel):
     corrected_by: str | None = None
 
 
-MomentSource = Literal["capture", "sample"]
+MomentSource = Literal["capture", "upload", "photo", "sample"]
 
 
 class RewindMoment(BaseModel):

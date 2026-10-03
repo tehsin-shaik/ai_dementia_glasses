@@ -31,6 +31,8 @@ const COPY = {
     earlierBadge: "Earlier saved moments, not the last 10 minutes",
     evidence: "Evidence",
     capture: "Live capture",
+    upload: "Uploaded photo",
+    photo: "Saved photo",
     sample: "Sample record",
     noPhoto: "No photo saved",
     corrected: "Caregiver corrected",
@@ -49,6 +51,8 @@ const COPY = {
     earlierBadge: "لحظات محفوظة أقدم، وليست آخر ١٠ دقائق",
     evidence: "الدليل",
     capture: "تصوير مباشر",
+    upload: "صورة مرفوعة",
+    photo: "صورة محفوظة",
     sample: "سجل تجريبي",
     noPhoto: "لا توجد صورة محفوظة",
     corrected: "صحّحه مقدّم الرعاية",
@@ -135,9 +139,7 @@ function MomentCard({
       <MomentPhoto apiUrl={apiUrl} userId={userId} moment={moment} fallback={copy.noPhoto} />
       <p className="rewind-card-description">{moment.description}</p>
       <span className="rewind-card-time">{formatMomentTime(moment.recorded_at, language)}</span>
-      <span className="rewind-card-source">
-        {moment.source === "capture" ? copy.capture : copy.sample}
-      </span>
+      <span className="rewind-card-source">{copy[moment.source]}</span>
       {language === "en" && moment.episode_title && (
         <span className="rewind-card-source">
           {copy.episode} · {moment.episode_title}
