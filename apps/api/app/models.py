@@ -3,8 +3,10 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     LargeBinary,
@@ -60,7 +62,106 @@ class CaregiverPatientAccess(Base):
     can_manage_notes: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
+class Observation(Base):
+    """One captured moment from any source: raw evidence, not interpretation."""
+
+    __tablename__ = "observations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    image_path: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    activity: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # [{"name": str, "person_id": int | None}]
+    detected_people: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # [{"name": str, "location": str | None, "confidence": float | None}]
+    detected_objects: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    raw_analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    extra: Mapped[dict] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    embedding_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=datetime.now)
+
+
+class Event(Base):
+    """A meaningful action or state interpreted from one or more observations."""
+
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    # How the event was produced: "reviewed", "rule:<name>", or "legacy_migration".
+    inference: Mapped[str] = mapped_column(String(60), nullable=False)
+    location: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    people: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    objects: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    embedding_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=datetime.now)
+
+
+class Episode(Base):
+    """A coherent stretch of activity grouping several events."""
+
+    __tablename__ = "episodes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    # The last evidence time; never extended past the newest event.
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    # "rule:<name>" for a themed title, "locations" for a descriptive one.
+    inference: Mapped[str] = mapped_column(String(60), nullable=False)
+    location: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    people: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    objects: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    embedding_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=datetime.now)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=datetime.now, onupdate=datetime.now
+    )
+
+
+class EventObservation(Base):
+    __tablename__ = "event_observations"
+
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), primary_key=True)
+    observation_id: Mapped[int] = mapped_column(ForeignKey("observations.id"), primary_key=True, index=True)
+
+
+class EpisodeEvent(Base):
+    __tablename__ = "episode_events"
+
+    episode_id: Mapped[int] = mapped_column(ForeignKey("episodes.id"), primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), primary_key=True, index=True)
+
+
+class EpisodeObservation(Base):
+    """Representative observations shown for an episode."""
+
+    __tablename__ = "episode_observations"
+
+    episode_id: Mapped[int] = mapped_column(ForeignKey("episodes.id"), primary_key=True)
+    observation_id: Mapped[int] = mapped_column(ForeignKey("observations.id"), primary_key=True, index=True)
+
+
 class Memory(Base):
+    """The user-facing record worth retrieving later; reviewed before it is saved."""
+
     __tablename__ = "memories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -70,6 +171,31 @@ class Memory(Base):
     activity: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Columns below were added with the observation hierarchy and are nullable so
+    # existing rows stay valid; see migrations.MEMORY_COLUMNS.
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    people: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    objects: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    episode_id: Mapped[int | None] = mapped_column(ForeignKey("episodes.id"), nullable=True, index=True)
+    importance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    embedding_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MemoryObservation(Base):
+    __tablename__ = "memory_observations"
+
+    memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id"), primary_key=True)
+    observation_id: Mapped[int] = mapped_column(ForeignKey("observations.id"), primary_key=True, index=True)
+
+
+class MemoryEvent(Base):
+    __tablename__ = "memory_events"
+
+    memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id"), primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), primary_key=True, index=True)
 
 
 class MediaBlob(Base):

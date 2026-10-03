@@ -3,7 +3,7 @@
 from datetime import datetime
 import os
 
-from fastapi import Depends, File, Form, FastAPI, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, Depends, File, Form, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import ValidationError
@@ -13,20 +13,24 @@ from sqlalchemy.orm import Session
 from . import models  # noqa: F401 - registers models before table creation
 from .caregiver import router as caregiver_router
 from .cues.routes import router as cues_router
-from .database import SessionLocal, get_db, init_db
+from .database import SessionLocal, engine, get_db, init_db
+from .migrations import run_migrations
 from .face.routes import router as face_router
 from .identity import get_current_user
+from .episode_service import consolidate_in_background
 from .media_storage import (
+    StoredImage,
+    discard_stored_image,
     media_type_for,
-    new_media_filename,
-    remove_uploaded_image,
     read_uploaded_image,
     safe_media_path,
-    save_uploaded_image,
-    uses_database_media,
+    store_uploaded_image,
 )
-from .models import MediaBlob, Memory, ObjectObservation, User
+from .memory_service import save_reviewed_moment
+from .models import MediaBlob, Memory, Observation, User
+from .observation_service import ObservationValidationError
 from .query_service import answer_question
+from .retrieval_service import episodes_by_id
 from .rewind_service import DEFAULT_WINDOW_MINUTES, build_rewind
 from .runtime import allowed_origins, seed_if_empty
 from .schemas import (
@@ -34,18 +38,21 @@ from .schemas import (
     Language,
     MemoryListItem,
     MemoryResponse,
+    ObservationSource,
     QueryRequest,
     QueryResponse,
     RewindResponse,
     SeedResponse,
 )
 from .seed import seed_demo_data
+from .timeline_routes import router as timeline_router
 from .vision import VisionAnalysis
 from .vision import provider as vision_provider
 from .vision.provider import VisionProviderError, VisionProviderNotConfiguredError
 
 
 init_db()
+run_migrations(engine, SessionLocal)
 
 if os.getenv("SEED_ON_STARTUP") == "1":
     with SessionLocal() as startup_session:
@@ -61,6 +68,7 @@ app.add_middleware(
 app.include_router(caregiver_router)
 app.include_router(face_router)
 app.include_router(cues_router)
+app.include_router(timeline_router)
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -107,15 +115,19 @@ def image_url(image_path: str | None) -> str | None:
 
 @app.post("/api/memories", response_model=MemoryResponse, status_code=201)
 async def create_memory(
+    background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     timestamp: datetime = Form(...),
     location: str = Form(...),
     description: str = Form(...),
     activity: str | None = Form(default=None),
     object_name: str | None = Form(default=None),
+    source: ObservationSource = Form(default="other"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MemoryResponse:
+    """Save a reviewed moment: Observation -> Events -> Memory; episodes group afterwards."""
+
     location_value = location.strip()
     description_value = description.strip()
     activity_value = (activity or "").strip()
@@ -133,51 +145,21 @@ async def create_memory(
     if len(object_name_value) > 120:
         raise HTTPException(status_code=422, detail="Object name cannot exceed 120 characters.")
 
-    # Store timestamps consistently as naive local wall-clock datetimes for SQLite.
-    if timestamp.tzinfo is not None:
-        timestamp = timestamp.astimezone().replace(tzinfo=None)
-
-    image_bytes: bytes | None = None
-    if uses_database_media():
-        extension, image_bytes = await read_uploaded_image(image)
-        stored_filename = new_media_filename(extension)
-    else:
-        stored_filename = await save_uploaded_image(image)
+    stored: StoredImage | None = None
     try:
-        if image_bytes is not None:
-            db.add(
-                MediaBlob(
-                    filename=stored_filename,
-                    user_id=current_user.id,
-                    content_type=media_type_for(stored_filename),
-                    data=image_bytes,
-                )
-            )
-        memory = Memory(
-            user_id=current_user.id,
+        stored = await store_uploaded_image(db, current_user.id, image)
+        saved = save_reviewed_moment(
+            db,
+            current_user.id,
             timestamp=timestamp,
             location=location_value,
-            activity=activity_value,
             description=description_value,
-            image_path=stored_filename,
+            activity=activity_value,
+            object_name=object_name_value,
+            image_path=stored.filename,
+            source=source,
         )
-
-        db.add(memory)
-        db.flush()
-
-        observation = None
-        normalized_object_name = object_name_value.casefold()
-        if normalized_object_name:
-            observation = ObjectObservation(
-                user_id=current_user.id,
-                object_name=normalized_object_name,
-                location=location_value,
-                observed_at=timestamp,
-                memory_id=memory.id,
-            )
-            db.add(observation)
-            db.flush()
-
+        memory = saved.memory
         response = MemoryResponse(
             id=memory.id,
             timestamp=memory.timestamp,
@@ -185,15 +167,19 @@ async def create_memory(
             activity=memory.activity or None,
             description=memory.description,
             image_url=image_url(memory.image_path),
-            object_observation_id=observation.id if observation else None,
+            object_observation_id=saved.object_observation.id if saved.object_observation else None,
         )
         db.commit()
-        return response
+    except ObservationValidationError as exc:
+        db.rollback()
+        discard_stored_image(stored)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception:
         db.rollback()
-        if image_bytes is None:
-            remove_uploaded_image(stored_filename)
+        discard_stored_image(stored)
         raise
+    background_tasks.add_task(consolidate_in_background, db.get_bind(), current_user.id)
+    return response
 
 
 @app.post("/api/vision/analyze", response_model=VisionAnalysis)
@@ -251,6 +237,7 @@ def list_memories(
             .order_by(Memory.timestamp.desc(), Memory.id.desc())
         )
     )
+    episodes = episodes_by_id(db, current_user.id, {memory.episode_id for memory in memories if memory.episode_id})
     return [
         MemoryListItem(
             id=memory.id,
@@ -258,6 +245,9 @@ def list_memories(
             location=memory.location,
             description=memory.description,
             image_url=image_url(memory.image_path),
+            title=memory.title,
+            episode_id=memory.episode_id,
+            episode_title=episodes[memory.episode_id].title if memory.episode_id in episodes else None,
         )
         for memory in memories
     ]
@@ -271,12 +261,18 @@ def get_media(
 ) -> Response:
     path = safe_media_path(filename)
     memory = db.scalar(
-        select(Memory).where(
+        select(Memory.id).where(
             Memory.user_id == current_user.id,
             Memory.image_path == filename,
         )
     )
-    if memory is None:
+    observation = db.scalar(
+        select(Observation.id).where(
+            Observation.user_id == current_user.id,
+            Observation.image_path == filename,
+        )
+    )
+    if memory is None and observation is None:
         raise HTTPException(status_code=404, detail="Media file not found.")
     blob = db.get(MediaBlob, filename)
     if blob is not None:

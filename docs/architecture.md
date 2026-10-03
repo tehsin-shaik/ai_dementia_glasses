@@ -51,6 +51,14 @@ POST /api/cues/present
 One acknowledged, dismissible HUD cue
 ```
 
+## Layered Memory
+
+Below the saved Memory, captures are stored as Observations, interpreted into confidence-scored Events, and grouped into Episodes after capture. Every input device goes through `create_observation()` and identifies itself only by `source`. Details, migration, and API: [MEMORY_ARCHITECTURE.md](MEMORY_ARCHITECTURE.md).
+
+```text
+Observation → Event → Episode → Memory
+```
+
 ## Hardware Abstraction
 
 The input source should be replaceable without changing the memory, analysis, and question-answering flow:

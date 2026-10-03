@@ -3,12 +3,20 @@
 from datetime import date, datetime, time, timedelta
 import re
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .correction_service import latest_correction
 from .formatting import format_time, media_url
-from .models import ImportantObject, Memory, ObjectObservation, Person, ScheduleItem
+from .models import Memory
+from .retrieval_service import (
+    episodes_by_id,
+    find_person,
+    known_object_names,
+    latest_activity_memory,
+    latest_object_observation,
+    memories_for_day,
+    schedule_for_day,
+)
 from .schemas import Intent, Language, QueryEvidence, QueryResponse
 
 
@@ -37,6 +45,8 @@ PERSON_TRAILING_WORDS = {"again", "please", "now", "to", "me", "مرة", "أخر
 PERSON_TERMS_AR = ("من هي", "من هو", "من تكون", "من يكون")
 
 PAST_TENSE_TERMS = {"was", "did", "كنت"}
+DAY_SUMMARY_VERBS = {"did", "فعلت"}
+TODAY_TERMS = {"today", "اليوم"}
 CLOCK_TIME_PATTERN = re.compile(
     r"(?:\b(?:at|around|about)\s+|الساعة\s*)?"
     r"(?<!\d)(\d{1,2})(?::(\d{2}))?\s*"
@@ -109,6 +119,10 @@ def detect_intent(question: str) -> Intent:
     if tokens & PAST_TENSE_TERMS and clock_time_mention(question) is not None:
         return "recent_activity"
 
+    # "What did I do today?" asks about the past; "What am I doing today?" is the schedule.
+    if tokens & DAY_SUMMARY_VERBS and tokens & TODAY_TERMS:
+        return "day_summary"
+
     if tokens & SCHEDULE_TERMS_EN or tokens & SCHEDULE_TERMS_AR:
         return "schedule"
 
@@ -171,16 +185,6 @@ def candidate_object_names(question: str) -> list[str]:
     return ordered
 
 
-def known_object_names(db: Session, user_id: int) -> set[str]:
-    observed = db.scalars(
-        select(ObjectObservation.object_name).where(ObjectObservation.user_id == user_id).distinct()
-    )
-    important = db.scalars(
-        select(ImportantObject.name).where(ImportantObject.user_id == user_id).distinct()
-    )
-    return {name.casefold() for name in observed} | {name.casefold() for name in important}
-
-
 def resolve_object_name(db: Session, user_id: int, question: str) -> str | None:
     known = known_object_names(db, user_id)
     for candidate in candidate_object_names(question):
@@ -216,22 +220,10 @@ def answer_question(
         asked_time = requested_clock_time(question)
         if asked_time is None and clock_time_mention(question) is not None:
             return unknown_response(language)
-        activity_query = (
-            select(Memory)
-            .where(Memory.user_id == user_id)
-            .where(Memory.activity.is_not(None))
-            .where(Memory.activity != "")
-        )
-        if asked_time is not None:
-            # The moment in progress at the asked time: the latest saved one at or
-            # shortly before it, today.
-            asked_at = datetime.combine(date.today(), asked_time)
-            activity_query = activity_query.where(
-                Memory.timestamp <= asked_at,
-                Memory.timestamp >= asked_at - ACTIVITY_LOOKBACK,
-            )
-        memory = db.scalar(
-            activity_query.order_by(Memory.timestamp.desc(), Memory.id.desc()).limit(1)
+        asked_at = datetime.combine(date.today(), asked_time) if asked_time is not None else None
+        # The moment in progress at the asked time: the latest saved one at or shortly before it.
+        memory = latest_activity_memory(
+            db, user_id, at=asked_at, lookback=ACTIVITY_LOOKBACK if asked_at is not None else None
         )
         if memory is None:
             return unknown_response(language)
@@ -272,15 +264,7 @@ def answer_question(
         object_name = resolve_object_name(db, user_id, question)
         if object_name is None:
             return unknown_response(language)
-        observation = db.scalar(
-            select(ObjectObservation)
-            .where(
-                ObjectObservation.user_id == user_id,
-                ObjectObservation.object_name == object_name,
-            )
-            .order_by(ObjectObservation.observed_at.desc(), ObjectObservation.id.desc())
-            .limit(1)
-        )
+        observation = latest_object_observation(db, user_id, object_name)
         if observation is None:
             return unknown_response(language)
         observation_memory = db.get(Memory, observation.memory_id)
@@ -328,12 +312,7 @@ def answer_question(
         person_name = resolve_person_name(question)
         if person_name is None:
             return unknown_response(language)
-        person = db.scalar(
-            select(Person)
-            .where(Person.user_id == user_id, Person.name.ilike(person_name))
-            .order_by(Person.id)
-            .limit(1)
-        )
+        person = find_person(db, user_id, person_name)
         if person is None:
             return unknown_response(language)
         answer = (
@@ -356,19 +335,10 @@ def answer_question(
             language=language,
         )
 
-    today_start = datetime.combine(date.today(), time.min)
-    tomorrow_start = datetime.combine(date.today() + timedelta(days=1), time.min)
-    schedule_items = list(
-        db.scalars(
-            select(ScheduleItem)
-            .where(
-                ScheduleItem.user_id == user_id,
-                ScheduleItem.scheduled_at >= today_start,
-                ScheduleItem.scheduled_at < tomorrow_start,
-            )
-            .order_by(ScheduleItem.scheduled_at, ScheduleItem.id)
-        )
-    )
+    if intent == "day_summary":
+        return day_summary(db, user_id, language)
+
+    schedule_items = schedule_for_day(db, user_id, date.today())
     if not schedule_items:
         return unknown_response(language)
     schedule_phrases = []
@@ -392,5 +362,54 @@ def answer_question(
             )
             for item in schedule_items
         ],
+        language=language,
+    )
+
+
+def day_summary(db: Session, user_id: int, language: Language = "en") -> QueryResponse:
+    """Today's saved moments in order, grouped by the episode each belongs to."""
+
+    memories = memories_for_day(db, user_id, date.today())
+    if not memories:
+        return unknown_response(language)
+    episodes = episodes_by_id(db, user_id, {memory.episode_id for memory in memories if memory.episode_id})
+    phrases = [
+        f"{(memory.activity or memory.description).rstrip('.')} ({format_time(memory.timestamp, language)})"
+        for memory in memories
+    ]
+    if language == "ar":
+        answer = f"لحظاتك المحفوظة اليوم: {'، '.join(phrases)}."
+    else:
+        count = len(memories)
+        noun = "moment" if count == 1 else "moments"
+        answer = f"Today you saved {count} {noun}: {'; '.join(phrases)}."
+    evidence: list[QueryEvidence] = []
+    for memory in memories:
+        correction = latest_correction(db, memory.id)
+        evidence.append(
+            QueryEvidence(
+                source_id=f"memory:{memory.id}",
+                label=f"Saved memory #{memory.id}",
+                detail=memory.location,
+                recorded_at=memory.timestamp,
+                image_url=media_url(memory.image_path),
+                corrected_at=correction[0] if correction else None,
+                corrected_by=correction[1] if correction else None,
+            )
+        )
+    for episode in sorted(episodes.values(), key=lambda item: (item.start_time, item.id)):
+        evidence.append(
+            QueryEvidence(
+                source_id=f"episode:{episode.id}",
+                label=f"Episode (grouped automatically): {episode.title}",
+                detail=episode.location or "",
+                recorded_at=episode.start_time,
+            )
+        )
+    return QueryResponse(
+        answer=answer,
+        intent="day_summary",
+        source_ids=[item.source_id for item in evidence],
+        evidence=evidence,
         language=language,
     )

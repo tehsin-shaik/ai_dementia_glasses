@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .correction_service import latest_correction
 from .formatting import format_time, media_url
-from .models import Memory
+from .models import Episode, Memory
 from .schemas import Language, RewindMoment, RewindResponse
 
 DEFAULT_WINDOW_MINUTES = 10
@@ -22,6 +22,7 @@ def moment_source(memory: Memory) -> str:
 
 def to_moment(db: Session, memory: Memory) -> RewindMoment:
     correction = latest_correction(db, memory.id)
+    episode = db.get(Episode, memory.episode_id) if memory.episode_id else None
     return RewindMoment(
         memory_id=memory.id,
         recorded_at=memory.timestamp,
@@ -32,6 +33,8 @@ def to_moment(db: Session, memory: Memory) -> RewindMoment:
         source=moment_source(memory),
         corrected_at=correction[0] if correction else None,
         corrected_by=correction[1] if correction else None,
+        episode_id=episode.id if episode else None,
+        episode_title=episode.title if episode else None,
     )
 
 

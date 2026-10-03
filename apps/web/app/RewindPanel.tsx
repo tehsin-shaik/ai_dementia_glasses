@@ -34,6 +34,7 @@ const COPY = {
     sample: "Sample record",
     noPhoto: "No photo saved",
     corrected: "Caregiver corrected",
+    episode: "Part of",
     failed: "Saved moments could not be loaded.",
     times: `Times are shown exactly as recorded. Rewind covers the last ${REWIND_WINDOW_MINUTES} minutes.`,
   },
@@ -51,6 +52,7 @@ const COPY = {
     sample: "سجل تجريبي",
     noPhoto: "لا توجد صورة محفوظة",
     corrected: "صحّحه مقدّم الرعاية",
+    episode: "جزء من",
     failed: "تعذّر تحميل اللحظات المحفوظة.",
     times: `تُعرض الأوقات كما سُجّلت. يغطي الاسترجاع آخر ${REWIND_WINDOW_MINUTES} دقيقة.`,
   },
@@ -136,6 +138,11 @@ function MomentCard({
       <span className="rewind-card-source">
         {moment.source === "capture" ? copy.capture : copy.sample}
       </span>
+      {language === "en" && moment.episode_title && (
+        <span className="rewind-card-source">
+          {copy.episode} · {moment.episode_title}
+        </span>
+      )}
       {moment.corrected_at !== null && (
         <span className="rewind-card-corrected">
           {copy.corrected} · {moment.corrected_by} · {formatMomentTime(moment.corrected_at, language)}

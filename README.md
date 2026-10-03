@@ -283,6 +283,7 @@ See:
 
 * [MVP definition](docs/MVP.md)
 * [Architecture](docs/architecture.md)
+* [Memory architecture (Observation → Event → Episode → Memory)](docs/MEMORY_ARCHITECTURE.md)
 * [Frontend audit](docs/AUDIT_FRONTEND.md)
 
 ## Run Locally

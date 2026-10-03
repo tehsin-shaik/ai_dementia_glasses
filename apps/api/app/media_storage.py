@@ -1,5 +1,6 @@
 """Safe local storage for uploaded memory images."""
 
+from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 import mimetypes
 import os
@@ -7,6 +8,9 @@ from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy.orm import Session
+
+from .models import MediaBlob
 
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -70,20 +74,48 @@ async def save_uploaded_image(upload: UploadFile) -> str:
     """Store a supported image under a unique local filename."""
 
     extension, image_bytes = await read_uploaded_image(upload)
+    unique_name = new_media_filename(extension)
+    write_media_file(unique_name, image_bytes)
+    return unique_name
 
+
+def write_media_file(filename: str, data: bytes) -> None:
     media_directory = configured_media_directory()
     media_directory.mkdir(parents=True, exist_ok=True)
-    unique_name = new_media_filename(extension)
-    final_path = media_directory / unique_name
+    final_path = media_directory / filename
     temporary_path = media_directory / f".{uuid4().hex}.upload"
-
     try:
-        temporary_path.write_bytes(image_bytes)
+        temporary_path.write_bytes(data)
         temporary_path.replace(final_path)
-        return unique_name
     finally:
         if temporary_path.exists():
             temporary_path.unlink()
+
+
+@dataclass
+class StoredImage:
+    filename: str
+    data: bytes
+    in_database: bool
+
+
+async def store_uploaded_image(db: Session, user_id: int, upload: UploadFile) -> StoredImage:
+    """Persist an upload as a file or, with MEDIA_STORAGE=database, as a row in this session."""
+
+    extension, data = await read_uploaded_image(upload)
+    filename = new_media_filename(extension)
+    if uses_database_media():
+        db.add(MediaBlob(filename=filename, user_id=user_id, content_type=media_type_for(filename), data=data))
+        return StoredImage(filename, data, True)
+    write_media_file(filename, data)
+    return StoredImage(filename, data, False)
+
+
+def discard_stored_image(stored: StoredImage | None) -> None:
+    """Undo a file write after a failed transaction; database rows roll back on their own."""
+
+    if stored is not None and not stored.in_database:
+        remove_uploaded_image(stored.filename)
 
 
 def validate_image_extension(filename: str | None) -> str:

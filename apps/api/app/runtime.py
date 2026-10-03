@@ -1,12 +1,11 @@
 """Deployment-time configuration for hosted demo environments."""
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 import os
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .database import advisory_lock
 from .models import User
 from .seed import seed_demo_data
 
@@ -23,27 +22,6 @@ def allowed_origins() -> list[str]:
     return LOCAL_ORIGINS + [origin for origin in extra if origin not in LOCAL_ORIGINS]
 
 
-@contextmanager
-def _seed_lock(db: Session) -> Iterator[None]:
-    """Serialize seeding so concurrent cold starts cannot duplicate the demo data."""
-
-    bind = db.get_bind()
-    if bind.dialect.name != "postgresql":
-        yield
-        return
-    # The lock lives on its own connection so the seeding commits cannot release it.
-    with bind.connect() as connection:
-        connection.execute(text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": SEED_LOCK_ID})
-        connection.commit()
-        try:
-            yield
-        finally:
-            connection.execute(
-                text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": SEED_LOCK_ID}
-            )
-            connection.commit()
-
-
 def seed_if_empty(db: Session) -> bool:
     """Insert demo data when the database has no users yet.
 
@@ -51,7 +29,7 @@ def seed_if_empty(db: Session) -> bool:
     to exist before the first request reaches them.
     """
 
-    with _seed_lock(db):
+    with advisory_lock(db, SEED_LOCK_ID):
         if db.scalar(select(func.count()).select_from(User)):
             return False
         seed_demo_data(db)

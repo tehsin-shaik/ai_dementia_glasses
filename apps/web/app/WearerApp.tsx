@@ -706,6 +706,7 @@ export default function WearerApp() {
     formData.append("timestamp", memoryTimestamp);
     formData.append("location", memoryLocation);
     formData.append("description", memoryDescription);
+    formData.append("source", memoryImageSource === "camera" ? "browser_camera" : "uploaded_image");
     if (memoryActivity.trim()) {
       formData.append("activity", memoryActivity);
     }

@@ -5,17 +5,27 @@ from datetime import date, datetime, time
 from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
+from .episode_service import consolidate_episodes
+from .memory_service import save_reviewed_moment
 from .models import (
     Caregiver,
     CaregiverNote,
     CaregiverPatientAccess,
     CuePresentation,
     CueState,
+    Episode,
+    EpisodeEvent,
+    EpisodeObservation,
+    Event,
+    EventObservation,
     ImportantObject,
     MediaBlob,
     Memory,
     MemoryCorrection,
+    MemoryEvent,
+    MemoryObservation,
     ObjectObservation,
+    Observation,
     PatientProfile,
     Person,
     PersonFaceEnrollment,
@@ -24,6 +34,8 @@ from .models import (
     User,
 )
 
+
+KEYS_MEMORY_INDEX = 2
 
 SEEDED_MODELS = (
     # Children first so this remains safe when foreign keys are enforced.
@@ -37,9 +49,17 @@ SEEDED_MODELS = (
     PersonFaceEnrollment,
     Person,
     MemoryCorrection,
+    MemoryEvent,
+    MemoryObservation,
+    EpisodeEvent,
+    EpisodeObservation,
+    EventObservation,
     ObjectObservation,
     MediaBlob,
     Memory,
+    Episode,
+    Event,
+    Observation,
     PatientProfile,
     Caregiver,
     User,
@@ -131,28 +151,21 @@ def seed_demo_data(db: Session) -> dict[str, int | list[int]]:
 
         db.add(PatientProfile(user_id=user.id, **patient["profile"]))
         memories: list[Memory] = []
-        for memory_time, location, activity, description in patient["memory_rows"]:
-            memory = Memory(
-                user_id=user.id,
+        for index, (memory_time, location, activity, description) in enumerate(patient["memory_rows"]):
+            saved = save_reviewed_moment(
+                db,
+                user.id,
                 timestamp=datetime.combine(today, memory_time),
                 location=location,
                 activity=activity,
                 description=description,
+                object_name="keys" if index == KEYS_MEMORY_INDEX else "",
+                object_location=patient["key_location"],
+                metadata={"seeded": True},
             )
-            db.add(memory)
-            db.flush()
-            memories.append(memory)
+            memories.append(saved.memory)
         memories_by_user.append(memories)
-
-        db.add(
-            ObjectObservation(
-                user_id=user.id,
-                object_name="keys",
-                location=patient["key_location"],
-                observed_at=memories[2].timestamp,
-                memory_id=memories[2].id,
-            )
-        )
+        consolidate_episodes(db, user.id)
         person_name, relationship = patient["person"]
         db.add(Person(user_id=user.id, name=person_name, relationship=relationship))
         db.add_all(
