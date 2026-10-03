@@ -42,12 +42,14 @@ def save_reviewed_moment(
     image_path: str | None = None,
     source: str = "other",
     metadata: dict | None = None,
+    capture: Observation | None = None,
 ) -> SavedMoment:
     """Store a wearer-reviewed moment through the observation pipeline.
 
     The Memory keeps its long-standing columns, so existing answers, rewind,
     corrections, and cues read it unchanged; the observation and events beneath
-    it are the evidence chain. Episode grouping happens later.
+    it are the evidence chain. Episode grouping happens later. A `capture` is
+    the unreviewed observation the wearer reviewed; it is linked, not edited.
     """
 
     normalized_object = object_name.strip().casefold()
@@ -66,7 +68,7 @@ def save_reviewed_moment(
             if normalized_object
             else [],
             reviewed=True,
-            metadata=metadata or {},
+            metadata={**(metadata or {}), **({"reviewed_from_observation_id": capture.id} if capture else {})},
         ),
     )
     events = observation_events(db, observation.id)
@@ -87,6 +89,9 @@ def save_reviewed_moment(
     db.add(memory)
     db.flush()
     link_memory(db, memory, observation, events)
+    if capture is not None:
+        db.add(MemoryObservation(memory_id=memory.id, observation_id=capture.id))
+        db.flush()
 
     object_observation = None
     if normalized_object:

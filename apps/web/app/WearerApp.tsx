@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, SyntheticEvent, useCallback, useEffect, useRef,
 import GlassesSimulator from "./GlassesSimulator";
 import { MemoryHudState, ProactiveCue, QueryEvidence } from "./MemoryHud";
 import { memoryCueFetch } from "./api";
+import { observationFormData, type Capture } from "./capture";
 import RewindPanel from "./RewindPanel";
 import SiteNav from "./SiteNav";
 import {
@@ -260,12 +261,15 @@ export default function WearerApp() {
   const [isAnalyzingVision, setIsAnalyzingVision] = useState(false);
   const [isSavingMemory, setIsSavingMemory] = useState(false);
   const [cameraSaved, setCameraSaved] = useState(false);
+  const [captureObservationId, setCaptureObservationId] = useState<number | null>(null);
+  const [isRecordingCapture, setIsRecordingCapture] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [proactiveCuesEnabled, setProactiveCuesEnabled] = useState(true);
   const [proactiveCue, setProactiveCue] = useState<ProactiveCue | null>(null);
   const [proactiveRefreshToken, setProactiveRefreshToken] = useState(0);
   const [rewindRefreshToken, setRewindRefreshToken] = useState(0);
   const hudRequestRef = useRef(0);
+  const captureRequestRef = useRef(0);
   const profileVersionRef = useRef(0);
   const proactiveRequestRef = useRef(0);
   const dismissedCueKeysRef = useRef<Set<string>>(new Set());
@@ -702,11 +706,15 @@ export default function WearerApp() {
     const requestUserId = activeUserId;
     const requestProfileVersion = profileVersionRef.current;
     const formData = new FormData();
-    formData.append("image", memoryImage);
+    if (memoryImageSource === "camera" && captureObservationId !== null) {
+      formData.append("observation_id", String(captureObservationId));
+    } else {
+      formData.append("image", memoryImage);
+      formData.append("source", memoryImageSource === "camera" ? "browser_camera" : "uploaded_image");
+    }
     formData.append("timestamp", memoryTimestamp);
     formData.append("location", memoryLocation);
     formData.append("description", memoryDescription);
-    formData.append("source", memoryImageSource === "camera" ? "browser_camera" : "uploaded_image");
     if (memoryActivity.trim()) {
       formData.append("activity", memoryActivity);
     }
@@ -811,7 +819,36 @@ export default function WearerApp() {
     setError("A memory image could not be displayed.");
   }
 
+  function forgetCapture() {
+    captureRequestRef.current += 1;
+    setCaptureObservationId(null);
+    setIsRecordingCapture(false);
+  }
+
+  async function recordCapture(capture: Capture) {
+    const requestId = captureRequestRef.current + 1;
+    captureRequestRef.current = requestId;
+    setIsRecordingCapture(true);
+    try {
+      const response = await memoryCueFetch(`${API_URL}/api/observations`, activeUserId, {
+        method: "POST",
+        body: observationFormData(capture),
+      });
+      const payload: unknown = response.ok ? await response.json() : null;
+      if (captureRequestRef.current === requestId && isRecord(payload) && typeof payload.id === "number") {
+        setCaptureObservationId(payload.id);
+      }
+    } catch {
+      // Saving falls back to uploading the image with the reviewed memory.
+    } finally {
+      if (captureRequestRef.current === requestId) {
+        setIsRecordingCapture(false);
+      }
+    }
+  }
+
   function selectUploadedImage(nextFile: File | null) {
+    forgetCapture();
     setMemoryImage(nextFile);
     setMemoryImageSource(nextFile ? "upload" : null);
     setSaveMessage(null);
@@ -837,10 +874,11 @@ export default function WearerApp() {
     selectUploadedImage(new File([await response.blob()], name, { type: "image/jpeg" }));
   }
 
-  function handleCameraCapture(file: File) {
+  function handleCameraCapture(capture: Capture) {
+    const file = capture.image;
     setMemoryImage(file);
     setMemoryImageSource("camera");
-    setMemoryTimestamp(localDateTimeValue(new Date()));
+    setMemoryTimestamp(localDateTimeValue(capture.capturedAt));
     setMemoryLocation("");
     setMemoryActivity("");
     setMemoryDescription("");
@@ -853,9 +891,11 @@ export default function WearerApp() {
     setError(null);
     setPreviewUrl(URL.createObjectURL(file));
     clearHud();
+    void recordCapture(capture);
   }
 
   function handleCameraRetake() {
+    forgetCapture();
     setMemoryImage(null);
     setMemoryImageSource(null);
     setMemoryLocation("");
@@ -1134,7 +1174,7 @@ export default function WearerApp() {
               />
             </label>
             <div className="save-row">
-              <button className="primary-button" type="button" onClick={saveMemory} disabled={isSavingMemory}>
+              <button className="primary-button" type="button" onClick={saveMemory} disabled={isSavingMemory || isRecordingCapture}>
                 {isSavingMemory ? "Saving..." : "Save memory"}
               </button>
               {saveMessage && <p className="success-message" role="status">{saveMessage}</p>}
