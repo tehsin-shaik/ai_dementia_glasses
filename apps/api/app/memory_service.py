@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .episode_service import refresh_episode
+from .event_service import REVIEWED_INFERENCES
 from .models import (
     Episode,
     Event,
@@ -132,7 +133,7 @@ def sync_memory_events(db: Session, memory: Memory) -> None:
     events = db.scalars(
         select(Event)
         .join(MemoryEvent, MemoryEvent.event_id == Event.id)
-        .where(MemoryEvent.memory_id == memory.id, Event.inference.in_(("reviewed", "legacy_migration")))
+        .where(MemoryEvent.memory_id == memory.id, Event.inference.in_(REVIEWED_INFERENCES))
     )
     for event in events:
         if event.event_type == "recorded_activity":

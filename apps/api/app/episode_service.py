@@ -7,10 +7,13 @@ on it. It is idempotent: each event joins at most one episode.
 
 from collections import Counter
 from datetime import datetime, timedelta
+import logging
 
-from sqlalchemy import Connection, Engine, select
+from sqlalchemy import Connection, Engine, func, select
 from sqlalchemy.orm import Session
 
+from .database import advisory_lock
+from .event_service import REVIEWED_INFERENCES
 from .formatting import format_time
 from .models import (
     Episode,
@@ -25,6 +28,8 @@ from .models import (
 
 EPISODE_GAP = timedelta(minutes=20)
 REPRESENTATIVE_LIMIT = 3
+CONSOLIDATION_LOCK_BASE = 8_412_600_000_000
+logger = logging.getLogger(__name__)
 
 
 def _event_end(event: Event) -> datetime:
@@ -53,25 +58,31 @@ def unassigned_events(db: Session, user_id: int) -> list[Event]:
     )
 
 
+def _distance(episode: Episode, moment: datetime) -> timedelta:
+    end = episode.end_time or episode.start_time
+    if moment < episode.start_time:
+        return episode.start_time - moment
+    if moment > end:
+        return moment - end
+    return timedelta(0)
+
+
 def episode_for(db: Session, event: Event) -> Episode | None:
-    """An episode whose span, widened by the gap, covers the event's start."""
+    """The nearest episode whose span, widened by the gap, covers the event's start.
+
+    Ties go to the earlier episode, so the same events always group the same way.
+    """
 
     candidates = db.scalars(
-        select(Episode).where(
+        select(Episode)
+        .where(
             Episode.user_id == event.user_id,
             Episode.start_time <= event.start_time + EPISODE_GAP,
+            func.coalesce(Episode.end_time, Episode.start_time) >= event.start_time - EPISODE_GAP,
         )
+        .order_by(Episode.start_time, Episode.id)
     )
-    best: Episode | None = None
-    for episode in candidates:
-        end = episode.end_time or episode.start_time
-        if event.start_time > end + EPISODE_GAP:
-            continue
-        if best is None or abs((episode.start_time - event.start_time).total_seconds()) < abs(
-            (best.start_time - event.start_time).total_seconds()
-        ):
-            best = episode
-    return best
+    return min(candidates, key=lambda episode: _distance(episode, event.start_time), default=None)
 
 
 def _merge_named(entries: list[list | None]) -> list[dict]:
@@ -193,9 +204,48 @@ def consolidate_episodes(db: Session, user_id: int) -> list[Episode]:
     return list(touched.values())
 
 
+def consolidate_and_commit(db: Session, user_id: int) -> list[Episode]:
+    """Consolidate and commit while holding a per-user lock, so concurrent runs cannot double-assign events."""
+
+    with advisory_lock(db, CONSOLIDATION_LOCK_BASE + user_id):
+        episodes = consolidate_episodes(db, user_id)
+        db.commit()
+    return episodes
+
+
 def consolidate_in_background(bind: Engine | Connection, user_id: int) -> None:
-    """Run consolidation in its own session, e.g. from a FastAPI background task."""
+    """Run consolidation in its own session, e.g. from a FastAPI background task.
+
+    Captures are already committed; a failure here only leaves events ungrouped until the next run.
+    """
 
     with Session(bind=bind) as db:
-        consolidate_episodes(db, user_id)
-        db.commit()
+        try:
+            consolidate_and_commit(db, user_id)
+        except Exception:
+            db.rollback()
+            logger.exception("Episode consolidation failed for user %s.", user_id)
+
+
+def grounded_episode_titles(db: Session, user_id: int, episode_ids: set[int]) -> dict[int, str]:
+    """Wearer-facing episode labels built only from reviewed or legacy saved events.
+
+    Rule-inferred and unreviewed events still shape `Episode.title` for timelines,
+    but never the label shown next to saved moments or spoken answers.
+    """
+
+    if not episode_ids:
+        return {}
+    grouped: dict[int, list[Event]] = {}
+    for episode_id, event in db.execute(
+        select(EpisodeEvent.episode_id, Event)
+        .join(Event, Event.id == EpisodeEvent.event_id)
+        .where(
+            EpisodeEvent.episode_id.in_(episode_ids),
+            Event.user_id == user_id,
+            Event.inference.in_(REVIEWED_INFERENCES),
+        )
+        .order_by(Event.start_time, Event.id)
+    ):
+        grouped.setdefault(episode_id, []).append(event)
+    return {episode_id: describe(events)[0] for episode_id, events in grouped.items()}

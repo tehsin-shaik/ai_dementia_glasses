@@ -6,10 +6,10 @@ import re
 from sqlalchemy.orm import Session
 
 from .correction_service import latest_correction
+from .episode_service import grounded_episode_titles
 from .formatting import format_time, media_url
 from .models import Memory
 from .retrieval_service import (
-    episodes_by_id,
     find_person,
     known_object_names,
     latest_activity_memory,
@@ -372,7 +372,7 @@ def day_summary(db: Session, user_id: int, language: Language = "en") -> QueryRe
     memories = memories_for_day(db, user_id, date.today())
     if not memories:
         return unknown_response(language)
-    episodes = episodes_by_id(db, user_id, {memory.episode_id for memory in memories if memory.episode_id})
+    episode_titles = grounded_episode_titles(db, user_id, {memory.episode_id for memory in memories if memory.episode_id})
     phrases = [
         f"{(memory.activity or memory.description).rstrip('.')} ({format_time(memory.timestamp, language)})"
         for memory in memories
@@ -397,13 +397,17 @@ def day_summary(db: Session, user_id: int, language: Language = "en") -> QueryRe
                 corrected_by=correction[1] if correction else None,
             )
         )
-    for episode in sorted(episodes.values(), key=lambda item: (item.start_time, item.id)):
+    episode_memories: dict[int, list[Memory]] = {}
+    for memory in memories:
+        if memory.episode_id in episode_titles:
+            episode_memories.setdefault(memory.episode_id, []).append(memory)
+    for episode_id, members in sorted(episode_memories.items(), key=lambda item: (item[1][0].timestamp, item[0])):
         evidence.append(
             QueryEvidence(
-                source_id=f"episode:{episode.id}",
-                label=f"Episode (grouped automatically): {episode.title}",
-                detail=episode.location or "",
-                recorded_at=episode.start_time,
+                source_id=f"episode:{episode_id}",
+                label=f"Episode (grouped automatically): {episode_titles[episode_id]}",
+                detail=", ".join(dict.fromkeys(member.location for member in members)),
+                recorded_at=members[0].timestamp,
             )
         )
     return QueryResponse(

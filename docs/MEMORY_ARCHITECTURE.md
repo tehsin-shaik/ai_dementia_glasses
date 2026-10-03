@@ -80,6 +80,16 @@ the timeline endpoints with their confidence, but they are never spoken as
 facts. If nothing reviewed matches, the answer is the standard "I don't know"
 with no sources.
 
+Episode labels shown to the wearer (`episode_title` in `/api/memories` and
+`/api/rewind`, and episode evidence in answers) are rebuilt from the episode's
+reviewed and legacy events only, so an unreviewed capture or a rule-inferred
+activity in the same 20-minute window never appears there. `Episode.title` on
+`GET /api/episodes` still reflects every event.
+
+Event inference runs in a savepoint: if a rule fails, the observation is kept
+without events. Background consolidation runs after the capture is committed,
+under a per-user advisory lock, and a failure only leaves events ungrouped.
+
 New intent: **"What did I do today?"** (`ماذا فعلت اليوم؟`) lists today's saved
 moments in order and cites the episodes they belong to. With no saved moments
 it returns the unknown answer. "What am I doing today?" stays the schedule.
@@ -102,8 +112,14 @@ advisory lock (a no-op on SQLite), and is safe to run repeatedly.
 
 Nothing is deleted. Memory ids, people, objects, schedules, corrections, and
 image references are untouched. No end times, coordinates, people, or source
-hardware are invented. The startup migration and the full hierarchy were checked
-against SQLite (tests) and a real Postgres 16 instance.
+hardware are invented. Column adds use `IF NOT EXISTS` on Postgres so concurrent
+cold starts cannot collide, and a consolidation failure cannot undo the backfill.
+
+Postgres-specific behaviour (JSON round-trips, grouping queries, savepoint
+rollback, advisory locks, concurrent consolidation, concurrent and repeated
+migration) is covered by `apps/api/tests/test_memory_architecture_postgres.py`,
+which runs when `MEMORYCUE_TEST_POSTGRES_URL` points at a disposable database
+and is skipped otherwise.
 
 ## API
 

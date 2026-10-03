@@ -7,6 +7,8 @@ Observation -> Event chain and then groups events into episodes. Nothing is
 deleted or rewritten, and only data already stored is copied.
 """
 
+import logging
+
 from sqlalchemy import Engine, inspect, select, text
 from sqlalchemy.orm import Session
 
@@ -24,6 +26,7 @@ from .models import (
 )
 
 MIGRATION_LOCK_ID = 8412557302
+logger = logging.getLogger(__name__)
 
 # Column name -> DDL type, added to `memories` when missing. All are nullable.
 MEMORY_COLUMNS = {
@@ -44,9 +47,11 @@ def add_missing_columns(engine: Engine) -> list[str]:
     existing = {column["name"] for column in inspect(engine).get_columns("memories")}
     added = [name for name in MEMORY_COLUMNS if name not in existing]
     if added:
+        # Concurrent cold starts may race here; Postgres can skip columns another instance just added.
+        guard = "IF NOT EXISTS " if engine.dialect.name == "postgresql" else ""
         with engine.begin() as connection:
             for name in added:
-                connection.execute(text(f"ALTER TABLE memories ADD COLUMN {name} {MEMORY_COLUMNS[name]}"))
+                connection.execute(text(f"ALTER TABLE memories ADD COLUMN {guard}{name} {MEMORY_COLUMNS[name]}"))
     return added
 
 
@@ -119,7 +124,11 @@ def backfill_legacy_memories(db: Session) -> int:
         backfill_memory(db, memory)
     user_ids = {memory.user_id for memory in memories}
     for user_id in sorted(user_ids):
-        consolidate_episodes(db, user_id)
+        try:
+            with db.begin_nested():
+                consolidate_episodes(db, user_id)
+        except Exception:
+            logger.exception("Episode consolidation failed during migration for user %s.", user_id)
     return len(memories)
 
 

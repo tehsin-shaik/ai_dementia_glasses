@@ -694,3 +694,94 @@ def test_app_still_serves_legacy_data_after_migration(engine, session_factory, c
     rewind = client.get("/api/rewind", params={"include_earlier": "true"}).json()
     assert {moment["memory_id"] for moment in rewind["moments"]} == {7, 9}
     assert client.get("/api/observations").json()[0]["metadata"]["original_source"] == "unknown"
+
+
+# --- Review regressions -------------------------------------------------------
+
+
+def test_unreviewed_captures_never_reach_spoken_or_wearer_facing_episode_labels(client: TestClient) -> None:
+    seed(client)
+    captured = client.post(
+        "/api/observations",
+        data={"timestamp": at(10, 12).isoformat(), "source": "meta_glasses", "location_label": "Garden shed", "people": "Sarah"},
+    )
+    assert captured.status_code == 201
+    assert client.post("/api/episodes/consolidate").status_code == 200
+
+    summary = client.post("/api/query", json={"question": "What did I do today?"}).json()
+    episode_labels = [item["label"] for item in summary["evidence"] if item["source_id"].startswith("episode:")]
+    assert episode_labels
+    spoken_surface = " ".join([summary["answer"], *(item["label"] + item["detail"] for item in summary["evidence"])])
+    assert "Garden shed" not in spoken_surface
+    assert "Sarah" not in spoken_surface
+    assert "Getting ready to leave" not in spoken_surface
+
+    rewind = client.get("/api/rewind", params={"include_earlier": "true"}).json()["moments"]
+    memories = client.get("/api/memories").json()
+    titles = {item["episode_title"] for item in [*rewind, *memories] if item.get("episode_title")}
+    assert titles and all("Garden shed" not in title and "Getting ready" not in title for title in titles)
+    assert "kitchen counter" in client.post("/api/query", json={"question": "Where are my keys?"}).json()["answer"]
+
+
+def test_failed_event_inference_still_saves_the_observation(client: TestClient, db: Session, monkeypatch) -> None:
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("event rule crashed")
+
+    monkeypatch.setattr("app.observation_service.events_for_observation", broken)
+    user = make_user(db)
+    observation = create_observation(db, user.id, ObservationInput(timestamp=at(9), description="Something happened."))
+    db.commit()
+    assert db.get(Observation, observation.id) is not None
+    assert observation_events(db, observation.id) == []
+
+    seed(client)
+    created = client.post("/api/observations", data={"timestamp": at(9, 30).isoformat(), "source": "iphone_camera"})
+    assert created.status_code == 201
+    saved = client.post(
+        "/api/memories",
+        files={"image": ("photo.jpg", b"fake-image-content", "image/jpeg")},
+        data={"timestamp": at(9, 40).isoformat(), "location": "Hall", "description": "Coat on the hook."},
+    )
+    assert saved.status_code == 201
+    assert saved.json()["id"] in {memory["id"] for memory in client.get("/api/memories").json()}
+
+
+def test_failed_background_consolidation_keeps_saved_data(client: TestClient, monkeypatch) -> None:
+    seed(client)
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("grouping crashed")
+
+    monkeypatch.setattr("app.episode_service.consolidate_episodes", broken)
+    created = client.post("/api/observations", data={"timestamp": at(9, 30).isoformat(), "source": "browser_camera"})
+    assert created.status_code == 201
+    assert created.json()["id"] in {item["id"] for item in client.get("/api/observations").json()}
+
+
+def test_episode_gap_boundary_is_inclusive_and_ties_are_deterministic(db: Session) -> None:
+    user = make_user(db)
+    for when in (at(9, 0), at(9, 20), at(9, 40) + timedelta(seconds=1)):
+        save_reviewed_moment(db, user.id, timestamp=when, location="Kitchen", description=f"Moment at {when:%H:%M:%S}.")
+    db.flush()
+    consolidate_episodes(db, user.id)
+    before = {
+        "observations": len(db.scalars(select(Observation)).all()),
+        "events": len(db.scalars(select(Event)).all()),
+        "memories": len(db.scalars(select(Memory)).all()),
+    }
+    episodes = db.scalars(select(Episode).order_by(Episode.start_time)).all()
+    assert [(episode.start_time, episode.end_time) for episode in episodes] == [
+        (at(9, 0), at(9, 20)),
+        (at(9, 40) + timedelta(seconds=1), None),
+    ]
+
+    # Exactly between two episodes: joins the earlier one, every time.
+    save_reviewed_moment(db, user.id, timestamp=at(9, 30) + timedelta(milliseconds=500), location="Kitchen", description="Between.")
+    db.flush()
+    consolidate_episodes(db, user.id)
+    consolidate_episodes(db, user.id)
+    middle = db.scalar(select(Memory).where(Memory.description == "Between."))
+    assert middle.episode_id == episodes[0].id
+    assert len(db.scalars(select(EpisodeEvent)).all()) == len(db.scalars(select(Event)).all())
+    assert len(db.scalars(select(Observation)).all()) == before["observations"] + 1
+    assert len(db.scalars(select(Memory)).all()) == before["memories"] + 1

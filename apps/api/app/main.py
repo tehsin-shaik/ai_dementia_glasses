@@ -17,7 +17,7 @@ from .database import SessionLocal, engine, get_db, init_db
 from .migrations import run_migrations
 from .face.routes import router as face_router
 from .identity import get_current_user
-from .episode_service import consolidate_in_background
+from .episode_service import consolidate_in_background, grounded_episode_titles
 from .media_storage import (
     StoredImage,
     discard_stored_image,
@@ -30,7 +30,6 @@ from .memory_service import save_reviewed_moment
 from .models import MediaBlob, Memory, Observation, User
 from .observation_service import ObservationValidationError
 from .query_service import answer_question
-from .retrieval_service import episodes_by_id
 from .rewind_service import DEFAULT_WINDOW_MINUTES, build_rewind
 from .runtime import allowed_origins, seed_if_empty
 from .schemas import (
@@ -237,7 +236,7 @@ def list_memories(
             .order_by(Memory.timestamp.desc(), Memory.id.desc())
         )
     )
-    episodes = episodes_by_id(db, current_user.id, {memory.episode_id for memory in memories if memory.episode_id})
+    episode_titles = grounded_episode_titles(db, current_user.id, {memory.episode_id for memory in memories if memory.episode_id})
     return [
         MemoryListItem(
             id=memory.id,
@@ -247,7 +246,7 @@ def list_memories(
             image_url=image_url(memory.image_path),
             title=memory.title,
             episode_id=memory.episode_id,
-            episode_title=episodes[memory.episode_id].title if memory.episode_id in episodes else None,
+            episode_title=episode_titles.get(memory.episode_id) if memory.episode_id else None,
         )
         for memory in memories
     ]

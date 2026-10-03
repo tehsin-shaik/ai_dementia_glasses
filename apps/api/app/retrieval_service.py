@@ -103,13 +103,6 @@ def memories_for_day(db: Session, user_id: int, day: date) -> list[Memory]:
     )
 
 
-def episodes_by_id(db: Session, user_id: int, episode_ids: set[int]) -> dict[int, Episode]:
-    if not episode_ids:
-        return {}
-    rows = db.scalars(select(Episode).where(Episode.user_id == user_id, Episode.id.in_(episode_ids)))
-    return {episode.id: episode for episode in rows}
-
-
 def _in_window(query: Select, column, day: date | None, since: datetime | None) -> Select:
     if day is not None:
         start, end = day_bounds(day)
@@ -161,6 +154,20 @@ def observation_ids_for_events(db: Session, event_ids: list[int]) -> dict[int, l
         .order_by(EventObservation.observation_id)
     ):
         linked[event_id].append(observation_id)
+    return linked
+
+
+def event_ids_for_observations(db: Session, observation_ids: list[int]) -> dict[int, list[int]]:
+    linked: dict[int, list[int]] = {observation_id: [] for observation_id in observation_ids}
+    if not observation_ids:
+        return linked
+    for observation_id, event_id in db.execute(
+        select(EventObservation.observation_id, EventObservation.event_id)
+        .join(Event, Event.id == EventObservation.event_id)
+        .where(EventObservation.observation_id.in_(observation_ids))
+        .order_by(Event.start_time, Event.id)
+    ):
+        linked[observation_id].append(event_id)
     return linked
 
 

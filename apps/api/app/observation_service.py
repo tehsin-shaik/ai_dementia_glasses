@@ -6,6 +6,7 @@ all produce the same record, so new capture hardware only needs to call it.
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import logging
 import os
 
 from pydantic import ValidationError
@@ -26,6 +27,7 @@ OBSERVATION_SOURCES = (
     "other",
 )
 FUTURE_TOLERANCE = timedelta(days=1)
+logger = logging.getLogger(__name__)
 EARLIEST_TIMESTAMP = datetime(2000, 1, 1)
 
 
@@ -193,5 +195,9 @@ def create_observation(
     db.add(observation)
     db.flush()
     if generate_events:
-        events_for_observation(db, observation)
+        try:
+            with db.begin_nested():
+                events_for_observation(db, observation)
+        except Exception:
+            logger.exception("Event inference failed for observation %s; it is kept without events.", observation.id)
     return observation

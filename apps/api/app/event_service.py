@@ -19,6 +19,8 @@ CONTEXT_LIMIT = 10
 MIN_OBJECT_CONFIDENCE = 0.6
 LOCATION_CHANGE_CONFIDENCE = 0.6
 PERSON_CONFIDENCE = 0.7
+# Events that only restate what the wearer reviewed or a pre-hierarchy saved memory.
+REVIEWED_INFERENCES = ("reviewed", "legacy_migration")
 
 
 @dataclass(frozen=True)
@@ -239,6 +241,8 @@ def activity_events(db: Session, observation: Observation, context: list[Observa
                 Event.start_time >= observation.timestamp - CONTEXT_WINDOW,
                 Event.start_time <= observation.timestamp,
             )
+            .order_by(Event.start_time.desc(), Event.id.desc())
+            .limit(1)
         )
         if existing is not None:
             existing.end_time = max(existing.end_time or existing.start_time, observation.timestamp)

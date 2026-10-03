@@ -10,11 +10,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .episode_service import consolidate_episodes, consolidate_in_background
+from .episode_service import consolidate_and_commit, consolidate_in_background
 from .formatting import media_url
 from .identity import get_current_user
 from .media_storage import StoredImage, discard_stored_image, store_uploaded_image
-from .memory_service import observation_events
 from .memory_text import episode_to_text, event_to_text, observation_to_text
 from .models import Episode, Event, Observation, User
 from .observation_service import (
@@ -26,6 +25,7 @@ from .observation_service import (
 )
 from .retrieval_service import (
     episode_links,
+    event_ids_for_observations,
     list_episodes,
     list_events,
     list_observations,
@@ -47,7 +47,7 @@ def _entities(entries: list | None) -> list[NamedEntity]:
     return [NamedEntity.model_validate(entry) for entry in entries or [] if isinstance(entry, dict)]
 
 
-def observation_response(db: Session, observation: Observation) -> ObservationResponse:
+def observation_response(observation: Observation, event_ids: list[int]) -> ObservationResponse:
     return ObservationResponse(
         id=observation.id,
         timestamp=observation.timestamp,
@@ -64,7 +64,7 @@ def observation_response(db: Session, observation: Observation) -> ObservationRe
         reviewed=observation.reviewed,
         analysis=(observation.extra or {}).get("analysis"),
         metadata=observation.extra or {},
-        event_ids=[event.id for event in observation_events(db, observation.id)],
+        event_ids=event_ids,
         text=observation_to_text(observation),
         created_at=observation.created_at,
     )
@@ -148,7 +148,7 @@ async def post_observation(
                 if analysis is not None:
                     apply_analysis(data, analysis, outcome)
         observation = create_observation(db, current_user.id, data)
-        response = observation_response(db, observation)
+        response = observation_response(observation, event_ids_for_observations(db, [observation.id])[observation.id])
         db.commit()
     except ObservationValidationError as exc:
         db.rollback()
@@ -170,10 +170,9 @@ def get_observations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[ObservationResponse]:
-    return [
-        observation_response(db, observation)
-        for observation in list_observations(db, current_user.id, day=day, since=since, limit=limit)
-    ]
+    observations = list_observations(db, current_user.id, day=day, since=since, limit=limit)
+    linked = event_ids_for_observations(db, [observation.id for observation in observations])
+    return [observation_response(observation, linked[observation.id]) for observation in observations]
 
 
 @router.get("/events", response_model=list[EventResponse])
@@ -210,6 +209,5 @@ def post_consolidate(
 ) -> ConsolidationResponse:
     """Group any events not yet in an episode; safe to call repeatedly or on a schedule."""
 
-    episodes = consolidate_episodes(db, current_user.id)
-    db.commit()
+    episodes = consolidate_and_commit(db, current_user.id)
     return ConsolidationResponse(episode_ids=sorted(episode.id for episode in episodes))
