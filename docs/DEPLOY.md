@@ -19,6 +19,7 @@ end before relying on it.
    | Name | Value |
    | --- | --- |
    | `DATABASE_URL` | a Postgres URL, e.g. `postgresql://user:pw@host/db` (see below) |
+   | `MEDIA_STORAGE` | `database` |
    | `MEDIA_DIR` | `/tmp/media` |
    | `SEED_ON_STARTUP` | `1` |
    | `NEXT_PUBLIC_API_URL` | the project's own URL, e.g. `https://memorycue.vercel.app` |
@@ -61,6 +62,8 @@ caregiver corrections — is shared by every instance and survives redeploys.
 Setting `DATABASE_URL` to `sqlite:////tmp/memorycue.db` still works for a
 throwaway deploy, with the caveat above.
 
-Photos are the remaining exception: `MEDIA_DIR` is a plain directory, so images
-saved on the hosted demo still live in `/tmp` and disappear with the instance
-while their text records remain.
+Photos follow the same rule once `MEDIA_STORAGE=database` is set: each uploaded
+image is written to a `media_blobs` row in the same transaction as its memory,
+so it survives instance recycling and redeploys. Without that variable images
+go to `MEDIA_DIR`, which on Vercel is `/tmp` and disappears with the instance
+while the text records remain. Images uploaded before the switch stay in `/tmp`.

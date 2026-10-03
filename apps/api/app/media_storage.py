@@ -27,6 +27,16 @@ def configured_media_directory() -> Path:
     return Path(configured_path).resolve()
 
 
+def uses_database_media() -> bool:
+    """Whether uploaded images are stored as database rows instead of local files."""
+
+    return (os.getenv("MEDIA_STORAGE") or "").strip().casefold() == "database"
+
+
+def new_media_filename(extension: str) -> str:
+    return f"{uuid4().hex}{extension}"
+
+
 def safe_media_path(filename: str) -> Path:
     """Resolve a generated filename and reject traversal or absolute paths."""
 
@@ -63,7 +73,7 @@ async def save_uploaded_image(upload: UploadFile) -> str:
 
     media_directory = configured_media_directory()
     media_directory.mkdir(parents=True, exist_ok=True)
-    unique_name = f"{uuid4().hex}{extension}"
+    unique_name = new_media_filename(extension)
     final_path = media_directory / unique_name
     temporary_path = media_directory / f".{uuid4().hex}.upload"
 

@@ -115,19 +115,21 @@ These are conservative, explainable reminders based on stored patient context. M
 
 The prototype supports creating a memory from an uploaded image. Select an image, enter its time, location, description, and optional activity, then optionally provide an object name such as `keys`.
 
-Uploaded images are stored locally with generated filenames. When an object is provided, MemoryCue records the observation so later questions use the newest matching memory. The current prototype accepts `.jpg`, `.jpeg`, `.png`, and `.webp` images up to 10 MB.
+Uploaded images are stored locally with generated filenames (or in the database when `MEDIA_STORAGE=database`, which the hosted demo uses). When an object is provided, MemoryCue records the observation so later questions use the newest matching memory. The current prototype accepts `.jpg`, `.jpeg`, `.png`, and `.webp` images up to 10 MB.
 
 ### AI-assisted image understanding
 
 When the optional external vision provider is configured, select an image and choose **Analyze with AI**. The image is sent to that provider, and MemoryCue returns concise suggestions for the description, location, activity, and visible objects. The suggestions are placed into the editable form for review; no MemoryCue memory record is created until the user chooses **Save memory**.
 
-To enable the OpenAI provider locally, set these variables in a `.env` file and start the API with that file:
+To enable a provider locally, set these variables in a `.env` file and start the API with that file. `VISION_PROVIDER` is `openai` or `gemini`:
 
 ```dotenv
 VISION_PROVIDER=openai
 VISION_MODEL=<a vision-capable model available to your account>
 VISION_API_KEY=<your API key>
 ```
+
+For Gemini, create a key at https://aistudio.google.com/app/apikey and set `VISION_PROVIDER=gemini` with a vision-capable Gemini model name. Free-tier Gemini requests may be used by Google to improve its products, so use demo photos rather than real personal images.
 
 ```powershell
 Copy-Item .env.example .env
