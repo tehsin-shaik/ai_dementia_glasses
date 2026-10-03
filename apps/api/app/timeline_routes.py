@@ -23,6 +23,7 @@ from .observation_service import (
     apply_analysis,
     create_observation,
 )
+from .retention_service import cleanup_in_background
 from .retrieval_service import (
     episode_links,
     event_ids_for_observations,
@@ -159,6 +160,7 @@ async def post_observation(
         discard_stored_image(stored)
         raise
     background_tasks.add_task(consolidate_in_background, db.get_bind(), current_user.id)
+    background_tasks.add_task(cleanup_in_background, db.get_bind(), current_user.id)
     return response
 
 
