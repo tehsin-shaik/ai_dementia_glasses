@@ -71,6 +71,25 @@ timestamp + source [+ image, transcript, coordinates, location_label, people]
   → background: consolidate_episodes()
 ```
 
+Browser camera (`apps/web/app/capture.ts`):
+
+```text
+CaptureSource.capture() → Capture { image, capturedAt, source, latitude?, longitude? }
+  → POST /api/observations (analyze=false) → unreviewed Observation
+  → optional "Analyze with AI" (POST /api/vision/analyze, stateless)
+  → wearer reviews and edits
+  → POST /api/memories with observation_id instead of an image
+     → reviewed Observation (metadata.reviewed_from_observation_id) + Memory
+     → the Memory reuses the capture's image and links to both observations
+```
+
+A capture is "the system observed something"; it becomes a Memory only when
+the wearer saves it. The raw capture is never edited and stays unreviewed.
+Only the owner's unreviewed captures with an image can be saved this way.
+`BrowserCamera` is the first `CaptureSource`; an iPhone or glasses client
+produces the same `Capture` with a different `source`, and the backend has no
+per-source path. Uploaded files still save directly with `source=uploaded_image`.
+
 ## Answers stay grounded
 
 Spoken answers (`POST /api/query`) still come only from reviewed records:

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { captureVideoFrame } from "./camera";
+import { browserCameraSource, type Capture } from "./capture";
 import {
   MemoryHudControls,
   MemoryHudOverlay,
@@ -30,7 +31,7 @@ type GlassesSimulatorProps = {
   isSaving: boolean;
   analysisComplete: boolean;
   saved: boolean;
-  onCapture: (file: File) => void;
+  onCapture: (capture: Capture) => void;
   onRetake: () => void;
   onAnalyze: () => void;
   onRecognize: (file: File) => void;
@@ -273,8 +274,7 @@ export default function GlassesSimulator({
     }
 
     try {
-      const frame = await captureVideoFrame(videoRef.current, canvasRef.current);
-      onCapture(frame);
+      onCapture(await browserCameraSource(videoRef.current, canvasRef.current).capture());
       setBaseStatus("captured");
       setCameraError(null);
     } catch (error) {

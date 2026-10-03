@@ -27,7 +27,7 @@ from .media_storage import (
     store_uploaded_image,
 )
 from .memory_service import save_reviewed_moment
-from .models import MediaBlob, Memory, Observation, User
+from .models import MediaBlob, Memory, MemoryObservation, Observation, User
 from .observation_service import ObservationValidationError
 from .query_service import answer_question
 from .rewind_service import DEFAULT_WINDOW_MINUTES, build_rewind
@@ -115,7 +115,8 @@ def image_url(image_path: str | None) -> str | None:
 @app.post("/api/memories", response_model=MemoryResponse, status_code=201)
 async def create_memory(
     background_tasks: BackgroundTasks,
-    image: UploadFile = File(...),
+    image: UploadFile | None = File(default=None),
+    observation_id: int | None = Form(default=None),
     timestamp: datetime = Form(...),
     location: str = Form(...),
     description: str = Form(...),
@@ -125,7 +126,14 @@ async def create_memory(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MemoryResponse:
-    """Save a reviewed moment: Observation -> Events -> Memory; episodes group afterwards."""
+    """Save a reviewed moment: Observation -> Events -> Memory; episodes group afterwards.
+
+    The photo is either uploaded with the request or taken from an earlier
+    capture (`observation_id`), which stays unchanged as the raw evidence.
+    """
+
+    if (image is None) == (observation_id is None):
+        raise HTTPException(status_code=422, detail="Provide either an image or a captured observation.")
 
     location_value = location.strip()
     description_value = description.strip()
@@ -144,9 +152,22 @@ async def create_memory(
     if len(object_name_value) > 120:
         raise HTTPException(status_code=422, detail="Object name cannot exceed 120 characters.")
 
+    capture: Observation | None = None
+    if observation_id is not None:
+        capture = db.scalar(
+            select(Observation).where(Observation.id == observation_id, Observation.user_id == current_user.id)
+        )
+        if capture is None:
+            raise HTTPException(status_code=404, detail="Captured observation not found.")
+        if capture.reviewed or capture.image_path is None:
+            raise HTTPException(status_code=422, detail="Only an unreviewed capture with an image can be saved.")
+        if db.scalar(select(MemoryObservation.memory_id).where(MemoryObservation.observation_id == capture.id)):
+            raise HTTPException(status_code=409, detail="This capture is already saved as a memory.")
+
     stored: StoredImage | None = None
     try:
-        stored = await store_uploaded_image(db, current_user.id, image)
+        if image is not None:
+            stored = await store_uploaded_image(db, current_user.id, image)
         saved = save_reviewed_moment(
             db,
             current_user.id,
@@ -155,8 +176,9 @@ async def create_memory(
             description=description_value,
             activity=activity_value,
             object_name=object_name_value,
-            image_path=stored.filename,
-            source=source,
+            image_path=stored.filename if stored else capture.image_path,
+            source=capture.source if capture else source,
+            capture=capture,
         )
         memory = saved.memory
         response = MemoryResponse(

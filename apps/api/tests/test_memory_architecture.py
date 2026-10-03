@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.correction_service import latest_correction
@@ -785,3 +785,156 @@ def test_episode_gap_boundary_is_inclusive_and_ties_are_deterministic(db: Sessio
     assert len(db.scalars(select(EpisodeEvent)).all()) == len(db.scalars(select(Event)).all())
     assert len(db.scalars(select(Observation)).all()) == before["observations"] + 1
     assert len(db.scalars(select(Memory)).all()) == before["memories"] + 1
+
+
+CAPTURED_AT = datetime.combine(date.today(), time(10, 15, 27))
+
+
+def capture(client: TestClient, source: str = "browser_camera", **data) -> dict:
+    response = client.post(
+        "/api/observations",
+        files={"image": ("glasses-capture.jpg", b"captured-frame", "image/jpeg")},
+        data={"timestamp": CAPTURED_AT.isoformat(), "source": source, "analyze": "false", **data},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+@pytest.mark.parametrize("source", ["browser_camera", "iphone_camera", "meta_glasses"])
+def test_a_capture_becomes_a_normalized_unreviewed_observation(client: TestClient, db: Session, source: str) -> None:
+    seed(client)
+    memories_before = client.get("/api/memories").json()
+    objects_before = db.scalar(select(func.count()).select_from(ObjectObservation))
+
+    body = capture(client, source)
+
+    assert body["source"] == source
+    assert body["timestamp"] == CAPTURED_AT.isoformat()
+    assert body["reviewed"] is False
+    assert body["latitude"] is None and body["longitude"] is None and body["location_label"] is None
+    assert body["description"] is None and body["activity"] is None and body["analysis"] is None
+    assert client.get(body["image_url"]).content == b"captured-frame"
+    assert db.get(Observation, body["id"]).image_path == body["image_url"].removeprefix("/api/media/")
+    assert client.get("/api/memories").json() == memories_before
+    assert db.scalar(select(func.count()).select_from(ObjectObservation)) == objects_before
+
+
+def test_a_capture_keeps_a_supplied_location(client: TestClient) -> None:
+    seed(client)
+    body = capture(client, latitude="24.4539", longitude="54.3773")
+    assert (body["latitude"], body["longitude"]) == (24.4539, 54.3773)
+    assert body["location_label"] is None
+
+
+def test_a_capture_survives_failed_event_inference(client: TestClient, monkeypatch) -> None:
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("event rule crashed")
+
+    monkeypatch.setattr("app.observation_service.events_for_observation", broken)
+    seed(client)
+    body = capture(client)
+    assert body["event_ids"] == []
+    stored = {item["id"]: item for item in client.get("/api/observations").json()}[body["id"]]
+    assert stored["source"] == "browser_camera"
+    assert client.get(stored["image_url"]).status_code == 200
+
+
+def test_an_analyzed_camera_capture_is_never_a_grounded_answer(client: TestClient) -> None:
+    seed(client)
+    memories_before = client.get("/api/memories").json()
+    response = client.post(
+        "/api/observations",
+        files={"image": ("keys-on-table.jpg", b"captured-frame", "image/jpeg")},
+        data={"timestamp": at(11, 50).isoformat(), "source": "browser_camera"},
+    )
+    assert response.status_code == 201
+    observation = response.json()
+    assert observation["objects"][0]["name"] == "keys"
+    assert observation["event_ids"]
+    assert client.post("/api/episodes/consolidate").status_code == 200
+
+    keys = client.post("/api/query", json={"question": "Where are my keys?"}).json()
+    assert "kitchen counter" in keys["answer"]
+    assert "dark table" not in keys["answer"]
+    summary = client.post("/api/query", json={"question": "What did I do today?"}).json()
+    spoken = " ".join([summary["answer"], *(item["label"] + item["detail"] for item in summary["evidence"])])
+    assert "Preparing to leave" not in spoken and "dark table" not in spoken
+    assert all(not source_id.startswith(("observation:", "event:")) for source_id in keys["source_ids"] + summary["source_ids"])
+    assert client.get("/api/memories").json() == memories_before
+
+
+def test_saving_a_reviewed_capture_links_it_without_editing_it(client: TestClient, db: Session) -> None:
+    seed(client)
+    raw = capture(client)
+    saved = client.post(
+        "/api/memories",
+        data={
+            "observation_id": str(raw["id"]),
+            "timestamp": CAPTURED_AT.isoformat(),
+            "location": "Hallway table",
+            "description": "My wallet is on the hallway table.",
+            "object_name": "Wallet",
+        },
+    )
+    assert saved.status_code == 201
+    body = saved.json()
+    assert body["image_url"] == raw["image_url"]
+    assert body["timestamp"] == CAPTURED_AT.isoformat()
+    assert body["object_observation_id"] is not None
+
+    unchanged = db.get(Observation, raw["id"])
+    assert unchanged.reviewed is False
+    assert unchanged.location_label is None and unchanged.description is None
+    assert unchanged.detected_objects == []
+    linked = set(db.scalars(select(MemoryObservation.observation_id).where(MemoryObservation.memory_id == body["id"])))
+    assert raw["id"] in linked
+    reviewed = db.get(Observation, next(iter(linked - {raw["id"]})))
+    assert reviewed.reviewed is True
+    assert reviewed.source == "browser_camera"
+    assert reviewed.extra["reviewed_from_observation_id"] == raw["id"]
+
+    wallet = client.post("/api/query", json={"question": "Where is my wallet?"}).json()
+    assert "Hallway table" in wallet["answer"]
+    assert body["id"] in {memory["id"] for memory in client.get("/api/memories").json()}
+    assert client.get(body["image_url"]).status_code == 200
+    assert client.get(body["image_url"], headers={USER_ID_HEADER: "2"}).status_code == 404
+
+    again = {"timestamp": CAPTURED_AT.isoformat(), "location": "Hall", "description": "Again."}
+    assert client.post("/api/memories", data={**again, "observation_id": str(reviewed.id)}).status_code == 422
+    assert client.post("/api/memories", data={**again, "observation_id": str(raw["id"])}).status_code == 409
+
+
+def test_saving_a_capture_is_scoped_to_its_owner_and_needs_one_image(client: TestClient) -> None:
+    seed(client)
+    raw = capture(client)
+    form = {"timestamp": CAPTURED_AT.isoformat(), "location": "Hall", "description": "Coat on the hook."}
+
+    other_user = client.post("/api/memories", data={**form, "observation_id": str(raw["id"])}, headers={USER_ID_HEADER: "2"})
+    assert other_user.status_code == 404
+    both = client.post(
+        "/api/memories",
+        files={"image": ("photo.jpg", b"fake-image-content", "image/jpeg")},
+        data={**form, "observation_id": str(raw["id"])},
+    )
+    assert both.status_code == 422
+    assert client.post("/api/memories", data=form).status_code == 422
+    imageless = client.post("/api/observations", data={"timestamp": CAPTURED_AT.isoformat(), "source": "browser_camera"}).json()
+    assert client.post("/api/memories", data={**form, "observation_id": str(imageless["id"])}).status_code == 422
+
+
+def test_captures_use_database_media_storage(client: TestClient, monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("MEDIA_STORAGE", "database")
+    seed(client)
+    raw = capture(client)
+    media_directory = tmp_path / "media"
+    assert not media_directory.exists() or not list(media_directory.iterdir())
+    listed = {item["id"]: item for item in client.get("/api/observations").json()}[raw["id"]]
+    assert client.get(listed["image_url"]).content == b"captured-frame"
+    assert client.get(listed["image_url"], headers={USER_ID_HEADER: "2"}).status_code == 404
+
+    saved = client.post(
+        "/api/memories",
+        data={"observation_id": str(raw["id"]), "timestamp": CAPTURED_AT.isoformat(), "location": "Hall", "description": "Coat."},
+    )
+    assert saved.status_code == 201
+    assert client.get(saved.json()["image_url"]).content == b"captured-frame"
