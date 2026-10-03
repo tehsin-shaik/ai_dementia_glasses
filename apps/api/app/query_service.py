@@ -36,6 +36,15 @@ NEGATION_TERMS = {"not", "except", "besides", "ليس", "وليس"}
 PERSON_TRAILING_WORDS = {"again", "please", "now", "to", "me", "مرة", "أخرى"}
 PERSON_TERMS_AR = ("من هي", "من هو", "من تكون", "من يكون")
 
+PAST_TENSE_TERMS = {"was", "did", "كنت"}
+CLOCK_TIME_PATTERN = re.compile(
+    r"(?:\b(?:at|around|about)\s+|الساعة\s*)?"
+    r"(?<!\d)(\d{1,2})(?::(\d{2}))?\s*"
+    r"(a\.?\s?m\.?|p\.?\s?m\.?|صباحًا|صباحا|ص|مساءً|مساء|م)?(?!\w)",
+    flags=re.IGNORECASE,
+)
+ACTIVITY_LOOKBACK = timedelta(minutes=30)
+
 STOP_WORDS = {
     "where", "are", "is", "my", "the", "did", "i", "leave", "put", "last",
     "see", "seen", "have", "a", "an", "of", "do", "you", "know", "can",
@@ -54,6 +63,37 @@ def normalize_question(question: str) -> str:
     return " ".join(normalized.split())
 
 
+def clock_time_mention(question: str) -> tuple[int, int] | None:
+    """Return the (hour, minute) asked about, as in "What was I doing at 10:10 AM?".
+
+    A bare number only counts when it is introduced by "at"/"around"/"الساعة"
+    or has minutes or AM/PM, so stray numbers are not read as times. Values
+    are not range-checked here.
+    """
+
+    for match in CLOCK_TIME_PATTERN.finditer(question):
+        text, hour_text, minute_text, meridiem = match.group(0), match.group(1), match.group(2), match.group(3)
+        introduced = not text.lstrip()[:1].isdigit()
+        if not (introduced or minute_text or meridiem):
+            continue
+        hour = int(hour_text)
+        minute = int(minute_text or 0)
+        marker = (meridiem or "").replace(".", "").replace(" ", "").casefold()
+        if marker in {"pm", "مساءً", "مساء", "م"} and 1 <= hour < 12:
+            hour += 12
+        elif marker in {"am", "صباحًا", "صباحا", "ص"} and hour == 12:
+            hour = 0
+        return hour, minute
+    return None
+
+
+def requested_clock_time(question: str) -> time | None:
+    mention = clock_time_mention(question)
+    if mention is None or mention[0] > 23 or mention[1] > 59:
+        return None
+    return time(*mention)
+
+
 def detect_intent(question: str) -> Intent:
     """Classify a question without needing database context."""
 
@@ -65,6 +105,9 @@ def detect_intent(question: str) -> Intent:
     # A locating question is about an object even when it also mentions today.
     if tokens & LOCATION_TERMS_EN or tokens & LOCATION_TERMS_AR:
         return "object_location"
+
+    if tokens & PAST_TENSE_TERMS and clock_time_mention(question) is not None:
+        return "recent_activity"
 
     if tokens & SCHEDULE_TERMS_EN or tokens & SCHEDULE_TERMS_AR:
         return "schedule"
@@ -170,23 +213,43 @@ def answer_question(
         return unknown_response(language)
 
     if intent == "recent_activity":
-        memory = db.scalar(
+        asked_time = requested_clock_time(question)
+        if asked_time is None and clock_time_mention(question) is not None:
+            return unknown_response(language)
+        activity_query = (
             select(Memory)
             .where(Memory.user_id == user_id)
             .where(Memory.activity.is_not(None))
             .where(Memory.activity != "")
-            .order_by(Memory.timestamp.desc(), Memory.id.desc())
-            .limit(1)
+        )
+        if asked_time is not None:
+            # The moment in progress at the asked time: the latest saved one at or
+            # shortly before it, today.
+            asked_at = datetime.combine(date.today(), asked_time)
+            activity_query = activity_query.where(
+                Memory.timestamp <= asked_at,
+                Memory.timestamp >= asked_at - ACTIVITY_LOOKBACK,
+            )
+        memory = db.scalar(
+            activity_query.order_by(Memory.timestamp.desc(), Memory.id.desc()).limit(1)
         )
         if memory is None:
             return unknown_response(language)
         activity = memory.activity.rstrip(".")
         activity_correction = latest_correction(db, memory.id)
-        answer = (
-            f"آخر ما كنت تفعله: {activity}."
-            if language == "ar"
-            else f"You were {activity}."
-        )
+        if asked_time is not None:
+            saved_time = format_time(memory.timestamp, language)
+            answer = (
+                f"الساعة {saved_time} كنت: {activity}."
+                if language == "ar"
+                else f"At {saved_time}, you were {activity}."
+            )
+        else:
+            answer = (
+                f"آخر ما كنت تفعله: {activity}."
+                if language == "ar"
+                else f"You were {activity}."
+            )
         return QueryResponse(
             answer=answer,
             intent=intent,

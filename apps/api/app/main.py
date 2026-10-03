@@ -5,7 +5,7 @@ import os
 
 from fastapi import Depends, File, Form, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,12 +18,14 @@ from .face.routes import router as face_router
 from .identity import get_current_user
 from .media_storage import (
     media_type_for,
+    new_media_filename,
     remove_uploaded_image,
     read_uploaded_image,
     safe_media_path,
     save_uploaded_image,
+    uses_database_media,
 )
-from .models import Memory, ObjectObservation, User
+from .models import MediaBlob, Memory, ObjectObservation, User
 from .query_service import answer_question
 from .rewind_service import DEFAULT_WINDOW_MINUTES, build_rewind
 from .runtime import allowed_origins, seed_if_empty
@@ -135,8 +137,22 @@ async def create_memory(
     if timestamp.tzinfo is not None:
         timestamp = timestamp.astimezone().replace(tzinfo=None)
 
-    stored_filename = await save_uploaded_image(image)
+    image_bytes: bytes | None = None
+    if uses_database_media():
+        extension, image_bytes = await read_uploaded_image(image)
+        stored_filename = new_media_filename(extension)
+    else:
+        stored_filename = await save_uploaded_image(image)
     try:
+        if image_bytes is not None:
+            db.add(
+                MediaBlob(
+                    filename=stored_filename,
+                    user_id=current_user.id,
+                    content_type=media_type_for(stored_filename),
+                    data=image_bytes,
+                )
+            )
         memory = Memory(
             user_id=current_user.id,
             timestamp=timestamp,
@@ -175,7 +191,8 @@ async def create_memory(
         return response
     except Exception:
         db.rollback()
-        remove_uploaded_image(stored_filename)
+        if image_bytes is None:
+            remove_uploaded_image(stored_filename)
         raise
 
 
@@ -251,7 +268,7 @@ def get_media(
     filename: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> FileResponse:
+) -> Response:
     path = safe_media_path(filename)
     memory = db.scalar(
         select(Memory).where(
@@ -261,6 +278,9 @@ def get_media(
     )
     if memory is None:
         raise HTTPException(status_code=404, detail="Media file not found.")
+    blob = db.get(MediaBlob, filename)
+    if blob is not None:
+        return Response(content=blob.data, media_type=blob.content_type)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Media file not found.")
     return FileResponse(path=path, media_type=media_type_for(path.name))

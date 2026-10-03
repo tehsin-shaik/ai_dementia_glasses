@@ -1,4 +1,4 @@
-"""The single configured vision provider used by the MVP."""
+"""The configured vision provider (one at a time) used by the MVP."""
 
 import base64
 import json
@@ -58,6 +58,15 @@ VISION_RESPONSE_SCHEMA = {
 }
 
 
+def analysis_prompt(context: str | None) -> str:
+    context_instruction = (
+        f"\nOptional user context (use only to focus the description, never to invent facts): {context}"
+        if context
+        else ""
+    )
+    return f"Analyze this image and return the normalized memory suggestion.{context_instruction}"
+
+
 class OpenAIVisionAnalyzer(VisionAnalyzer):
     """Use OpenAI's multimodal Responses API without exposing provider data to the app."""
 
@@ -73,11 +82,6 @@ class OpenAIVisionAnalyzer(VisionAnalyzer):
     ) -> VisionAnalysis:
         media_type = media_type_for(filename)
         encoded_image = base64.b64encode(image_bytes).decode("ascii")
-        context_instruction = (
-            f"\nOptional user context (use only to focus the description, never to invent facts): {context}"
-            if context
-            else ""
-        )
         payload = {
             "model": self.model,
             "instructions": VISION_INSTRUCTIONS,
@@ -87,10 +91,7 @@ class OpenAIVisionAnalyzer(VisionAnalyzer):
                     "content": [
                         {
                             "type": "input_text",
-                            "text": (
-                                "Analyze this image and return the normalized memory suggestion."
-                                f"{context_instruction}"
-                            ),
+                            "text": analysis_prompt(context),
                         },
                         {
                             "type": "input_image",
@@ -158,6 +159,80 @@ def extract_response_text(response_payload: dict[str, Any]) -> str:
     raise ValueError("Missing provider output text")
 
 
+class GeminiVisionAnalyzer(VisionAnalyzer):
+    """Use the Gemini API's generateContent endpoint with a JSON-schema response."""
+
+    def __init__(self, api_key: str, model: str) -> None:
+        self.api_key = api_key
+        self.model = model
+
+    async def analyze_image(
+        self,
+        image_bytes: bytes,
+        filename: str,
+        context: str | None = None,
+    ) -> VisionAnalysis:
+        payload = {
+            "systemInstruction": {"parts": [{"text": VISION_INSTRUCTIONS}]},
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": analysis_prompt(context)},
+                        {
+                            "inlineData": {
+                                "mimeType": media_type_for(filename),
+                                "data": base64.b64encode(image_bytes).decode("ascii"),
+                            }
+                        },
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseJsonSchema": VISION_RESPONSE_SCHEMA,
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+                    headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
+                    json=payload,
+                )
+        except httpx.HTTPError as exc:
+            raise VisionProviderError("The vision provider could not be reached.") from exc
+
+        if response.is_error:
+            raise VisionProviderError("The vision provider rejected the image.")
+
+        try:
+            content = extract_gemini_text(response.json())
+            return VisionAnalysis.model_validate(json.loads(content))
+        except (ValueError, TypeError, KeyError, IndexError, ValidationError) as exc:
+            raise VisionProviderError("The vision provider returned an invalid analysis.") from exc
+
+
+def extract_gemini_text(response_payload: dict[str, Any]) -> str:
+    """Return the first candidate's text, which holds the JSON analysis."""
+
+    if not isinstance(response_payload, dict):
+        raise ValueError("Provider response was not an object")
+    for candidate in response_payload.get("candidates", []):
+        parts = candidate.get("content", {}).get("parts", []) if isinstance(candidate, dict) else []
+        for part in parts:
+            if isinstance(part, dict) and isinstance(part.get("text"), str) and part["text"]:
+                return part["text"]
+    raise ValueError("Missing provider output text")
+
+
+VISION_ANALYZERS: dict[str, type[OpenAIVisionAnalyzer] | type[GeminiVisionAnalyzer]] = {
+    "openai": OpenAIVisionAnalyzer,
+    "gemini": GeminiVisionAnalyzer,
+}
+
+
 DEMO_ANALYSES = {
     "keys-on-table.jpg": VisionAnalysis(
         description="A set of keys is resting beside a phone and headphones on a dark table.",
@@ -195,7 +270,8 @@ def get_vision_analyzer() -> VisionAnalyzer:
 
     if not provider or not api_key or not model:
         raise VisionProviderNotConfiguredError
-    if provider != "openai":
+    analyzer_class = VISION_ANALYZERS.get(provider)
+    if analyzer_class is None:
         raise VisionProviderError("The configured vision provider is not supported.")
 
-    return OpenAIVisionAnalyzer(api_key=api_key, model=model)
+    return analyzer_class(api_key=api_key, model=model)

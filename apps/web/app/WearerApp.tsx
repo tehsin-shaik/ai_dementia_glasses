@@ -61,6 +61,7 @@ type CuePresentationAttempt = {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const SUGGESTED_QUESTIONS = [
   "What was I doing?",
+  "What was I doing at 10 AM?",
   "Where are my keys?",
   "Who is Sarah?",
   "What am I doing today?",

@@ -1,10 +1,13 @@
 """Tests for the deterministic MemoryCue API vertical slice."""
 
+import asyncio
 from collections.abc import Generator
 from datetime import datetime, timedelta
+import json
 import os
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -2288,3 +2291,133 @@ def test_postgres_urls_are_pointed_at_the_installed_driver() -> None:
         == "postgresql+psycopg://user:pw@host/db"
     )
     assert normalize_database_url("sqlite:///./memorycue.db") == "sqlite:///./memorycue.db"
+
+
+@pytest.mark.parametrize(
+    ("question", "answer", "source_id"),
+    [
+        ("What was I doing at 10 AM?", "At 10:00 AM, you were making tea.", "memory:1"),
+        ("What was I doing at 10:12?", "At 10:10 AM, you were reading.", "memory:2"),
+        ("what was i doing at 10:30 a.m. today", "At 10:25 AM, you were preparing to leave.", "memory:4"),
+    ],
+)
+def test_activity_at_a_clock_time_uses_the_moment_in_progress(
+    client: TestClient, question: str, answer: str, source_id: str
+) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": question}).json()
+    assert body["intent"] == "recent_activity"
+    assert body["answer"] == answer
+    assert body["source_ids"] == [source_id]
+
+
+@pytest.mark.parametrize(
+    "question",
+    ["What was I doing at 9 AM?", "What was I doing at 11:30 AM?", "What was I doing at 25:00?"],
+)
+def test_activity_at_a_clock_time_without_a_saved_moment_is_unknown(
+    client: TestClient, question: str
+) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": question}).json()
+    assert body["intent"] == "unknown"
+    assert body["evidence"] == []
+
+
+def test_activity_at_a_clock_time_answers_in_arabic(client: TestClient) -> None:
+    seed(client)
+    body = client.post(
+        "/api/query",
+        json={"question": "ماذا كنت أفعل الساعة 10 صباحًا؟", "language": "ar"},
+    ).json()
+    assert body["intent"] == "recent_activity"
+    assert body["answer"] == "الساعة 10:00 صباحًا كنت: making tea."
+    assert body["source_ids"] == ["memory:1"]
+
+
+def test_database_media_storage_keeps_photos_without_local_files(
+    client: TestClient, monkeypatch
+) -> None:
+    monkeypatch.setenv("MEDIA_STORAGE", "database")
+    seed(client)
+    response = upload_memory(
+        client,
+        timestamp=timestamp_at(),
+        location="Kitchen counter",
+        description="I left my keys on the kitchen counter.",
+    )
+    assert response.status_code == 201
+    image_url = response.json()["image_url"]
+
+    media_directory = Path(os.environ["MEDIA_DIR"])
+    assert not media_directory.exists() or not list(media_directory.iterdir())
+    media_response = client.get(image_url)
+    assert media_response.status_code == 200
+    assert media_response.content == b"fake-image-content"
+    assert media_response.headers["content-type"] == "image/jpeg"
+    assert client.get(image_url, headers={USER_ID_HEADER: "2"}).status_code == 404
+
+    seed(client)
+    assert client.get(image_url).status_code == 404
+
+
+def test_gemini_provider_is_selected_from_configuration(monkeypatch) -> None:
+    monkeypatch.setenv("VISION_PROVIDER", "Gemini")
+    monkeypatch.setenv("VISION_MODEL", "gemini-test")
+    monkeypatch.setenv("VISION_API_KEY", "test-key")
+    assert isinstance(vision_provider.get_vision_analyzer(), vision_provider.GeminiVisionAnalyzer)
+
+
+def test_gemini_analyzer_sends_inline_image_and_parses_json(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["key"] = request.headers["x-goog-api-key"]
+        captured["payload"] = json.loads(request.content)
+        analysis = {
+            "description": "Keys on a table.",
+            "location": "Table",
+            "activity": None,
+            "objects": [{"name": "keys", "location": "table", "confidence": 0.9}],
+        }
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": json.dumps(analysis)}]}}]},
+        )
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        vision_provider.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    )
+    analyzer = vision_provider.GeminiVisionAnalyzer(api_key="test-key", model="gemini-test")
+    result = asyncio.run(analyzer.analyze_image(b"img", "photo.png", context="kitchen"))
+
+    assert result.location == "Table"
+    assert result.objects[0].name == "keys"
+    assert captured["url"] == (
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent"
+    )
+    assert captured["key"] == "test-key"
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    image_part = payload["contents"][0]["parts"][1]["inlineData"]
+    assert image_part == {"mimeType": "image/png", "data": "aW1n"}
+    assert payload["generationConfig"]["responseMimeType"] == "application/json"
+    assert "kitchen" in payload["contents"][0]["parts"][0]["text"]
+
+
+def test_gemini_analyzer_reports_a_rejected_request(monkeypatch) -> None:
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        vision_provider.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(
+            transport=httpx.MockTransport(lambda _request: httpx.Response(429)), **kwargs
+        ),
+    )
+    analyzer = vision_provider.GeminiVisionAnalyzer(api_key="test-key", model="gemini-test")
+    with pytest.raises(VisionProviderError):
+        asyncio.run(analyzer.analyze_image(b"img", "photo.jpg"))
