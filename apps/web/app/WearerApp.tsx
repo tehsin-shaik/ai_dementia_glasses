@@ -9,11 +9,15 @@ import RewindPanel from "./RewindPanel";
 import SiteNav from "./SiteNav";
 import {
   isSpeechOutputSupported,
+  isVoiceActive,
   isVoiceInputSupported,
   speak,
-  startListening,
+  speechInputMessage,
+  startSpeechInput,
   stopSpeaking,
+  type SpeechInputSession,
   VoiceLanguage,
+  type VoicePhase,
 } from "./voice";
 
 type QueryResult = {
@@ -22,6 +26,14 @@ type QueryResult = {
   source_ids: string[];
   evidence: QueryEvidence[];
   language: VoiceLanguage;
+};
+
+type VoiceTarget = "question" | "hud";
+
+const QUESTION_VOICE_STATUS: Partial<Record<VoicePhase, string>> = {
+  requesting: "Waiting for microphone permission...",
+  listening: "Microphone on. Ask one question.",
+  processing: "Processing what you said...",
 };
 
 type FaceRecognitionResult = {
@@ -240,7 +252,10 @@ export default function WearerApp() {
   const [hudError, setHudError] = useState<string | null>(null);
   const [hudEvidence, setHudEvidence] = useState<QueryEvidence[]>([]);
   const [language, setLanguage] = useState<VoiceLanguage>("en");
-  const [isListening, setIsListening] = useState(false);
+  const [voiceTarget, setVoiceTarget] = useState<VoiceTarget | null>(null);
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
+  const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [speakAnswers, setSpeakAnswers] = useState(true);
   const [voiceInputSupported, setVoiceInputSupported] = useState(false);
   const [speechOutputSupported, setSpeechOutputSupported] = useState(false);
@@ -278,7 +293,8 @@ export default function WearerApp() {
   const proactiveCueRef = useRef<ProactiveCue | null>(proactiveCue);
   const visibleProactiveCueRef = useRef<ProactiveCue | null>(null);
   const cuePresentationRef = useRef<CuePresentationAttempt | null>(null);
-  const stopListeningRef = useRef<(() => void) | null>(null);
+  const speechSessionRef = useRef<SpeechInputSession | null>(null);
+  const speechTurnRef = useRef(0);
   const languageRef = useRef(language);
   const speakAnswersRef = useRef(speakAnswers);
 
@@ -288,6 +304,20 @@ export default function WearerApp() {
   activeUserIdRef.current = activeUserId;
   proactiveCuesEnabledRef.current = proactiveCuesEnabled;
   proactiveCueRef.current = proactiveCue;
+
+  const questionVoiceActive = voiceTarget === "question" && isVoiceActive(voicePhase);
+  let questionVoiceStatus: string | null = null;
+  if (voiceTarget === "question") {
+    if (voicePhase === "transcript" && voiceTranscript) {
+      questionVoiceStatus = `Heard: “${voiceTranscript}”`;
+    } else if (voicePhase === "error") {
+      questionVoiceStatus = voiceError;
+    } else {
+      questionVoiceStatus = QUESTION_VOICE_STATUS[voicePhase] ?? null;
+    }
+  } else if (!voiceInputSupported) {
+    questionVoiceStatus = "Voice input is not available in this browser. Type your question instead.";
+  }
 
   const activeProfile = DEMO_PROFILES.find((profile) => profile.id === activeUserId) ?? DEMO_PROFILES[0];
 
@@ -299,7 +329,7 @@ export default function WearerApp() {
     setVoiceInputSupported(isVoiceInputSupported());
     setSpeechOutputSupported(isSpeechOutputSupported());
     return () => {
-      stopListeningRef.current?.();
+      speechSessionRef.current?.cancel();
       stopSpeaking();
     };
   }, []);
@@ -603,39 +633,77 @@ export default function WearerApp() {
     void submitQuery(value, "hud");
   }
 
-  function stopListening() {
-    stopListeningRef.current?.();
-    stopListeningRef.current = null;
-    setIsListening(false);
+  function cancelVoice() {
+    speechTurnRef.current += 1;
+    speechSessionRef.current?.cancel();
+    speechSessionRef.current = null;
+    setVoiceTarget(null);
+    setVoicePhase("idle");
+    setVoiceTranscript(null);
+    setVoiceError(null);
   }
 
-  function changeListening(listening: boolean) {
-    if (!listening) {
-      stopListening();
-      return;
-    }
+  function startVoice(target: VoiceTarget) {
+    cancelVoice();
     stopSpeaking();
-    const stop = startListening(languageRef.current, {
-      onTranscript: (transcript) => askHudQuestion(transcript),
-      onError: (message) => {
-        setHudError(message);
-        setHudState("error");
+    const turn = speechTurnRef.current;
+    const isCurrentTurn = () => speechTurnRef.current === turn;
+    setVoiceTarget(target);
+    const session = startSpeechInput(languageRef.current, {
+      onPhase: (phase) => {
+        if (isCurrentTurn()) {
+          setVoicePhase(phase);
+        }
+      },
+      onTranscript: (transcript) => {
+        if (!isCurrentTurn()) {
+          return;
+        }
+        setVoiceTranscript(transcript);
+        setVoicePhase("transcript");
+        if (target === "question") {
+          void askQuestion(transcript);
+        } else {
+          askHudQuestion(transcript);
+        }
+      },
+      onError: (speechError) => {
+        if (!isCurrentTurn()) {
+          return;
+        }
+        const message = speechInputMessage(speechError);
+        setVoiceError(message);
+        setVoicePhase("error");
+        if (target === "hud") {
+          setHudError(message);
+          setHudState("error");
+        }
       },
       onEnd: () => {
-        stopListeningRef.current = null;
-        setIsListening(false);
+        if (isCurrentTurn()) {
+          speechSessionRef.current = null;
+        }
       },
     });
-    if (stop === null) {
+    if (session === null) {
       setVoiceInputSupported(false);
+      setVoiceTarget(null);
+      setVoicePhase("idle");
       return;
     }
-    stopListeningRef.current = stop;
-    setIsListening(true);
+    speechSessionRef.current = session;
+  }
+
+  function changeHudListening(listening: boolean) {
+    if (listening) {
+      startVoice("hud");
+    } else {
+      cancelVoice();
+    }
   }
 
   function changeLanguage(next: VoiceLanguage) {
-    stopListening();
+    cancelVoice();
     stopSpeaking();
     setLanguage(next);
   }
@@ -920,6 +988,7 @@ export default function WearerApp() {
     profileVersionRef.current += 1;
     proactiveRequestRef.current += 1;
     dismissedCueKeysRef.current.clear();
+    cancelVoice();
     setActiveUserId(nextUserId);
     setQuestion("");
     setResult(null);
@@ -974,8 +1043,9 @@ export default function WearerApp() {
           hudEvidence={hudEvidence}
           language={language}
           onLanguageChange={changeLanguage}
-          isListening={isListening}
-          onListeningChange={changeListening}
+          voicePhase={voiceTarget === "hud" ? voicePhase : "idle"}
+          voiceTranscript={voiceTarget === "hud" ? voiceTranscript : null}
+          onListeningChange={changeHudListening}
           voiceInputSupported={voiceInputSupported}
           speakAnswers={speakAnswers}
           onSpeakAnswersChange={(enabled) => {
@@ -1022,10 +1092,30 @@ export default function WearerApp() {
               placeholder="Where are my keys?"
               autoComplete="off"
             />
+            {voiceInputSupported && (
+              <button
+                className={`secondary-button voice-question-button ${questionVoiceActive ? "is-listening" : ""}`}
+                type="button"
+                aria-pressed={questionVoiceActive}
+                onClick={() => (questionVoiceActive ? cancelVoice() : startVoice("question"))}
+                disabled={isLoading && !questionVoiceActive}
+              >
+                {questionVoiceActive ? "Stop listening" : "Ask by voice"}
+              </button>
+            )}
             <button className="primary-button" type="submit" disabled={isLoading || !question.trim()}>
               {isLoading ? "Asking..." : "Ask"}
             </button>
           </form>
+          {questionVoiceStatus && (
+            <p
+              className={`voice-question-status ${voicePhase === "error" ? "is-error" : ""}`}
+              data-testid="voice-question-status"
+              role="status"
+            >
+              {questionVoiceStatus}
+            </p>
+          )}
 
           <div className="suggestions" aria-label="Supported example questions">
             <p>Supported examples</p>

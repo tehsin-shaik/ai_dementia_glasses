@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
-import type { VoiceLanguage } from "./voice";
+import { isVoiceActive, type VoiceLanguage, type VoicePhase } from "./voice";
 
 export type MemoryHudState = "idle" | "querying" | "result" | "unknown" | "error";
 
@@ -44,7 +44,8 @@ type MemoryHudControlsProps = {
   onProactiveCuesChange: (enabled: boolean) => void;
   language: VoiceLanguage;
   onLanguageChange: (language: VoiceLanguage) => void;
-  isListening: boolean;
+  voicePhase: VoicePhase;
+  voiceTranscript: string | null;
   onListeningChange: (listening: boolean) => void;
   voiceInputSupported: boolean;
   speakAnswers: boolean;
@@ -69,7 +70,9 @@ const COPY = {
     checking: "Checking...",
     quickCues: "Quick cues",
     speak: "Speak",
+    requesting: "Waiting for mic...",
     listening: "Listening...",
+    processing: "Processing...",
     speakAnswers: "Speak answers",
     active: "Questions run only when you choose Ask or Speak. Optional cues use saved context and can be turned off.",
     inactive: "Start the camera to use cues in the preview.",
@@ -86,7 +89,9 @@ const COPY = {
     checking: "جارٍ البحث...",
     quickCues: "أسئلة سريعة",
     speak: "تحدّث",
+    requesting: "بانتظار الميكروفون...",
     listening: "أستمع...",
+    processing: "جارٍ المعالجة...",
     speakAnswers: "نطق الإجابات",
     active: "تُطرح الأسئلة فقط عند اختيار اسأل أو تحدّث. التلميحات الاختيارية تعتمد على معلومات محفوظة ويمكن إيقافها.",
     inactive: "شغّل الكاميرا لاستخدام التلميحات في المعاينة.",
@@ -227,7 +232,8 @@ export function MemoryHudControls({
   onProactiveCuesChange,
   language,
   onLanguageChange,
-  isListening,
+  voicePhase,
+  voiceTranscript,
   onListeningChange,
   voiceInputSupported,
   speakAnswers,
@@ -238,6 +244,17 @@ export function MemoryHudControls({
   const copy = COPY[language];
   const isQuerying = state === "querying";
   const isDisabled = !isCameraActive || isQuerying;
+  const isListening = isVoiceActive(voicePhase);
+  const voiceLabel =
+    voicePhase === "requesting" || voicePhase === "listening" || voicePhase === "processing"
+      ? copy[voicePhase]
+      : copy.speak;
+
+  useEffect(() => {
+    if (voiceTranscript) {
+      setQuestion(voiceTranscript);
+    }
+  }, [voiceTranscript]);
 
   function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -310,7 +327,7 @@ export function MemoryHudControls({
               onClick={() => onListeningChange(!isListening)}
               disabled={!isCameraActive}
             >
-              {isListening ? copy.listening : copy.speak}
+              {voiceLabel}
             </button>
           )}
           <button className="primary-button" type="submit" disabled={isDisabled || !question.trim()}>
