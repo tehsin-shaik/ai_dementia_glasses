@@ -234,3 +234,35 @@ def test_cleanup_skips_a_capture_that_is_being_saved(engine, session_factory) ->
     with session_factory() as db:
         assert db.get(Observation, capture_id) is not None
         assert cleanup_abandoned_observations(db, user_id).deleted_observation_ids == [capture_id]
+
+
+def test_migrations_enable_row_level_security_without_locking_out_the_app(engine, session_factory) -> None:
+    Base.metadata.create_all(engine)
+    with session_factory() as db:
+        seed_demo_data(db)
+        db.commit()
+
+    run_migrations(engine, session_factory)
+    run_migrations(engine, session_factory)
+
+    with engine.begin() as connection:
+        disabled = connection.execute(
+            text("SELECT relname FROM pg_class WHERE relname = ANY(:names) AND NOT relrowsecurity"),
+            {"names": [table.name for table in Base.metadata.sorted_tables]},
+        ).scalars().all()
+        assert disabled == []
+        connection.execute(text("DROP ROLE IF EXISTS memorycue_api_probe"))
+        connection.execute(text("CREATE ROLE memorycue_api_probe NOLOGIN NOBYPASSRLS"))
+        connection.execute(text("GRANT SELECT ON users, memories TO memorycue_api_probe"))
+    with engine.connect() as connection:
+        connection.execute(text("SET ROLE memorycue_api_probe"))
+        assert connection.scalar(text("SELECT count(*) FROM users")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM memories")) == 0
+        connection.rollback()
+    with engine.begin() as connection:
+        connection.execute(text("REVOKE ALL ON users, memories FROM memorycue_api_probe"))
+        connection.execute(text("DROP ROLE memorycue_api_probe"))
+
+    with session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(User)) > 0
+        assert answer_question(db, db.scalar(select(User.id).order_by(User.id)), "Where are my keys?").intent != "unknown"

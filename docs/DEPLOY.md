@@ -59,6 +59,12 @@ So the hosted demo uses a hosted Postgres database instead. Any provider works
 against an empty database, and everything written afterwards — saved moments,
 caregiver corrections — is shared by every instance and survives redeploys.
 
+On every cold start against Postgres the app turns on row level security for
+each of its tables, with no policies. Supabase's public API roles (`anon`,
+`authenticated`) then see no rows, which clears Supabase's "RLS Disabled in
+Public" warning. The app itself connects as the tables' owner (`postgres` on
+Supabase), which row level security does not restrict, so it is unaffected.
+
 Setting `DATABASE_URL` to `sqlite:////tmp/memorycue.db` still works for a
 throwaway deploy, with the caveat above.
 

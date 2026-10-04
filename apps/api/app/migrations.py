@@ -12,7 +12,7 @@ import logging
 from sqlalchemy import Engine, inspect, select, text
 from sqlalchemy.orm import Session
 
-from .database import advisory_lock
+from .database import Base, advisory_lock
 from .episode_service import consolidate_episodes
 from .memory_service import link_memory
 from .models import (
@@ -53,6 +53,32 @@ def add_missing_columns(engine: Engine) -> list[str]:
             for name in added:
                 connection.execute(text(f"ALTER TABLE memories ADD COLUMN {guard}{name} {MEMORY_COLUMNS[name]}"))
     return added
+
+
+def enable_row_level_security(engine: Engine) -> list[str]:
+    """Turn on row level security for every app table on Postgres.
+
+    With no policies, Supabase's public API roles (`anon`, `authenticated`)
+    can read or change nothing. The app connects as the tables' owner, which
+    row level security does not apply to.
+    """
+
+    if engine.dialect.name != "postgresql":
+        return []
+    with engine.begin() as connection:
+        disabled = list(
+            connection.execute(
+                text(
+                    "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                    "WHERE n.nspname = current_schema() AND c.relkind = 'r' "
+                    "AND NOT c.relrowsecurity AND c.relname = ANY(:names)"
+                ),
+                {"names": [table.name for table in Base.metadata.sorted_tables]},
+            ).scalars()
+        )
+        for name in disabled:
+            connection.execute(text(f'ALTER TABLE "{name}" ENABLE ROW LEVEL SECURITY'))
+    return disabled
 
 
 def legacy_memories(db: Session) -> list[Memory]:
@@ -136,6 +162,7 @@ def run_migrations(engine: Engine, session_factory) -> int:
     """Bring an existing database up to the current schema; safe to run repeatedly."""
 
     add_missing_columns(engine)
+    enable_row_level_security(engine)
     with session_factory() as db:
         with advisory_lock(db, MIGRATION_LOCK_ID):
             if not db.scalar(select(User.id).limit(1)):
