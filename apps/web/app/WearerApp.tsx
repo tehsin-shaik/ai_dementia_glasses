@@ -1072,6 +1072,7 @@ export default function WearerApp() {
         />
 
         <RewindPanel
+          key={activeUserId}
           apiUrl={API_URL}
           userId={activeUserId}
           language={language}
