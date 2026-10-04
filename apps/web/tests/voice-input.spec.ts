@@ -247,7 +247,7 @@ const errorCases = [
   { error: "not-allowed", message: "Microphone permission was denied. Allow microphone access in your browser, or type your question." },
   {
     error: "service-not-allowed",
-    message: "Speech recognition is turned off for this browser or device (for example, Dictation is off). Type your question instead.",
+    message: "Speech recognition is disabled or unavailable in this browser or device settings (for example, Siri/Dictation is off). Type your question instead.",
   },
   { error: "audio-capture", message: "No microphone was found. Connect one, or type your question." },
   { error: "no-speech", message: "I didn't hear a question. Try again or type it." },

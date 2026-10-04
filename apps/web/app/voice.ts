@@ -118,7 +118,7 @@ export function speechInputMessage(error: SpeechInputError): string {
     case "permission-denied":
       return "Microphone permission was denied. Allow microphone access in your browser, or type your question.";
     case "service-off":
-      return "Speech recognition is turned off for this browser or device (for example, Dictation is off). Type your question instead.";
+      return "Speech recognition is disabled or unavailable in this browser or device settings (for example, Siri/Dictation is off). Type your question instead.";
     case "no-microphone":
       return "No microphone was found. Connect one, or type your question.";
     case "unsupported":
