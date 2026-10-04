@@ -35,6 +35,8 @@ type SpeechRecognitionLike = {
   start(): void;
   stop(): void;
   abort(): void;
+  onstart: (() => void) | null;
+  onspeechend: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
@@ -68,36 +70,85 @@ export function isSpeechOutputSupported(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window;
 }
 
-export function voiceErrorMessage(error: string): string {
-  if (error === "not-allowed" || error === "service-not-allowed") {
-    return "Microphone permission was denied. Allow microphone access and try again.";
-  }
-  if (error === "no-speech") {
-    return "I didn't hear a question. Try speaking again.";
-  }
-  if (error === "audio-capture") {
-    return "No microphone was found. Connect one and try again.";
-  }
-  if (error === "network") {
-    return "Speech recognition needs a network connection.";
-  }
-  return "The question could not be heard. Try again or type it.";
+/** One dictation turn: requesting → listening → processing → transcript, or an error. */
+export type VoicePhase = "idle" | "requesting" | "listening" | "processing" | "transcript" | "error";
+
+export type SpeechInputPhase = "requesting" | "listening" | "processing";
+
+export type SpeechInputError =
+  | "permission-denied"
+  | "no-microphone"
+  | "unsupported"
+  | "no-speech"
+  | "timeout"
+  | "network"
+  | "failed";
+
+export const SPEECH_INPUT_TIMEOUT_MS = 15_000;
+
+export function isVoiceActive(phase: VoicePhase): boolean {
+  return phase === "requesting" || phase === "listening" || phase === "processing";
 }
 
-type ListenCallbacks = {
+function speechInputError(code: string): SpeechInputError {
+  if (code === "not-allowed" || code === "service-not-allowed") {
+    return "permission-denied";
+  }
+  if (code === "audio-capture") {
+    return "no-microphone";
+  }
+  if (code === "no-speech") {
+    return "no-speech";
+  }
+  if (code === "network") {
+    return "network";
+  }
+  if (code === "language-not-supported") {
+    return "unsupported";
+  }
+  return "failed";
+}
+
+export function speechInputMessage(error: SpeechInputError): string {
+  switch (error) {
+    case "permission-denied":
+      return "Microphone permission was denied. Allow microphone access in your browser, or type your question.";
+    case "no-microphone":
+      return "No microphone was found. Connect one, or type your question.";
+    case "unsupported":
+      return "Speech recognition is not available for this language in this browser. Type your question instead.";
+    case "no-speech":
+      return "I didn't hear a question. Try again or type it.";
+    case "timeout":
+      return "Listening stopped after 15 seconds without a question. Try again or type it.";
+    case "network":
+      return "Speech recognition in this browser needs a network connection. Type your question instead.";
+    case "failed":
+      return "The question could not be heard. Try again or type it.";
+  }
+}
+
+type SpeechInputCallbacks = {
+  onPhase: (phase: SpeechInputPhase) => void;
   onTranscript: (transcript: string) => void;
-  onError: (message: string) => void;
+  onError: (error: SpeechInputError) => void;
   onEnd: () => void;
 };
 
+export type SpeechInputSession = {
+  cancel: () => void;
+};
+
 /**
- * Start one dictation turn and return a stop function, or null when the
- * browser has no Web Speech recognition support.
+ * Start one user-triggered dictation turn. Exactly one of onTranscript or
+ * onError fires unless the turn is cancelled; the microphone is released when
+ * the turn ends or after the timeout. Returns null without Web Speech support.
  */
-export function startListening(
+export function startSpeechInput(
   language: VoiceLanguage,
-  callbacks: ListenCallbacks,
-): (() => void) | null {
+  callbacks: SpeechInputCallbacks,
+  timeoutMs = SPEECH_INPUT_TIMEOUT_MS,
+): SpeechInputSession | null {
   const Recognition = recognitionConstructor();
   if (Recognition === null) {
     return null;
@@ -109,21 +160,66 @@ export function startListening(
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
 
+  let settled = false;
+  let timer: number | undefined;
+  const settle = (): boolean => {
+    if (settled) {
+      return false;
+    }
+    settled = true;
+    window.clearTimeout(timer);
+    return true;
+  };
+  const fail = (error: SpeechInputError) => {
+    if (settle()) {
+      callbacks.onError(error);
+    }
+  };
+
+  recognition.onstart = () => {
+    if (!settled) {
+      callbacks.onPhase("listening");
+    }
+  };
+  recognition.onspeechend = () => {
+    if (!settled) {
+      callbacks.onPhase("processing");
+    }
+  };
   recognition.onresult = (event) => {
-    const transcript = event.results[0]?.[0]?.transcript?.trim();
-    if (transcript) {
+    const transcript = event.results[0]?.[0]?.transcript?.trim() ?? "";
+    if (transcript && settle()) {
       callbacks.onTranscript(transcript);
     }
   };
   recognition.onerror = (event) => {
-    callbacks.onError(voiceErrorMessage(event.error));
+    fail(speechInputError(event.error));
   };
   recognition.onend = () => {
+    fail("no-speech");
     callbacks.onEnd();
   };
 
-  recognition.start();
-  return () => recognition.abort();
+  callbacks.onPhase("requesting");
+  try {
+    recognition.start();
+  } catch {
+    fail("failed");
+    callbacks.onEnd();
+    return { cancel: () => undefined };
+  }
+  timer = window.setTimeout(() => {
+    fail("timeout");
+    recognition.abort();
+  }, timeoutMs);
+
+  return {
+    cancel: () => {
+      if (settle()) {
+        recognition.abort();
+      }
+    },
+  };
 }
 
 export function speak(text: string, language: VoiceLanguage): void {

@@ -11,7 +11,7 @@ import {
   ProactiveCue,
   QueryEvidence,
 } from "./MemoryHud";
-import type { VoiceLanguage } from "./voice";
+import type { VoiceLanguage, VoicePhase } from "./voice";
 
 export type CameraStatus =
   | "inactive"
@@ -42,7 +42,8 @@ type GlassesSimulatorProps = {
   hudEvidence: QueryEvidence[];
   language: VoiceLanguage;
   onLanguageChange: (language: VoiceLanguage) => void;
-  isListening: boolean;
+  voicePhase: VoicePhase;
+  voiceTranscript: string | null;
   onListeningChange: (listening: boolean) => void;
   voiceInputSupported: boolean;
   speakAnswers: boolean;
@@ -137,7 +138,8 @@ export default function GlassesSimulator({
   hudEvidence,
   language,
   onLanguageChange,
-  isListening,
+  voicePhase,
+  voiceTranscript,
   onListeningChange,
   voiceInputSupported,
   speakAnswers,
@@ -369,7 +371,8 @@ export default function GlassesSimulator({
         onProactiveCuesChange={onProactiveCuesChange}
         language={language}
         onLanguageChange={onLanguageChange}
-        isListening={isListening}
+        voicePhase={voicePhase}
+        voiceTranscript={voiceTranscript}
         onListeningChange={onListeningChange}
         voiceInputSupported={voiceInputSupported}
         speakAnswers={speakAnswers}

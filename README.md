@@ -175,7 +175,7 @@ AI-generated metadata is a suggestion, not a fact. Review and edit it before sav
 
 ## Glasses Simulator
 
-The browser-based Glasses Simulator uses the laptop webcam as a stand-in for a future wearable camera. Camera access normally requires `localhost` or HTTPS; no microphone permission is requested.
+The browser-based Glasses Simulator uses the laptop webcam as a stand-in for a future wearable camera. Camera access normally requires `localhost` or HTTPS. The camera never asks for the microphone; microphone permission is requested only when you press a voice button (see below).
 
 1. Open the app locally and choose **Start camera**.
 2. Point the camera at a useful moment and choose **Capture image**.
@@ -201,7 +201,15 @@ The cue shows the existing answer directly, including a clear unknown state when
 
 ### Voice, answer language, and provenance
 
-The HUD can be used hands-free. Choose **Speak** to dictate one question through the browser Web Speech API; the recognized text runs through the same `/api/query` path, and the answer is read back with speech synthesis unless **Speak answers** is turned off. Dictation is one explicit turn per press: there is no wake word, no background listening, and no audio leaves the browser or is stored. Browsers without Web Speech support hide the voice controls and keep the typed HUD.
+Questions can be spoken instead of typed. Choose **Ask by voice** next to the main question box (no camera needed), or **Speak** in the camera HUD, and ask one question:
+
+1. The browser asks for microphone permission the first time.
+2. The button shows the microphone is on (**Stop listening** cancels at any time). Listening stops on its own when you finish speaking, or after 15 seconds.
+3. The recognized text appears in the question box and is sent through the same `/api/query` request as a typed question, with the same profile and language. Speech only turns into text; it does not change what MemoryCue knows or how it answers.
+
+Each press is one turn: there is no wake word, no background listening, and speaking never starts the camera, creates a capture, or saves a memory. MemoryCue does not record or store audio. The browser's built-in speech recognition (Web Speech API) does the speech-to-text; in Chrome that recognition runs on Google's speech service, so audio is sent there while you speak. English uses `en-US` and Arabic uses `ar-AE`, following the English/Arabic toggle.
+
+If permission is denied, no microphone is found, nothing is heard, or recognition fails, a short message explains it and typing keeps working. Browsers without Web Speech support (for example Firefox) hide the voice buttons. Answers are read back with speech synthesis unless **Speak answers** is turned off. Microphone input from physical smart glasses is not implemented.
 
 The **English / العربية** toggle sets the answer language. Arabic answers are built from the same stored records using Arabic templates, so the language never changes what MemoryCue claims to know; stored details such as a saved location are shown as they were entered rather than machine-translated.
 
@@ -288,7 +296,7 @@ The architecture is intended to later support wearable devices such as Meta AI g
 A future version could use:
 
 * first-person camera input;
-* microphone input;
+* microphone input from the glasses themselves;
 * open-ear audio responses;
 * wearable display prompts where supported.
 
