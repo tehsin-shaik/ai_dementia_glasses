@@ -2335,6 +2335,57 @@ def test_activity_at_a_clock_time_answers_in_arabic(client: TestClient) -> None:
     assert body["source_ids"] == ["memory:1"]
 
 
+@pytest.mark.parametrize(
+    ("question", "language", "answer", "source_id"),
+    [
+        ("what was I doing at ten AM", "en", "At 10:00 AM, you were making tea.", "memory:1"),
+        ("what was I doing at ten twelve", "en", "At 10:10 AM, you were reading.", "memory:2"),
+        ("what was I doing at half past ten a.m.", "en", "At 10:25 AM, you were preparing to leave.", "memory:4"),
+        ("ماذا كنت افعل الساعة العاشرة صباحا", "ar", "الساعة 10:00 صباحًا كنت: making tea.", "memory:1"),
+        ("ماذا كنت افعل الساعه العاشره والنصف", "ar", "الساعة 10:25 صباحًا كنت: preparing to leave.", "memory:4"),
+    ],
+)
+def test_activity_at_a_spoken_clock_time_uses_the_moment_in_progress(
+    client: TestClient, question: str, language: str, answer: str, source_id: str
+) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": question, "language": language}).json()
+    assert body["intent"] == "recent_activity"
+    assert body["answer"] == answer
+    assert body["source_ids"] == [source_id]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "what was I doing at nine AM",
+        "what was I doing at eleven thirty",
+        "ماذا كنت افعل الساعة التاسعة صباحا",
+        "what was I doing at ten-ish o'clock",
+        "ماذا كنت افعل الساعة الخامسة والعشرين",
+    ],
+)
+def test_activity_at_an_unsupported_or_unresolved_spoken_time_is_unknown(
+    client: TestClient, question: str
+) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": question}).json()
+    assert body["intent"] == "unknown"
+    assert body["source_ids"] == []
+    assert body["evidence"] == []
+
+
+@pytest.mark.parametrize("question", ["What was I doing?", "what was I doing at one point", "ماذا كنت افعل"])
+def test_activity_questions_without_a_time_still_use_the_latest_moment(
+    client: TestClient, question: str
+) -> None:
+    seed(client)
+    latest = client.post("/api/query", json={"question": "what was I doing"}).json()
+    body = client.post("/api/query", json={"question": question}).json()
+    assert body["intent"] == "recent_activity"
+    assert latest["source_ids"] and body["source_ids"] == latest["source_ids"]
+
+
 def test_database_media_storage_keeps_photos_without_local_files(
     client: TestClient, monkeypatch
 ) -> None:
