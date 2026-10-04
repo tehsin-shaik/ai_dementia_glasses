@@ -123,7 +123,7 @@ The user can ask:
 
 > What did I do today?
 
-The first returns the saved moment in progress at that time today (the latest one at or up to 30 minutes before it), stating that moment's own time. The second lists today's saved moments in order. When nothing was saved, both say so instead of guessing. Both work in English and Arabic.
+The first returns the saved moment in progress at that time today (the latest one at or up to 30 minutes before it), stating that moment's own time. Spoken times such as "ten AM", "half past ten", or "الساعة العاشرة صباحا" work the same as typed digits, and a time MemoryCue can't read with confidence gets "I don't know" rather than the latest activity. The second lists today's saved moments in order. When nothing was saved, both say so instead of guessing. Both work in English and Arabic.
 
 ### 8. Rewind recent moments
 

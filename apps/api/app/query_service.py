@@ -18,6 +18,7 @@ from .retrieval_service import (
     schedule_for_day,
 )
 from .schemas import Intent, Language, QueryEvidence, QueryResponse
+from .spoken_time import mentions_a_clock_time, rewrite_spoken_times
 
 
 ARABIC_OBJECT_SYNONYMS = {
@@ -48,7 +49,7 @@ PAST_TENSE_TERMS = {"was", "did", "كنت"}
 DAY_SUMMARY_VERBS = {"did", "فعلت"}
 TODAY_TERMS = {"today", "اليوم"}
 CLOCK_TIME_PATTERN = re.compile(
-    r"(?:\b(?:at|around|about)\s+|الساعة\s*)?"
+    r"(?:\b(?:at|around|about)\s+|الساع[ةه]\s*)?"
     r"(?<!\d)(\d{1,2})(?::(\d{2}))?\s*"
     r"(a\.?\s?m\.?|p\.?\s?m\.?|صباحًا|صباحا|ص|مساءً|مساء|م)?(?!\w)",
     flags=re.IGNORECASE,
@@ -76,12 +77,13 @@ def normalize_question(question: str) -> str:
 def clock_time_mention(question: str) -> tuple[int, int] | None:
     """Return the (hour, minute) asked about, as in "What was I doing at 10:10 AM?".
 
-    A bare number only counts when it is introduced by "at"/"around"/"الساعة"
-    or has minutes or AM/PM, so stray numbers are not read as times. Values
-    are not range-checked here.
+    Spoken times ("ten thirty AM", "الساعة العاشرة") are first rewritten to
+    digits. A bare number only counts when it is introduced by
+    "at"/"around"/"الساعة" or has minutes or AM/PM, so stray numbers are not
+    read as times. Values are not range-checked here.
     """
 
-    for match in CLOCK_TIME_PATTERN.finditer(question):
+    for match in CLOCK_TIME_PATTERN.finditer(rewrite_spoken_times(question)):
         text, hour_text, minute_text, meridiem = match.group(0), match.group(1), match.group(2), match.group(3)
         introduced = not text.lstrip()[:1].isdigit()
         if not (introduced or minute_text or meridiem):
@@ -104,6 +106,12 @@ def requested_clock_time(question: str) -> time | None:
     return time(*mention)
 
 
+def asks_about_a_clock_time(question: str) -> bool:
+    """Whether the question names a clock time, even one that cannot be resolved."""
+
+    return clock_time_mention(question) is not None or mentions_a_clock_time(rewrite_spoken_times(question))
+
+
 def detect_intent(question: str) -> Intent:
     """Classify a question without needing database context."""
 
@@ -116,7 +124,7 @@ def detect_intent(question: str) -> Intent:
     if tokens & LOCATION_TERMS_EN or tokens & LOCATION_TERMS_AR:
         return "object_location"
 
-    if tokens & PAST_TENSE_TERMS and clock_time_mention(question) is not None:
+    if tokens & PAST_TENSE_TERMS and asks_about_a_clock_time(question):
         return "recent_activity"
 
     # "What did I do today?" asks about the past; "What am I doing today?" is the schedule.
@@ -218,7 +226,7 @@ def answer_question(
 
     if intent == "recent_activity":
         asked_time = requested_clock_time(question)
-        if asked_time is None and clock_time_mention(question) is not None:
+        if asked_time is None and asks_about_a_clock_time(question):
             return unknown_response(language)
         asked_at = datetime.combine(date.today(), asked_time) if asked_time is not None else None
         # The moment in progress at the asked time: the latest saved one at or shortly before it.
