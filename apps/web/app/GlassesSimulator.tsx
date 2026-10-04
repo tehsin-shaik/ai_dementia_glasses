@@ -25,6 +25,7 @@ export type CameraStatus =
   | "error";
 
 type GlassesSimulatorProps = {
+  profileId: number;
   capturedFrame: File | null;
   capturedPreviewUrl: string | null;
   isAnalyzing: boolean;
@@ -121,6 +122,7 @@ function statusLabel(status: CameraStatus): string {
 }
 
 export default function GlassesSimulator({
+  profileId,
   capturedFrame,
   capturedPreviewUrl,
   isAnalyzing,
@@ -364,6 +366,7 @@ export default function GlassesSimulator({
       <canvas ref={canvasRef} className="camera-canvas" aria-hidden="true" />
 
       <MemoryHudControls
+        key={profileId}
         isCameraActive={isStreamActive}
         state={hudState}
         onQuery={onHudQuery}

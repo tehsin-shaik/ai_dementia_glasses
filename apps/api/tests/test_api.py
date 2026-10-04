@@ -2386,6 +2386,27 @@ def test_activity_questions_without_a_time_still_use_the_latest_moment(
     assert latest["source_ids"] and body["source_ids"] == latest["source_ids"]
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What did my doctor say?",
+        "What did I eat for lunch?",
+        "What did Sara tell me?",
+        "What was that?",
+        "What did my doctor say at 10 AM?",
+        "What was the weather at ten fifteen?",
+    ],
+)
+def test_past_tense_questions_about_other_things_do_not_answer_with_an_activity(
+    client: TestClient, question: str
+) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": question}).json()
+    assert body["intent"] == "unknown"
+    assert body["source_ids"] == []
+    assert body["evidence"] == []
+
+
 def test_database_media_storage_keeps_photos_without_local_files(
     client: TestClient, monkeypatch
 ) -> None:
