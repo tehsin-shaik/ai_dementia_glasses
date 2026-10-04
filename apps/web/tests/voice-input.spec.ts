@@ -5,6 +5,7 @@ type SpeechScript =
   | { mode: "empty" }
   | { mode: "error"; error: string }
   | { mode: "pending" }
+  | { mode: "started" }
   | { mode: "listening" };
 
 type SpeechLog = { languages: string[]; aborts: number };
@@ -35,6 +36,7 @@ async function installSpeech(page: Page, script: SpeechScript | null) {
       interimResults = false;
       maxAlternatives = 1;
       onstart: (() => void) | null = null;
+      onaudiostart: (() => void) | null = null;
       onspeechend: (() => void) | null = null;
       onresult: ((event: unknown) => void) | null = null;
       onerror: ((event: unknown) => void) | null = null;
@@ -46,6 +48,7 @@ async function installSpeech(page: Page, script: SpeechScript | null) {
         if (script.mode === "result") {
           later(() => {
             this.onstart?.();
+            this.onaudiostart?.();
             this.onspeechend?.();
             this.onresult?.({ results: [[{ transcript: script.transcript }]] });
             this.onend?.();
@@ -53,6 +56,7 @@ async function installSpeech(page: Page, script: SpeechScript | null) {
         } else if (script.mode === "empty") {
           later(() => {
             this.onstart?.();
+            this.onaudiostart?.();
             this.onspeechend?.();
             this.onresult?.({ results: [[{ transcript: "   " }]] });
             this.onend?.();
@@ -62,8 +66,13 @@ async function installSpeech(page: Page, script: SpeechScript | null) {
             this.onerror?.({ error: script.error });
             this.onend?.();
           });
-        } else if (script.mode === "listening") {
+        } else if (script.mode === "started") {
           later(() => this.onstart?.());
+        } else if (script.mode === "listening") {
+          later(() => {
+            this.onstart?.();
+            this.onaudiostart?.();
+          });
         }
       }
       stop() {
@@ -217,18 +226,29 @@ test("the microphone states are shown and Stop listening cancels without asking"
   await expect(voiceStatus(page)).toHaveCount(0);
   await expect(voiceButton(page)).toBeVisible();
 
+  await setSpeech(page, { mode: "started" });
+  await voiceButton(page).click();
+  await page.waitForTimeout(200);
+  await expect(voiceStatus(page)).toHaveText("Waiting for microphone permission...");
+  await page.getByRole("button", { name: "Stop listening" }).click();
+  await expect(voiceStatus(page)).toHaveCount(0);
+
   await setSpeech(page, { mode: "listening" });
   await voiceButton(page).click();
   await expect(voiceStatus(page)).toHaveText("Microphone on. Ask one question.");
   await page.getByRole("button", { name: "Stop listening" }).click();
   await expect(voiceStatus(page)).toHaveCount(0);
 
-  expect((await speechLog(page)).aborts).toBe(2);
+  expect((await speechLog(page)).aborts).toBe(3);
   expect(api.queries).toEqual([]);
 });
 
 const errorCases = [
   { error: "not-allowed", message: "Microphone permission was denied. Allow microphone access in your browser, or type your question." },
+  {
+    error: "service-not-allowed",
+    message: "Speech recognition is turned off for this browser or device (for example, Dictation is off). Type your question instead.",
+  },
   { error: "audio-capture", message: "No microphone was found. Connect one, or type your question." },
   { error: "no-speech", message: "I didn't hear a question. Try again or type it." },
   { error: "network", message: "Speech recognition in this browser needs a network connection. Type your question instead." },

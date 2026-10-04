@@ -35,7 +35,7 @@ type SpeechRecognitionLike = {
   start(): void;
   stop(): void;
   abort(): void;
-  onstart: (() => void) | null;
+  onaudiostart: (() => void) | null;
   onspeechend: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
@@ -77,6 +77,7 @@ export type SpeechInputPhase = "requesting" | "listening" | "processing";
 
 export type SpeechInputError =
   | "permission-denied"
+  | "service-off"
   | "no-microphone"
   | "unsupported"
   | "no-speech"
@@ -91,8 +92,11 @@ export function isVoiceActive(phase: VoicePhase): boolean {
 }
 
 function speechInputError(code: string): SpeechInputError {
-  if (code === "not-allowed" || code === "service-not-allowed") {
+  if (code === "not-allowed") {
     return "permission-denied";
+  }
+  if (code === "service-not-allowed") {
+    return "service-off";
   }
   if (code === "audio-capture") {
     return "no-microphone";
@@ -113,6 +117,8 @@ export function speechInputMessage(error: SpeechInputError): string {
   switch (error) {
     case "permission-denied":
       return "Microphone permission was denied. Allow microphone access in your browser, or type your question.";
+    case "service-off":
+      return "Speech recognition is turned off for this browser or device (for example, Dictation is off). Type your question instead.";
     case "no-microphone":
       return "No microphone was found. Connect one, or type your question.";
     case "unsupported":
@@ -176,7 +182,7 @@ export function startSpeechInput(
     }
   };
 
-  recognition.onstart = () => {
+  recognition.onaudiostart = () => {
     if (!settled) {
       callbacks.onPhase("listening");
     }

@@ -204,12 +204,14 @@ The cue shows the existing answer directly, including a clear unknown state when
 Questions can be spoken instead of typed. Choose **Ask by voice** next to the main question box (no camera needed), or **Speak** in the camera HUD, and ask one question:
 
 1. The browser asks for microphone permission the first time.
-2. The button shows the microphone is on (**Stop listening** cancels at any time). Listening stops on its own when you finish speaking, or after 15 seconds.
+2. Once the browser is actually recording, the button shows the microphone is on (**Stop listening** cancels at any time). Listening stops on its own when you finish speaking, or after 15 seconds.
 3. The recognized text appears in the question box and is sent through the same `/api/query` request as a typed question, with the same profile and language. Speech only turns into text; it does not change what MemoryCue knows or how it answers.
 
-Each press is one turn: there is no wake word, no background listening, and speaking never starts the camera, creates a capture, or saves a memory. MemoryCue does not record or store audio. The browser's built-in speech recognition (Web Speech API) does the speech-to-text; in Chrome that recognition runs on Google's speech service, so audio is sent there while you speak. English uses `en-US` and Arabic uses `ar-AE`, following the English/Arabic toggle.
+Each press is one turn: there is no wake word, no background listening, and speaking never starts the camera, creates a capture, or saves a memory. MemoryCue does not record or store audio. The browser's built-in speech recognition (Web Speech API) does the speech-to-text, usually on the browser vendor's speech service, so audio can be sent there while you speak: Chrome uses Google's service, Edge uses Microsoft's by default, and Safari uses Apple's speech recognition through Siri/Dictation, which may process it on Apple's servers. Recognition therefore needs a network connection. English uses `en-US` and Arabic uses `ar-AE`, following the English/Arabic toggle.
 
-If permission is denied, no microphone is found, nothing is heard, or recognition fails, a short message explains it and typing keeps working. Browsers without Web Speech support (for example Firefox) hide the voice buttons. Answers are read back with speech synthesis unless **Speak answers** is turned off. Microphone input from physical smart glasses is not implemented.
+Browser support: Chrome on a laptop or desktop is the tested browser. Edge should behave similarly but has not been tested. Safari (macOS, iPhone, iPad) only recognizes speech when Siri or Dictation is turned on, and not in web apps added to the iPhone/iPad Home Screen. Arabic recognition quality depends on the browser and has not yet been validated with real Arabic speakers.
+
+If permission is denied, speech recognition is turned off on the device, no microphone is found, nothing is heard, there is no network, or recognition fails, a short message explains it and typing keeps working. Browsers without Web Speech support (for example Firefox) hide the voice buttons. Answers are read back with speech synthesis unless **Speak answers** is turned off. Microphone input from physical smart glasses is not implemented.
 
 The **English / العربية** toggle sets the answer language. Arabic answers are built from the same stored records using Arabic templates, so the language never changes what MemoryCue claims to know; stored details such as a saved location are shown as they were entered rather than machine-translated.
 
