@@ -121,6 +121,15 @@ Recognition cues have the highest priority, followed by schedule cues and then i
 
 The cue engine never infers medical needs, medication compliance, emotion, confusion, distress, wandering, falls, or behavioral anomalies. It does not continuously inspect video or perform background face recognition. It evaluates stored context only.
 
+## First-person Glasses Experience
+
+The `/experience` page is a guided, first-person simulation of the future glasses display, for demos and judging. A procedural three.js apartment (kitchen, living room, hallway; no external models) replays Alex's seeded morning in seven steps: four captured moments (tea 10:00, reading 10:10, keys on the kitchen counter 10:18, preparing to leave 10:25), then "Where are my keys?", "Where is my wallet?", and free-form questions with suggestions.
+
+* **Explicit save.** Each captured moment shows "Keep this moment?" and the walk-through does not continue until **Save moment** is pressed. This Save is local to the simulation: it does not write Observations or Memories; the page says so. The moments match Alex's seeded records.
+* **Real answers.** Every question goes to the existing `/api/query` as Alex (profile `1`) in the selected language. The page renders only the returned answer and its sources. When a keys answer has evidence, the camera walks back toward the counter and a "Last recorded" marker appears over the keys. An `unknown` answer shows no sources and says MemoryCue does not guess. A failed request shows an error, never an answer.
+* **Voice and language.** The free-form step reuses the browser voice input (`startSpeechInput`) and the optional spoken answers. The English/Arabic toggle switches all page text, the request language, and the recognition language. Changing step or language cancels listening, stops speech, and drops late answers.
+* **Scope.** No camera, microphone, or data is used until the user acts. Without WebGL the scene is replaced by a note and the glasses panel still works; reduced-motion users get instant viewpoint changes. It is not a model of real Meta hardware.
+
 ## Development Identity and User Scoping
 
 Stage 6A adds two deterministic local demo profiles, Alex and Jordan. The browser's **Demo profile** selector sends the selected user ID in the `X-MemoryCue-User-Id` header. Query answers, memory creation and listing, people, schedules, object observations, vision analysis, and media access are scoped to that user. Switching profiles clears visible answers and unsaved camera/form state.
