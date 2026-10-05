@@ -1026,6 +1026,7 @@ export default function WearerApp() {
         </header>
 
         <GlassesSimulator
+          profileId={activeUserId}
           capturedFrame={memoryImageSource === "camera" ? memoryImage : null}
           capturedPreviewUrl={memoryImageSource === "camera" ? previewUrl : null}
           isAnalyzing={isAnalyzingVision && memoryImageSource === "camera"}
@@ -1071,6 +1072,7 @@ export default function WearerApp() {
         />
 
         <RewindPanel
+          key={activeUserId}
           apiUrl={API_URL}
           userId={activeUserId}
           language={language}

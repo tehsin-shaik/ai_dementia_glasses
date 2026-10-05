@@ -397,3 +397,24 @@ test("the camera HUD Speak button fills the HUD question box", async ({ page }) 
   expect(api.queries).toEqual([{ question: "Where are my keys?", language: "en", userId: "1" }]);
   expect(api.otherWrites).toEqual([]);
 });
+
+test("switching profile clears the HUD question box", async ({ page }) => {
+  await installSpeech(page, { mode: "result", transcript: "Where are my keys?" });
+  await routeApi(page, () => answer(keysAnswer));
+
+  await page.goto("/app");
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
+  const hudControls = page.getByLabel("MemoryCue camera cue controls");
+  const hudQuestion = hudControls.getByRole("textbox", { name: "Ask MemoryCue" });
+  await hudControls.getByRole("button", { name: "Speak" }).click();
+  await expect(hudQuestion).toHaveValue("Where are my keys?");
+
+  await page.getByLabel("Demo profile").selectOption({ label: "Jordan" });
+  await expect(hudQuestion).toHaveValue("");
+  await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
+
+  await hudQuestion.fill("Where is my wallet?");
+  await page.getByLabel("Demo profile").selectOption({ label: "Alex" });
+  await expect(hudQuestion).toHaveValue("");
+});

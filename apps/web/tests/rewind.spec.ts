@@ -169,3 +169,62 @@ test("rewinding an empty window says so and can show earlier moments", async ({ 
     { windowMinutes: "10", includeEarlier: "true" },
   ]);
 });
+
+test("switching profile never shows the previous profile's moments or late recap", async ({ page }) => {
+  const held: Record<string, Array<() => Promise<void>>> = { alexRecap: [], jordan: [] };
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      return route.fulfill({
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "*",
+          "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+        },
+      });
+    }
+    const url = new URL(request.url());
+    const userId = request.headers()["x-memorycue-user-id"];
+    if (url.pathname === "/api/rewind") {
+      const description = userId === "2" ? "Jordan watering plants" : "Alex reading";
+      const payload = {
+        summary: `${description} recap summary`,
+        moments: [{ ...moment(Number(userId), description, "2026-09-25T11:02:00"), image_url: null }],
+        window_minutes: 10,
+        within_window: true,
+        has_earlier: false,
+      };
+      const isRecap = url.searchParams.get("window_minutes") === "10";
+      if (userId === "1" && !isRecap) {
+        return fulfillJson(route, payload);
+      }
+      return new Promise<void>((resolve) => {
+        held[userId === "1" ? "alexRecap" : "jordan"].push(async () => {
+          await fulfillJson(route, payload).catch(() => undefined);
+          resolve();
+        });
+      });
+    }
+    if (url.pathname === "/api/cues") {
+      return fulfillJson(route, { cues: [] });
+    }
+    return fulfillJson(route, { detail: "Not found" }, 404);
+  });
+
+  await page.goto("/app");
+  await expect(panel(page).getByText("Alex reading")).toBeVisible();
+
+  await panel(page).getByRole("button", { name: "Rewind recent moments" }).click();
+  await expect.poll(() => held.alexRecap.length).toBe(1);
+  await page.getByLabel("Demo profile").selectOption({ label: "Jordan" });
+  await expect.poll(() => held.jordan.length).toBeGreaterThan(0);
+  await expect(panel(page).getByText("Alex reading")).toHaveCount(0);
+
+  await Promise.all(held.jordan.map((release) => release()));
+  await expect(panel(page).getByText("Jordan watering plants")).toBeVisible();
+  await held.alexRecap[0]();
+  await page.waitForTimeout(300);
+  await expect(panel(page).getByText("Alex reading")).toHaveCount(0);
+  await expect(panel(page).getByText("Alex reading recap summary")).toHaveCount(0);
+});

@@ -37,7 +37,7 @@ ARABIC_OBJECT_SYNONYMS = {
 
 SCHEDULE_TERMS_EN = {"today", "schedule", "plans", "plan", "appointments"}
 SCHEDULE_TERMS_AR = {"اليوم", "جدول", "جدولي", "مواعيدي", "برنامجي"}
-ACTIVITY_TERMS_EN = {"doing", "do", "did", "was"}
+ACTIVITY_TERMS_EN = {"doing", "do"}
 ACTIVITY_TERMS_AR = {"أفعل", "افعل", "كنت", "نشاطي"}
 LOCATION_TERMS_EN = {"where", "find", "seen", "misplaced", "lost", "leave", "left", "put"}
 LOCATION_TERMS_AR = {"أين", "اين", "وين"}
@@ -124,7 +124,8 @@ def detect_intent(question: str) -> Intent:
     if tokens & LOCATION_TERMS_EN or tokens & LOCATION_TERMS_AR:
         return "object_location"
 
-    if tokens & PAST_TENSE_TERMS and asks_about_a_clock_time(question):
+    asks_about_activity = bool(tokens & ACTIVITY_TERMS_EN or tokens & ACTIVITY_TERMS_AR)
+    if tokens & PAST_TENSE_TERMS and asks_about_activity and asks_about_a_clock_time(question):
         return "recent_activity"
 
     # "What did I do today?" asks about the past; "What am I doing today?" is the schedule.
