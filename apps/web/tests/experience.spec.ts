@@ -168,3 +168,24 @@ test("an unreachable API shows an error instead of an answer", async ({ page }) 
   await expect(glasses(page).getByRole("alert")).toContainText("MemoryCue couldn't be reached");
   await expect(page.getByTestId("experience-answer")).toHaveCount(0);
 });
+
+test("the Arabic layout stays inside a phone-width screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await routeQuery(page, () => ({ ...unknownAnswer, answer: "لا أملك معلومات محفوظة عن ذلك، ولن أخمّن.", language: "ar" }));
+  await page.goto("/experience");
+  await saveAllMoments(page);
+  await page.locator("[data-experience-next]").click();
+  await page.locator("[data-experience-next]").click();
+
+  await page.getByRole("button", { name: "العربية" }).click();
+  await page.getByRole("button", { name: "ماذا كنت أفعل الساعة العاشرة صباحا؟" }).click();
+  await expect(page.getByTestId("experience-answer")).toBeVisible();
+
+  const overflow = await page.evaluate(() =>
+    [".exp-stage", ".exp-hud", ".exp-narration", ".exp-form", ".exp-suggestions"].filter((selector) => {
+      const box = document.querySelector(selector)?.getBoundingClientRect();
+      return !box || box.left < 0 || box.right > window.innerWidth;
+    }),
+  );
+  expect(overflow).toEqual([]);
+});
