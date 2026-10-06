@@ -359,7 +359,7 @@ def test_post_memories_keeps_its_response_and_builds_the_hierarchy(client: TestC
     seed(client)
     created = client.post(
         "/api/memories",
-        files={"image": ("photo.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("photo.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={
             "timestamp": at(10, 30).isoformat(),
             "location": "Hallway",
@@ -392,7 +392,7 @@ def test_post_memories_keeps_its_response_and_builds_the_hierarchy(client: TestC
 def test_post_memories_defaults_source_and_rejects_unknown_sources(client: TestClient) -> None:
     seed(client)
     data = {"timestamp": at(10, 30).isoformat(), "location": "Hallway", "description": "Coat on the hook."}
-    files = {"image": ("photo.jpg", b"fake-image-content", "image/jpeg")}
+    files = {"image": ("photo.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")}
     assert client.post("/api/memories", files=files, data={**data, "source": "pager"}).status_code == 422
     assert client.post("/api/memories", files=files, data=data).status_code == 201
     assert client.get("/api/observations").json()[0]["source"] == "other"
@@ -419,7 +419,7 @@ def test_post_observation_runs_existing_vision_analysis(client: TestClient) -> N
     seed(client)
     response = client.post(
         "/api/observations",
-        files={"image": ("keys-on-table.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("keys-on-table.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={"timestamp": at(11).isoformat(), "source": "iphone_camera", "people": "Sarah, Stranger"},
     )
     assert response.status_code == 201
@@ -443,7 +443,7 @@ def test_post_observation_without_vision_provider_still_stores_it(client: TestCl
     seed(client)
     response = client.post(
         "/api/observations",
-        files={"image": ("random.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("random.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={"timestamp": at(11).isoformat(), "source": "uploaded_image"},
     )
     assert response.status_code == 201
@@ -471,7 +471,7 @@ def test_timeline_endpoints_are_isolated_per_user(client: TestClient) -> None:
     seed(client)
     created = client.post(
         "/api/observations",
-        files={"image": ("keys-on-table.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("keys-on-table.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={"timestamp": at(11).isoformat(), "source": "other"},
     ).json()
     other = {USER_ID_HEADER: "2"}
@@ -530,14 +530,14 @@ def test_existing_questions_still_answer_from_saved_moments(client: TestClient) 
 def test_what_did_i_do_today_lists_saved_moments_with_episodes(client: TestClient) -> None:
     seed(client)
     answer = client.post("/api/query", json={"question": "What did I do today?"}).json()
-    assert answer["intent"] == "day_summary"
+    assert answer["intent"] == "today_recall"
     assert answer["answer"].startswith("Today you saved 4 moments")
     assert "making tea" in answer["answer"]
     assert any(source.startswith("episode:") for source in answer["source_ids"])
     assert sum(source.startswith("memory:") for source in answer["source_ids"]) == 4
 
     arabic = client.post("/api/query", json={"question": "ماذا فعلت اليوم؟", "language": "ar"}).json()
-    assert arabic["intent"] == "day_summary"
+    assert arabic["intent"] == "today_recall"
 
     schedule = client.post("/api/query", json={"question": "What am I doing today?"}).json()
     assert schedule["intent"] == "schedule"
@@ -556,7 +556,7 @@ def test_unreviewed_observations_never_become_spoken_answers(client: TestClient)
     seed(client)
     client.post(
         "/api/observations",
-        files={"image": ("keys-on-table.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("keys-on-table.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={"timestamp": at(11, 50).isoformat(), "source": "meta_glasses"},
     )
     keys = client.post("/api/query", json={"question": "Where are my keys?"}).json()
@@ -745,7 +745,7 @@ def test_failed_event_inference_still_saves_the_observation(client: TestClient, 
     assert created.status_code == 201
     saved = client.post(
         "/api/memories",
-        files={"image": ("photo.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("photo.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={"timestamp": at(9, 40).isoformat(), "location": "Hall", "description": "Coat on the hook."},
     )
     assert saved.status_code == 201
@@ -799,7 +799,7 @@ CAPTURED_AT = datetime.combine(date.today(), time(10, 15, 27))
 def capture(client: TestClient, source: str = "browser_camera", **data) -> dict:
     response = client.post(
         "/api/observations",
-        files={"image": ("glasses-capture.jpg", b"captured-frame", "image/jpeg")},
+        files={"image": ("glasses-capture.jpg", b"\xff\xd8\xffcaptured-frame", "image/jpeg")},
         data={"timestamp": CAPTURED_AT.isoformat(), "source": source, "analyze": "false", **data},
     )
     assert response.status_code == 201
@@ -819,7 +819,7 @@ def test_a_capture_becomes_a_normalized_unreviewed_observation(client: TestClien
     assert body["reviewed"] is False
     assert body["latitude"] is None and body["longitude"] is None and body["location_label"] is None
     assert body["description"] is None and body["activity"] is None and body["analysis"] is None
-    assert client.get(body["image_url"]).content == b"captured-frame"
+    assert client.get(body["image_url"]).content == b"\xff\xd8\xffcaptured-frame"
     assert db.get(Observation, body["id"]).image_path == body["image_url"].removeprefix("/api/media/")
     assert client.get("/api/memories").json() == memories_before
     assert db.scalar(select(func.count()).select_from(ObjectObservation)) == objects_before
@@ -850,7 +850,7 @@ def test_an_analyzed_camera_capture_is_never_a_grounded_answer(client: TestClien
     memories_before = client.get("/api/memories").json()
     response = client.post(
         "/api/observations",
-        files={"image": ("keys-on-table.jpg", b"captured-frame", "image/jpeg")},
+        files={"image": ("keys-on-table.jpg", b"\xff\xd8\xffcaptured-frame", "image/jpeg")},
         data={"timestamp": at(11, 50).isoformat(), "source": "browser_camera"},
     )
     assert response.status_code == 201
@@ -919,7 +919,7 @@ def test_saving_a_capture_is_scoped_to_its_owner_and_needs_one_image(client: Tes
     assert other_user.status_code == 404
     both = client.post(
         "/api/memories",
-        files={"image": ("photo.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("photo.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={**form, "observation_id": str(raw["id"])},
     )
     assert both.status_code == 422
@@ -935,7 +935,7 @@ def test_captures_use_database_media_storage(client: TestClient, monkeypatch, tm
     media_directory = tmp_path / "media"
     assert not media_directory.exists() or not list(media_directory.iterdir())
     listed = {item["id"]: item for item in client.get("/api/observations").json()}[raw["id"]]
-    assert client.get(listed["image_url"]).content == b"captured-frame"
+    assert client.get(listed["image_url"]).content == b"\xff\xd8\xffcaptured-frame"
     assert client.get(listed["image_url"], headers={USER_ID_HEADER: "2"}).status_code == 404
 
     saved = client.post(
@@ -943,7 +943,7 @@ def test_captures_use_database_media_storage(client: TestClient, monkeypatch, tm
         data={"observation_id": str(raw["id"]), "timestamp": CAPTURED_AT.isoformat(), "location": "Hall", "description": "Coat."},
     )
     assert saved.status_code == 201
-    assert client.get(saved.json()["image_url"]).content == b"captured-frame"
+    assert client.get(saved.json()["image_url"]).content == b"\xff\xd8\xffcaptured-frame"
 
 
 # --- Rewind photo provenance --------------------------------------------------
@@ -957,7 +957,7 @@ def rewind_sources(client: TestClient) -> dict[str, str]:
 def upload_reviewed(client: TestClient, description: str, minute: int, filename: str = "photo.jpg", **data) -> dict:
     response = client.post(
         "/api/memories",
-        files={"image": (filename, b"uploaded-photo", "image/jpeg")},
+        files={"image": (filename, b"\xff\xd8\xffuploaded-photo", "image/jpeg")},
         data={"timestamp": at(23, minute).isoformat(), "location": "Hall", "description": description, **data},
     )
     assert response.status_code == 201

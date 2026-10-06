@@ -38,7 +38,7 @@ def capture(db: Session, user_id: int, *, hours_old: int = ABANDONED, image: str
     return observation
 
 
-def photo(data: bytes = b"captured-frame") -> str:
+def photo(data: bytes = b"\xff\xd8\xffcaptured-frame") -> str:
     filename = new_media_filename(".jpg")
     write_media_file(filename, data)
     return filename
@@ -145,7 +145,7 @@ def test_a_capture_saved_as_a_memory_and_its_shared_photo_are_kept(client: TestC
     seed(client)
     raw = client.post(
         "/api/observations",
-        files={"image": ("glasses-capture.jpg", b"captured-frame", "image/jpeg")},
+        files={"image": ("glasses-capture.jpg", b"\xff\xd8\xffcaptured-frame", "image/jpeg")},
         data={"timestamp": at(9).isoformat(), "source": "browser_camera", "analyze": "false"},
     ).json()
     saved = client.post(
@@ -159,7 +159,7 @@ def test_a_capture_saved_as_a_memory_and_its_shared_photo_are_kept(client: TestC
 
     assert (result.examined, result.retained, result.deleted_media) == (1, 1, [])
     assert exists(db, Observation, raw["id"])
-    assert client.get(saved["image_url"]).content == b"captured-frame"
+    assert client.get(saved["image_url"]).content == b"\xff\xd8\xffcaptured-frame"
 
 
 def test_the_source_of_a_reviewed_observation_is_kept(db: Session) -> None:
@@ -291,7 +291,7 @@ def test_a_photo_referenced_by_a_memory_is_kept(db: Session) -> None:
 def test_database_media_is_deleted_only_when_unreferenced(client: TestClient, db: Session, monkeypatch) -> None:
     monkeypatch.setenv("MEDIA_STORAGE", "database")
     seed(client)
-    upload = {"image": ("glasses-capture.jpg", b"captured-frame", "image/jpeg")}
+    upload = {"image": ("glasses-capture.jpg", b"\xff\xd8\xffcaptured-frame", "image/jpeg")}
     form = {"timestamp": at(9).isoformat(), "source": "browser_camera", "analyze": "false"}
     abandoned = client.post("/api/observations", files=upload, data=form).json()
     kept = client.post("/api/observations", files=upload, data=form).json()
@@ -311,7 +311,7 @@ def test_database_media_is_deleted_only_when_unreferenced(client: TestClient, db
     assert result.deleted_media == [abandoned_file]
     assert not exists_blob(db, abandoned_file) and exists_blob(db, kept_file)
     assert client.get(abandoned["image_url"]).status_code == 404
-    assert client.get(kept["image_url"]).content == b"captured-frame"
+    assert client.get(kept["image_url"]).content == b"\xff\xd8\xffcaptured-frame"
 
 
 def exists_blob(db: Session, filename: str) -> bool:
@@ -387,7 +387,7 @@ def test_cleanup_leaves_answers_rewind_and_memories_unchanged(client: TestClient
     seed(client)
     response = client.post(
         "/api/observations",
-        files={"image": ("keys-on-table.jpg", b"captured-frame", "image/jpeg")},
+        files={"image": ("keys-on-table.jpg", b"\xff\xd8\xffcaptured-frame", "image/jpeg")},
         data={"timestamp": at(11, 50).isoformat(), "source": "browser_camera"},
     )
     assert response.status_code == 201
@@ -411,7 +411,7 @@ def test_cleanup_leaves_answers_rewind_and_memories_unchanged(client: TestClient
 
 def test_a_new_capture_cleans_up_abandoned_ones_and_a_cleaned_capture_cannot_be_saved(client: TestClient, db: Session) -> None:
     seed(client)
-    upload = {"image": ("glasses-capture.jpg", b"captured-frame", "image/jpeg")}
+    upload = {"image": ("glasses-capture.jpg", b"\xff\xd8\xffcaptured-frame", "image/jpeg")}
     form = {"timestamp": at(9).isoformat(), "source": "browser_camera", "analyze": "false"}
     old = client.post("/api/observations", files=upload, data=form).json()
     db.get(Observation, old["id"]).created_at = datetime.now() - timedelta(hours=ABANDONED)

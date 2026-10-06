@@ -140,7 +140,7 @@ under a per-user advisory lock, and a failure only leaves events ungrouped.
 
 New intent: **"What did I do today?"** (`ماذا فعلت اليوم؟`) lists today's saved
 moments in order and cites the episodes they belong to. With no saved moments
-it returns the unknown answer. "What am I doing today?" stays the schedule.
+it returns the unknown answer. "What am I doing today?" stays the schedule. This intent is reported as `today_recall` (it was `day_summary` before the finalization pass).
 
 ## Migration of existing data
 
@@ -178,7 +178,7 @@ Unchanged: every existing route and response. Additive:
 | `POST /api/memories` | optional `source` form field (default `other`); otherwise identical |
 | `GET /api/memories` | items gain optional `title`, `episode_id`, `episode_title` |
 | `GET /api/rewind` | moments gain optional `episode_id`, `episode_title` |
-| `POST /api/query` | new `day_summary` intent |
+| `POST /api/query` | new `today_recall` intent (originally `day_summary`) |
 | `POST /api/observations` | new — source-agnostic capture |
 | `GET /api/observations`, `GET /api/events`, `GET /api/episodes` | new — `day`, `since`, `limit` (and `min_confidence` for events) |
 | `POST /api/episodes/consolidate` | new — group pending events now |

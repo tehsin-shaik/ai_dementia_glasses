@@ -35,8 +35,14 @@ ARABIC_OBJECT_SYNONYMS = {
     "جوالي": "phone",
 }
 
-SCHEDULE_TERMS_EN = {"today", "schedule", "plans", "plan", "appointments"}
-SCHEDULE_TERMS_AR = {"اليوم", "جدول", "جدولي", "مواعيدي", "برنامجي"}
+SCHEDULE_TERMS_EN = {"schedule", "plans", "plan", "appointments", "appointment", "calendar"}
+SCHEDULE_TERMS_AR = {"جدول", "جدولي", "مواعيدي", "موعدي", "برنامجي"}
+OPEN_QUESTION_STARTS = {"what", "whats", "ماذا", "ما", "شو"}
+# Advice, obligation, and future wording is not a request for a saved past moment.
+NON_RECALL_TERMS = {
+    "should", "supposed", "need", "needs", "must", "next", "will", "gonna", "going",
+    "يجب", "المفروض", "سأفعل", "سوف", "لازم",
+}
 ACTIVITY_TERMS_EN = {"doing", "do"}
 ACTIVITY_TERMS_AR = {"أفعل", "افعل", "كنت", "نشاطي"}
 LOCATION_TERMS_EN = {"where", "find", "seen", "misplaced", "lost", "leave", "left", "put"}
@@ -125,20 +131,26 @@ def detect_intent(question: str) -> Intent:
         return "object_location"
 
     asks_about_activity = bool(tokens & ACTIVITY_TERMS_EN or tokens & ACTIVITY_TERMS_AR)
+    is_open_question = bool(tokens & OPEN_QUESTION_STARTS)
     if tokens & PAST_TENSE_TERMS and asks_about_activity and asks_about_a_clock_time(question):
-        return "recent_activity"
+        return "time_anchored_activity"
 
     # "What did I do today?" asks about the past; "What am I doing today?" is the schedule.
-    if tokens & DAY_SUMMARY_VERBS and tokens & TODAY_TERMS:
-        return "day_summary"
+    if is_open_question and tokens & DAY_SUMMARY_VERBS and tokens & TODAY_TERMS:
+        return "today_recall"
 
     if tokens & SCHEDULE_TERMS_EN or tokens & SCHEDULE_TERMS_AR:
         return "schedule"
+    # A yes/no question that mentions today ("Did I take my medicine today?") is not a schedule request.
+    if is_open_question and tokens & TODAY_TERMS and not tokens & PAST_TENSE_TERMS:
+        return "schedule"
 
-    if "what" in tokens and tokens & ACTIVITY_TERMS_EN:
-        return "recent_activity"
-    if tokens & ACTIVITY_TERMS_AR and ("ماذا" in tokens or "ما" in tokens):
-        return "recent_activity"
+    if tokens & NON_RECALL_TERMS:
+        return "unknown"
+    if ("what" in tokens and tokens & ACTIVITY_TERMS_EN) or (
+        tokens & ACTIVITY_TERMS_AR and ("ماذا" in tokens or "ما" in tokens)
+    ):
+        return "time_anchored_activity" if asks_about_a_clock_time(question) else "recent_activity"
 
     if normalized.startswith("who is") or normalized.startswith("whos"):
         return "person_lookup"
@@ -225,7 +237,7 @@ def answer_question(
     if intent == "unknown":
         return unknown_response(language)
 
-    if intent == "recent_activity":
+    if intent in ("recent_activity", "time_anchored_activity"):
         asked_time = requested_clock_time(question)
         if asked_time is None and asks_about_a_clock_time(question):
             return unknown_response(language)
@@ -238,19 +250,7 @@ def answer_question(
             return unknown_response(language)
         activity = memory.activity.rstrip(".")
         activity_correction = latest_correction(db, memory.id)
-        if asked_time is not None:
-            saved_time = format_time(memory.timestamp, language)
-            answer = (
-                f"الساعة {saved_time} كنت: {activity}."
-                if language == "ar"
-                else f"At {saved_time}, you were {activity}."
-            )
-        else:
-            answer = (
-                f"آخر ما كنت تفعله: {activity}."
-                if language == "ar"
-                else f"You were {activity}."
-            )
+        answer = activity_answer(activity, memory.timestamp, asked_time, language)
         return QueryResponse(
             answer=answer,
             intent=intent,
@@ -344,7 +344,7 @@ def answer_question(
             language=language,
         )
 
-    if intent == "day_summary":
+    if intent == "today_recall":
         return day_summary(db, user_id, language)
 
     schedule_items = schedule_for_day(db, user_id, date.today())
@@ -373,6 +373,28 @@ def answer_question(
         ],
         language=language,
     )
+
+
+def activity_answer(activity: str, saved_at: datetime, asked_time: time | None, language: Language) -> str:
+    """Report a saved moment with its own time, never as what is happening now.
+
+    The activity text is quoted after a colon so stored phrasing of any shape
+    reads correctly.
+    """
+
+    saved_time = format_time(saved_at, language)
+    if asked_time is None:
+        if language == "ar":
+            return f"آخر لحظة محفوظة، الساعة {saved_time}: {activity}."
+        return f"Your last saved moment, at {saved_time}: {activity}."
+    if (saved_at.hour, saved_at.minute) == (asked_time.hour, asked_time.minute):
+        if language == "ar":
+            return f"لحظة محفوظة الساعة {saved_time}: {activity}."
+        return f"Saved at {saved_time}: {activity}."
+    asked = format_time(datetime.combine(saved_at.date(), asked_time), language)
+    if language == "ar":
+        return f"أقرب لحظة محفوظة قبل الساعة {asked} كانت الساعة {saved_time}: {activity}."
+    return f"The closest saved moment before {asked} was at {saved_time}: {activity}."
 
 
 def day_summary(db: Session, user_id: int, language: Language = "en") -> QueryResponse:
@@ -421,7 +443,7 @@ def day_summary(db: Session, user_id: int, language: Language = "en") -> QueryRe
         )
     return QueryResponse(
         answer=answer,
-        intent="day_summary",
+        intent="today_recall",
         source_ids=[item.source_id for item in evidence],
         evidence=evidence,
         language=language,

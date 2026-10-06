@@ -8,10 +8,11 @@ from pydantic import BaseModel, Field
 
 Intent = Literal[
     "recent_activity",
+    "time_anchored_activity",
+    "today_recall",
     "object_location",
     "person_lookup",
     "schedule",
-    "day_summary",
     "unknown",
 ]
 
@@ -88,12 +89,28 @@ class FaceEnrollmentStatus(BaseModel):
     created_at: datetime | None
 
 
+FaceRecognitionOutcome = Literal[
+    "matched", "no_enrollment", "no_face", "multiple_faces", "low_confidence", "ambiguous"
+]
+
+
+class FaceMatchDiagnostics(BaseModel):
+    """Scores for the development workspace only; the wearer UI never shows them."""
+
+    best_score: float | None
+    second_score: float | None
+    threshold: float
+    margin: float
+
+
 class FaceRecognitionResponse(BaseModel):
     recognized: bool
     person_id: int | None
     name: str | None
     relationship: str | None
     confidence: float = Field(ge=0, le=1)
+    outcome: FaceRecognitionOutcome = "matched"
+    diagnostics: FaceMatchDiagnostics | None = None
 
 
 class ImportantObjectResponse(BaseModel):

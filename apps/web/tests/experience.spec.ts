@@ -103,7 +103,23 @@ test("the keys question uses /api/query for Alex and shows the saved source", as
 
   await expect(page.getByTestId("experience-answer")).toHaveText(keysAnswer.answer);
   await expect(glasses(page).getByRole("list", { name: "Sources" })).toContainText("Saved memory #3");
+  await expect(page.locator(".exp-canvas")).toHaveAttribute("data-keys-revealed", "true");
   expect(queries).toEqual([{ question: "Where are my keys?", language: "en", userId: "1" }]);
+});
+
+test("keys saved somewhere other than the scene's counter are answered without pointing at the counter", async ({ page }) => {
+  const tableAnswer = {
+    ...keysAnswer,
+    answer: "Last recorded: your keys on the hallway table at 5:34 PM.",
+    evidence: [{ ...keysAnswer.evidence[0], detail: "keys on the hallway table", recorded_at: "2026-10-03T17:34:00" }],
+  };
+  await routeQuery(page, () => tableAnswer);
+  await page.goto("/experience");
+  await saveAllMoments(page);
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+
+  await expect(page.getByTestId("experience-answer")).toHaveText(tableAnswer.answer);
+  await expect(page.locator(".exp-canvas")).toHaveAttribute("data-keys-revealed", "false");
 });
 
 test("the wallet question shows the unknown answer with no sources", async ({ page }) => {

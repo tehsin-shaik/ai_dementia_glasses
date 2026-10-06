@@ -46,6 +46,7 @@ from .schemas import (
 from .seed import seed_demo_data
 from .timeline_routes import router as timeline_router
 from .vision import VisionAnalysis
+from .vision.schemas import normalize_analysis
 from .vision import provider as vision_provider
 from .vision.provider import VisionProviderError, VisionProviderNotConfiguredError
 
@@ -240,7 +241,7 @@ async def analyze_vision(
             filename=image.filename or f"image{extension}",
             context=context_value,
         )
-        return VisionAnalysis.model_validate(analysis)
+        return normalize_analysis(VisionAnalysis.model_validate(analysis))
     except (VisionProviderError, ValidationError, TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=502,

@@ -147,7 +147,7 @@ A successful explicit match updates the latest patient-scoped `RecognitionEvent`
 
 The provider boundary lives under `app/face/`: `FaceRecognizer` exposes embedding extraction and similarity comparison, `provider.py` contains the local `dlib-bin` implementation, and `service.py` owns serialization plus threshold and margin decisions. Route handlers do not call a cloud service or perform a global search. The current provider uses dlib's HOG detector, five-point landmark predictor, and pretrained `face-recognition-models` 128-dimensional ResNet encoder on CPU; similarity is normalized to a larger-is-better value.
 
-Only the derived embedding is stored. The caregiver reference image is read temporarily for validation and embedding extraction, then discarded. The recognition response exposes only `recognized`, the matched stored person fields when safe, and a bounded confidence value; it never returns embeddings or candidate lists. Confidence is intentionally withheld from the wearer HUD. This remains an opt-in research prototype and is not biometric authentication or production biometric security.
+Only the derived embedding is stored. The caregiver reference image is read temporarily for validation and embedding extraction, then discarded. The recognition response exposes only `recognized`, the matched stored person fields when safe, a bounded confidence value, and an `outcome` explaining an unknown result; it never returns embeddings or candidate lists. Scores for development are only returned with `?diagnostics=true`. Confidence is intentionally withheld from the wearer HUD. This remains an opt-in research prototype and is not biometric authentication or production biometric security.
 
 ## Development Identity Boundary
 
@@ -229,6 +229,6 @@ User review and edit
 Explicit memory save
 ```
 
-The analysis endpoint does not write to the database or permanent media storage. Provider output is validated against the internal `VisionAnalysis` schema before it is returned to the client. The client chooses which suggested object, if any, to include when saving a memory.
+The analysis endpoint does not write to the database or permanent media storage. Provider output is validated against the internal `VisionAnalysis` schema and normalized before it is returned to the client: blank fields become null, objects below 0.4 confidence are dropped, duplicate object names are merged, and the most confident objects come first. The wearer form only prefills an object reported at 0.6 confidence or above (or with no confidence). Uploaded bytes must match the JPEG, PNG, or WebP signature of their file type. The client chooses which suggested object, if any, to include when saving a memory.
 
 This document describes the intended direction only. It does not define a complete production architecture.
