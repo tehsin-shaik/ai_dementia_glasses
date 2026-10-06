@@ -21,10 +21,11 @@ Instead of relying on a general-purpose chatbot to guess, MemoryCue is designed 
 
 ## Explore MemoryCue
 
-The prototype has four focused surfaces:
+The prototype has five focused surfaces:
 
 * [`/`](http://localhost:3000/) — the product and research overview;
 * [`/app`](http://localhost:3000/app) — the wearer-facing browser camera simulator;
+* [`/experience`](http://localhost:3000/experience) — a first-person 3D walk-through of what the glasses would show;
 * [`/caregiver`](http://localhost:3000/caregiver) — setup for profiles linked to a simulated caregiver; and
 * [`/demo`](http://localhost:3000/demo) — development tools for resetting sample data and inspecting responses.
 
@@ -188,6 +189,12 @@ Use **Retake** to replace the captured image and **Stop camera** when finished. 
 Each capture is stored straight away as an unreviewed **Observation** (`source=browser_camera`, with its capture time) through `POST /api/observations`. Nothing becomes a memory until **Save memory**, which creates a reviewed copy linked to the original capture and reuses its photo. Unsaved captures are deleted with their photos after `OBSERVATION_RETENTION_HOURS` (default 168, i.e. 7 days) as long as nothing saved depends on them; reviewed data never expires.
 
 The browser camera is the first `CaptureSource` (`apps/web/app/capture.ts`). A future iPhone or Meta glasses client can send the same request with `source=iphone_camera` or `meta_glasses` without backend changes; no such client exists yet.
+
+### First-person glasses experience
+
+Open [`/experience`](http://localhost:3000/experience) for a guided 3D walk-through of Alex's demo morning, seen through the glasses. A small glasses panel in the corner shows each captured moment (tea, reading, keys on the kitchen counter, leaving), and the walk-through only continues after **Save moment**. At the front door Alex asks **Where are my keys?**: the answer comes from the real `/api/query`, the view turns back to the counter, and a "Last recorded · 10:18 AM" marker appears. **Where is my wallet?** shows the honest "I couldn't find matching saved information" answer. The last step takes typed or spoken questions in English or Arabic.
+
+The scene is built in code with three.js (no external models), uses Alex's seeded data, and does not write anything: **Save moment** here is part of the simulation. Use the arrow keys or **Back**/**Next** to move between steps.
 
 ### Layered memory
 
