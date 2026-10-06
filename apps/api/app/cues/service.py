@@ -35,6 +35,30 @@ def _cue_is_suppressed(state: CueState | None, now: datetime) -> bool:
     return state.last_shown_at is not None and now - state.last_shown_at < cooldown_delta()
 
 
+def _recognition_prefix(cue_id: str) -> str | None:
+    person, separator, _ = cue_id.partition(":recognition:")
+    return f"{person}{separator}" if separator and person.startswith("person:") else None
+
+
+def _person_recently_cued(states: dict[str, CueState], cue_id: str, now: datetime) -> bool:
+    """Whether another recognition of the same person was shown or dismissed within the cooldown.
+
+    Each recognition has its own cue id, so without this a person seen again
+    a few minutes later would be cued every time.
+    """
+
+    prefix = _recognition_prefix(cue_id)
+    if prefix is None:
+        return False
+    for key, state in states.items():
+        if key == cue_id or not key.startswith(prefix):
+            continue
+        for moment in (state.last_shown_at, state.dismissed_at):
+            if moment is not None and now - moment < cooldown_delta():
+                return True
+    return False
+
+
 def _upsert_state(db: Session, user_id: int, cue_key: str) -> CueState:
     state = db.scalar(
         select(CueState).where(CueState.user_id == user_id, CueState.cue_key == cue_key)
@@ -63,7 +87,12 @@ class CueEngine:
             for state in db.scalars(select(CueState).where(CueState.user_id == user_id))
         }
         candidates = self._candidates(db, user_id, current_time)
-        return [cue for cue in candidates if not _cue_is_suppressed(states.get(cue.id), current_time)]
+        return [
+            cue
+            for cue in candidates
+            if not _cue_is_suppressed(states.get(cue.id), current_time)
+            and not _person_recently_cued(states, cue.id, current_time)
+        ]
 
     def acknowledge_presentation(
         self,
@@ -91,10 +120,16 @@ class CueEngine:
             (cue for cue in self._candidates(db, user_id, current_time) if cue.id == cue_id),
             None,
         )
-        state = db.scalar(
-            select(CueState).where(CueState.user_id == user_id, CueState.cue_key == cue_id)
-        )
-        if candidate is None or _cue_is_suppressed(state, current_time):
+        states = {
+            item.cue_key: item
+            for item in db.scalars(select(CueState).where(CueState.user_id == user_id))
+        }
+        state = states.get(cue_id)
+        if (
+            candidate is None
+            or _cue_is_suppressed(state, current_time)
+            or _person_recently_cued(states, cue_id, current_time)
+        ):
             raise CueNotEligibleError("Cue is not currently eligible for presentation.")
 
         state = state or _upsert_state(db, user_id, cue_id)

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,28 +10,45 @@ from ..database import get_db
 from ..identity import get_current_user
 from ..media_storage import read_uploaded_image
 from ..models import Person, PersonFaceEnrollment, RecognitionEvent, User
-from ..schemas import FaceRecognitionResponse
+from ..schemas import FaceMatchDiagnostics, FaceRecognitionOutcome, FaceRecognitionResponse
 from . import provider as face_provider
 from .base import FaceRecognizerNotConfiguredError, MultipleFacesFoundError, NoFaceFoundError
-from .service import MatchCandidate, choose_match, deserialize_embedding
+from .service import MatchCandidate, MatchDecision, choose_match, deserialize_embedding, match_margin, match_threshold
 
 
 router = APIRouter(prefix="/api/face", tags=["face"])
 
 
-def unknown_response(confidence: float = 0.0) -> FaceRecognitionResponse:
+def match_diagnostics(decision: MatchDecision | None) -> FaceMatchDiagnostics:
+    return FaceMatchDiagnostics(
+        best_score=decision.confidence if decision and decision.outcome != "no_enrollment" else None,
+        second_score=decision.second_score if decision else None,
+        threshold=match_threshold(),
+        margin=match_margin(),
+    )
+
+
+def unknown_response(
+    outcome: FaceRecognitionOutcome,
+    decision: MatchDecision | None = None,
+    include_diagnostics: bool = False,
+) -> FaceRecognitionResponse:
+    confidence = decision.confidence if decision else 0.0
     return FaceRecognitionResponse(
         recognized=False,
         person_id=None,
         name=None,
         relationship=None,
         confidence=max(0.0, min(1.0, confidence)),
+        outcome=outcome,
+        diagnostics=match_diagnostics(decision) if include_diagnostics else None,
     )
 
 
 @router.post("/recognize", response_model=FaceRecognitionResponse)
 async def recognize_face(
     image: UploadFile = File(...),
+    diagnostics: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FaceRecognitionResponse:
@@ -47,7 +64,7 @@ async def recognize_face(
         )
     )
     if not enrollments:
-        return unknown_response()
+        return unknown_response("no_enrollment", include_diagnostics=diagnostics)
 
     try:
         recognizer = face_provider.get_face_recognizer()
@@ -56,8 +73,10 @@ async def recognize_face(
 
     try:
         query_embedding = recognizer.extract_embedding(image_bytes)
-    except (NoFaceFoundError, MultipleFacesFoundError):
-        return unknown_response()
+    except MultipleFacesFoundError:
+        return unknown_response("multiple_faces", include_diagnostics=diagnostics)
+    except NoFaceFoundError:
+        return unknown_response("no_face", include_diagnostics=diagnostics)
     except FaceRecognizerNotConfiguredError as exc:
         raise HTTPException(status_code=503, detail="Face recognition is not configured.") from exc
 
@@ -73,7 +92,8 @@ async def recognize_face(
 
     decision = choose_match(query_embedding, candidates, recognizer)
     if decision.person_id is None or decision.person_id not in people_by_id:
-        return unknown_response(decision.confidence)
+        outcome = "no_enrollment" if decision.outcome == "matched" else decision.outcome
+        return unknown_response(outcome, decision, diagnostics)
 
     person = people_by_id[decision.person_id]
     recognition_event = db.scalar(
@@ -99,4 +119,6 @@ async def recognize_face(
         name=person.name,
         relationship=person.relationship,
         confidence=decision.confidence,
+        outcome="matched",
+        diagnostics=match_diagnostics(decision) if diagnostics else None,
     )

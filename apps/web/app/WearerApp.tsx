@@ -42,6 +42,15 @@ type FaceRecognitionResult = {
   name: string | null;
   relationship: string | null;
   confidence: number;
+  outcome?: string;
+};
+
+const FACE_UNKNOWN_MESSAGES: Record<string, string> = {
+  no_face: "I couldn't see a face clearly. Try again facing the person.",
+  multiple_faces: "I can see more than one face. Point the camera at one person.",
+  no_enrollment: "No faces have been enrolled by a caregiver yet.",
+  ambiguous: "I'm not sure who this is, so I won't guess.",
+  low_confidence: "I couldn't match this person to an enrolled face.",
 };
 
 type DetectedObject = {
@@ -58,6 +67,12 @@ type VisionAnalysis = {
 };
 
 type MemoryImageSource = "upload" | "camera" | null;
+
+const MIN_PREFILL_OBJECT_CONFIDENCE = 0.6;
+
+function isConfidentObject(object: DetectedObject): boolean {
+  return object.confidence === null || object.confidence >= MIN_PREFILL_OBJECT_CONFIDENCE;
+}
 
 type ApiError = {
   detail?: string;
@@ -285,6 +300,8 @@ export default function WearerApp() {
   const [rewindRefreshToken, setRewindRefreshToken] = useState(0);
   const hudRequestRef = useRef(0);
   const captureRequestRef = useRef(0);
+  const queryRequestRef = useRef(0);
+  const analysisRequestRef = useRef(0);
   const profileVersionRef = useRef(0);
   const proactiveRequestRef = useRef(0);
   const dismissedCueKeysRef = useRef<Set<string>>(new Set());
@@ -569,9 +586,11 @@ export default function WearerApp() {
     const requestUserId = activeUserId;
     const requestProfileVersion = profileVersionRef.current;
     const hudRequestId = surface === "hud" ? hudRequestRef.current + 1 : 0;
+    const queryRequestId = surface === "normal" ? queryRequestRef.current + 1 : 0;
     clearProactiveCue();
 
     if (surface === "normal") {
+      queryRequestRef.current = queryRequestId;
       setQuestion(trimmedQuestion);
       setIsLoading(true);
       setError(null);
@@ -596,6 +615,9 @@ export default function WearerApp() {
       if (profileVersionRef.current !== requestProfileVersion) {
         return;
       }
+      if (surface === "normal" && queryRequestRef.current !== queryRequestId) {
+        return;
+      }
       setResult(queryResult);
       if (surface === "hud" && hudRequestRef.current === hudRequestId) {
         setHudAnswer(queryResult.answer);
@@ -615,11 +637,15 @@ export default function WearerApp() {
           setHudError(message);
           setHudState("error");
         }
-      } else {
+      } else if (queryRequestRef.current === queryRequestId) {
         setError(message);
       }
     } finally {
-      if (surface === "normal" && profileVersionRef.current === requestProfileVersion) {
+      if (
+        surface === "normal" &&
+        profileVersionRef.current === requestProfileVersion &&
+        queryRequestRef.current === queryRequestId
+      ) {
         setIsLoading(false);
       }
     }
@@ -740,7 +766,9 @@ export default function WearerApp() {
         setHudState("result");
         setProactiveRefreshToken((token) => token + 1);
       } else {
-        setHudAnswer("I couldn't match this person to an enrolled face.");
+        setHudAnswer(
+          FACE_UNKNOWN_MESSAGES[recognition.outcome ?? ""] ?? FACE_UNKNOWN_MESSAGES.low_confidence,
+        );
         setHudState("unknown");
       }
     } catch (requestError) {
@@ -836,6 +864,10 @@ export default function WearerApp() {
     setSaveMessage(null);
     const requestUserId = activeUserId;
     const requestProfileVersion = profileVersionRef.current;
+    const analysisRequestId = analysisRequestRef.current + 1;
+    analysisRequestRef.current = analysisRequestId;
+    const isCurrentAnalysis = () =>
+      profileVersionRef.current === requestProfileVersion && analysisRequestRef.current === analysisRequestId;
     const formData = new FormData();
     formData.append("image", memoryImage);
 
@@ -849,7 +881,7 @@ export default function WearerApp() {
       }
 
       const analysis = parseVisionAnalysis(await response.json());
-      if (profileVersionRef.current !== requestProfileVersion) {
+      if (!isCurrentAnalysis()) {
         return;
       }
       setVisionAnalysis(analysis);
@@ -857,17 +889,17 @@ export default function WearerApp() {
       setMemoryLocation(analysis.location ?? "");
       setMemoryActivity(analysis.activity ?? "");
       setMemoryDescription(analysis.description);
-      setMemoryObjectName(analysis.objects[0]?.name ?? "");
+      setMemoryObjectName(analysis.objects.find(isConfidentObject)?.name ?? "");
       setVisionMessage("AI suggestions added below. Review or edit them before saving.");
     } catch (requestError) {
-      if (profileVersionRef.current === requestProfileVersion) {
+      if (isCurrentAnalysis()) {
         setVisionError(true);
         setVisionMessage(
           `${requestError instanceof Error ? requestError.message : "The image could not be analyzed."} You can still complete the form manually.`,
         );
       }
     } finally {
-      if (profileVersionRef.current === requestProfileVersion) {
+      if (isCurrentAnalysis()) {
         setIsAnalyzingVision(false);
       }
     }
@@ -889,6 +921,8 @@ export default function WearerApp() {
 
   function forgetCapture() {
     captureRequestRef.current += 1;
+    analysisRequestRef.current += 1;
+    setIsAnalyzingVision(false);
     setCaptureObservationId(null);
     setIsRecordingCapture(false);
   }
@@ -934,16 +968,26 @@ export default function WearerApp() {
   }
 
   async function selectDemoImage(path: string, name: string) {
+    const requestProfileVersion = profileVersionRef.current;
     const response = await fetch(path);
+    if (profileVersionRef.current !== requestProfileVersion) {
+      return;
+    }
     if (!response.ok) {
       setError("The demo image could not be loaded.");
       return;
     }
-    selectUploadedImage(new File([await response.blob()], name, { type: "image/jpeg" }));
+    const image = await response.blob();
+    if (profileVersionRef.current !== requestProfileVersion) {
+      return;
+    }
+    selectUploadedImage(new File([image], name, { type: "image/jpeg" }));
   }
 
   function handleCameraCapture(capture: Capture) {
     const file = capture.image;
+    analysisRequestRef.current += 1;
+    setIsAnalyzingVision(false);
     setMemoryImage(file);
     setMemoryImageSource("camera");
     setMemoryTimestamp(localDateTimeValue(capture.capturedAt));
@@ -1282,13 +1326,13 @@ export default function WearerApp() {
               <p className="section-kicker">Answer</p>
               <h2 id="answer-heading">From saved information</h2>
             </div>
-            {result && <span className="intent-badge">{result.intent}</span>}
           </div>
           {result ? (
             <>
               <p className="answer-text">{result.answer}</p>
               <details className="debug-details">
                 <summary>Developer details</summary>
+                <p>Intent: {result.intent}</p>
                 <p>Source IDs: {result.source_ids.length ? result.source_ids.join(", ") : "None"}</p>
               </details>
             </>

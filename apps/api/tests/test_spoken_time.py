@@ -39,7 +39,7 @@ from app.query_service import asks_about_a_clock_time, clock_time_mention, detec
 def test_numeric_and_spoken_clock_times_resolve(question: str, expected: tuple[int, int]) -> None:
     assert clock_time_mention(question) == expected
     assert asks_about_a_clock_time(question)
-    assert detect_intent(question) == "recent_activity"
+    assert detect_intent(question) == "time_anchored_activity"
 
 
 @pytest.mark.parametrize(
@@ -55,7 +55,7 @@ def test_numeric_and_spoken_clock_times_resolve(question: str, expected: tuple[i
 def test_a_time_that_cannot_be_resolved_is_still_recognized_as_a_time_question(question: str) -> None:
     assert clock_time_mention(question) is None
     assert asks_about_a_clock_time(question)
-    assert detect_intent(question) == "recent_activity"
+    assert detect_intent(question) == "time_anchored_activity"
 
 
 @pytest.mark.parametrize(
@@ -64,7 +64,7 @@ def test_a_time_that_cannot_be_resolved_is_still_recognized_as_a_time_question(q
         ("What was I doing?", "recent_activity"),
         ("what was I doing at one point", "recent_activity"),
         ("What am I doing today?", "schedule"),
-        ("What did I do today?", "day_summary"),
+        ("What did I do today?", "today_recall"),
         ("Where are my keys?", "object_location"),
         ("Where did I put my two keys at ten?", "object_location"),
         ("ماذا كنت افعل", "recent_activity"),

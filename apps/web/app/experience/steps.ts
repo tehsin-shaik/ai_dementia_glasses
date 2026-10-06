@@ -29,6 +29,8 @@ export type QuestionStep = {
   narration: Localized;
   question: Localized;
   revealView?: Viewpoint;
+  /** The reveal only applies when the answer names one of these places. */
+  revealPlaces?: string[];
 };
 
 export type OpenStep = {
@@ -109,6 +111,7 @@ export const EXPERIENCE_STEPS: ExperienceStep[] = [
     sceneTime: "10:30 AM",
     view: { position: [4.9, 1.6, 0.1], target: [6, 1.35, 0] },
     revealView: { position: [0.2, 1.6, -0.8], target: KEYS_POSITION },
+    revealPlaces: ["counter", "طاولة المطبخ"],
     title: { en: "Where are my keys?", ar: "أين مفاتيحي؟" },
     narration: {
       en: "At the door Alex can't find the keys and asks. The answer comes from the live MemoryCue API, using only saved moments.",

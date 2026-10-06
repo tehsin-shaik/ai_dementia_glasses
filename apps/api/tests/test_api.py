@@ -28,6 +28,8 @@ from app.vision import VisionAnalysis
 from app.vision import provider as vision_provider
 from app.vision.provider import VisionProviderError
 
+JPEG_SIGNATURE = b"\xff\xd8\xff"
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
@@ -106,7 +108,7 @@ def upload_memory(
         data["activity"] = activity
     return client.post(
         "/api/memories",
-        files={"image": (filename, b"fake-image-content", "image/jpeg")},
+        files={"image": (filename, b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data=data,
         headers=user_headers(user_id),
     )
@@ -139,6 +141,7 @@ class StubFaceRecognizer:
     }
 
     def extract_embedding(self, image_bytes: bytes) -> list[float]:
+        image_bytes = image_bytes.removeprefix(JPEG_SIGNATURE)
         if image_bytes == b"no-face":
             raise NoFaceFoundError("No usable face was found.")
         if image_bytes == b"multiple-faces":
@@ -165,7 +168,7 @@ def upload_face(
 ):
     return client.post(
         f"/api/caregiver/patients/{patient_id}/people/{person_id}/face",
-        files={"image": ("face.jpg", image_bytes, "image/jpeg")},
+        files={"image": ("face.jpg", JPEG_SIGNATURE + image_bytes, "image/jpeg")},
         headers=caregiver_headers(caregiver_id),
     )
 
@@ -173,7 +176,7 @@ def upload_face(
 def recognize_face(client: TestClient, *, user_id: int, image_bytes: bytes):
     return client.post(
         "/api/face/recognize",
-        files={"image": ("camera.jpg", image_bytes, "image/jpeg")},
+        files={"image": ("camera.jpg", JPEG_SIGNATURE + image_bytes, "image/jpeg")},
         headers=user_headers(user_id),
     )
 
@@ -253,6 +256,8 @@ def test_face_recognition_matches_enrolled_person(client: TestClient, monkeypatc
         "name": "Sarah",
         "relationship": "Daughter",
         "confidence": 1.0,
+        "outcome": "matched",
+        "diagnostics": None,
     }
 
 
@@ -278,6 +283,8 @@ def test_face_recognition_returns_unknown_below_threshold(client: TestClient, mo
         "name": None,
         "relationship": None,
         "confidence": 0.4,
+        "outcome": "low_confidence",
+        "diagnostics": None,
     }
 
 
@@ -315,6 +322,8 @@ def test_face_recognition_returns_unknown_when_ambiguous(client: TestClient, mon
         "name": None,
         "relationship": None,
         "confidence": 0.82,
+        "outcome": "ambiguous",
+        "diagnostics": None,
     }
 
 
@@ -468,7 +477,7 @@ def test_recent_activity_query(client: TestClient) -> None:
     seed(client)
     response = client.post("/api/query", json={"question": "What was I doing?"})
     body = response.json()
-    assert body["answer"] == "You were preparing to leave."
+    assert body["answer"] == "Your last saved moment, at 10:25 AM: preparing to leave."
     assert body["intent"] == "recent_activity"
     assert body["source_ids"] == ["memory:4"]
     assert body["language"] == "en"
@@ -527,7 +536,7 @@ def test_recent_activity_accepts_spoken_phrasings(client: TestClient, question: 
     response = client.post("/api/query", json={"question": question})
     body = response.json()
     assert body["intent"] == "recent_activity"
-    assert body["answer"] == "You were preparing to leave."
+    assert body["answer"] == "Your last saved moment, at 10:25 AM: preparing to leave."
 
 
 def test_object_question_resolves_any_observed_object(client: TestClient) -> None:
@@ -671,7 +680,7 @@ def test_create_uploaded_memory(client: TestClient) -> None:
     assert stored_path.is_file()
     media_response = client.get(body["image_url"])
     assert media_response.status_code == 200
-    assert media_response.content == b"fake-image-content"
+    assert media_response.content == b"\xff\xd8\xfffake-image-content"
 
 
 def test_timezone_aware_timestamp_uses_backend_local_time(client: TestClient) -> None:
@@ -760,7 +769,7 @@ def test_reject_mismatched_image_content_type(client: TestClient) -> None:
     seed(client)
     response = client.post(
         "/api/memories",
-        files={"image": ("memory.png", b"fake-image-content", "image/jpeg")},
+        files={"image": ("memory.png", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={
             "timestamp": timestamp_at(),
             "location": "Kitchen counter",
@@ -801,7 +810,7 @@ def test_reject_missing_required_fields(client: TestClient) -> None:
     seed(client)
     missing_form_fields = client.post(
         "/api/memories",
-        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("memory.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
     )
     assert missing_form_fields.status_code == 422
     locations = {entry["loc"][-1] for entry in missing_form_fields.json()["detail"]}
@@ -880,7 +889,7 @@ def test_vision_analysis_returns_normalized_result(client: TestClient, monkeypat
     memories_before = client.get("/api/memories").json()
     class StubVisionAnalyzer:
         async def analyze_image(self, image_bytes, filename, context=None):
-            assert image_bytes == b"fake-image-content"
+            assert image_bytes == b"\xff\xd8\xfffake-image-content"
             assert filename == "memory.jpg"
             assert context == "Focus on useful everyday details."
             return VisionAnalysis(
@@ -893,7 +902,7 @@ def test_vision_analysis_returns_normalized_result(client: TestClient, monkeypat
     monkeypatch.setattr(vision_provider, "get_vision_analyzer", lambda: StubVisionAnalyzer())
     response = client.post(
         "/api/vision/analyze",
-        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("memory.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         data={"context": "Focus on useful everyday details."},
     )
 
@@ -919,7 +928,7 @@ def test_vision_analysis_rejects_unsupported_file_type(client: TestClient) -> No
     seed(client)
     response = client.post(
         "/api/vision/analyze",
-        files={"image": ("memory.gif", b"fake-image-content", "image/gif")},
+        files={"image": ("memory.gif", b"\xff\xd8\xfffake-image-content", "image/gif")},
     )
     assert response.status_code == 400
     assert "Unsupported image type" in response.json()["detail"]
@@ -929,7 +938,7 @@ def test_vision_analysis_handles_provider_not_configured(client: TestClient) -> 
     seed(client)
     response = client.post(
         "/api/vision/analyze",
-        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("memory.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
     )
     assert response.status_code == 503
     assert response.json() == {"detail": "Vision analysis is not configured."}
@@ -946,7 +955,7 @@ def test_vision_analysis_uses_grounded_fallback_for_bundled_demo_scene(
     )
     response = client.post(
         "/api/vision/analyze",
-        files={"image": ("keys-on-table.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("keys-on-table.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
     )
 
     assert response.status_code == 200
@@ -967,7 +976,7 @@ def test_vision_analysis_handles_invalid_provider_response(client: TestClient, m
     monkeypatch.setattr(vision_provider, "get_vision_analyzer", lambda: InvalidVisionAnalyzer())
     response = client.post(
         "/api/vision/analyze",
-        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("memory.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
     )
 
     assert response.status_code == 502
@@ -983,7 +992,7 @@ def test_vision_analysis_handles_provider_failure(client: TestClient, monkeypatc
     monkeypatch.setattr(vision_provider, "get_vision_analyzer", lambda: FailingVisionAnalyzer())
     response = client.post(
         "/api/vision/analyze",
-        files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+        files={"image": ("memory.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
     )
 
     assert response.status_code == 502
@@ -1021,7 +1030,7 @@ def test_recent_activity_uses_latest_non_null_activity(client: TestClient) -> No
     assert newer_without_activity.status_code == 201
 
     response = client.post("/api/query", json={"question": "What was I doing?"})
-    assert response.json()["answer"] == "You were reading in the living room."
+    assert response.json()["answer"] == "Your last saved moment, at 10:30 AM: reading in the living room."
 
 
 def test_personal_endpoints_require_identity(client: TestClient) -> None:
@@ -1036,7 +1045,7 @@ def test_personal_endpoints_require_identity(client: TestClient) -> None:
         memories_response = anonymous_client.get("/api/memories")
         create_response = anonymous_client.post(
             "/api/memories",
-            files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+            files={"image": ("memory.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
             data={
                 "timestamp": timestamp_at(),
                 "location": "Kitchen counter",
@@ -1045,7 +1054,7 @@ def test_personal_endpoints_require_identity(client: TestClient) -> None:
         )
         vision_response = anonymous_client.post(
             "/api/vision/analyze",
-            files={"image": ("memory.jpg", b"fake-image-content", "image/jpeg")},
+            files={"image": ("memory.jpg", b"\xff\xd8\xfffake-image-content", "image/jpeg")},
         )
         media_response = anonymous_client.get("/api/media/missing.jpg")
 
@@ -1171,7 +1180,7 @@ def test_memory_creation_ignores_client_user_id_payload(client: TestClient) -> N
     response = client.post(
         "/api/memories",
         headers=user_headers(1),
-        files={"image": ("memory.jpg", b"alex-image", "image/jpeg")},
+        files={"image": ("memory.jpg", b"\xff\xd8\xffalex-image", "image/jpeg")},
         data={
             "timestamp": timestamp_at(11, 2),
             "location": "Alex kitchen",
@@ -1245,7 +1254,7 @@ def test_media_is_only_available_to_its_owner(client: TestClient) -> None:
     assert unauthorized.status_code == 404
     assert unauthorized.json() == {"detail": "Media file not found."}
     assert authorized.status_code == 200
-    assert authorized.content == b"fake-image-content"
+    assert authorized.content == b"\xff\xd8\xfffake-image-content"
 
 
 def test_caregiver_identity_is_required_and_separate_from_patient_identity(client: TestClient) -> None:
@@ -2296,9 +2305,9 @@ def test_postgres_urls_are_pointed_at_the_installed_driver() -> None:
 @pytest.mark.parametrize(
     ("question", "answer", "source_id"),
     [
-        ("What was I doing at 10 AM?", "At 10:00 AM, you were making tea.", "memory:1"),
-        ("What was I doing at 10:12?", "At 10:10 AM, you were reading.", "memory:2"),
-        ("what was i doing at 10:30 a.m. today", "At 10:25 AM, you were preparing to leave.", "memory:4"),
+        ("What was I doing at 10 AM?", "Saved at 10:00 AM: making tea.", "memory:1"),
+        ("What was I doing at 10:12?", "The closest saved moment before 10:12 AM was at 10:10 AM: reading.", "memory:2"),
+        ("what was i doing at 10:30 a.m. today", "The closest saved moment before 10:30 AM was at 10:25 AM: preparing to leave.", "memory:4"),
     ],
 )
 def test_activity_at_a_clock_time_uses_the_moment_in_progress(
@@ -2306,7 +2315,7 @@ def test_activity_at_a_clock_time_uses_the_moment_in_progress(
 ) -> None:
     seed(client)
     body = client.post("/api/query", json={"question": question}).json()
-    assert body["intent"] == "recent_activity"
+    assert body["intent"] == "time_anchored_activity"
     assert body["answer"] == answer
     assert body["source_ids"] == [source_id]
 
@@ -2330,19 +2339,19 @@ def test_activity_at_a_clock_time_answers_in_arabic(client: TestClient) -> None:
         "/api/query",
         json={"question": "ماذا كنت أفعل الساعة 10 صباحًا؟", "language": "ar"},
     ).json()
-    assert body["intent"] == "recent_activity"
-    assert body["answer"] == "الساعة 10:00 صباحًا كنت: making tea."
+    assert body["intent"] == "time_anchored_activity"
+    assert body["answer"] == "لحظة محفوظة الساعة 10:00 صباحًا: making tea."
     assert body["source_ids"] == ["memory:1"]
 
 
 @pytest.mark.parametrize(
     ("question", "language", "answer", "source_id"),
     [
-        ("what was I doing at ten AM", "en", "At 10:00 AM, you were making tea.", "memory:1"),
-        ("what was I doing at ten twelve", "en", "At 10:10 AM, you were reading.", "memory:2"),
-        ("what was I doing at half past ten a.m.", "en", "At 10:25 AM, you were preparing to leave.", "memory:4"),
-        ("ماذا كنت افعل الساعة العاشرة صباحا", "ar", "الساعة 10:00 صباحًا كنت: making tea.", "memory:1"),
-        ("ماذا كنت افعل الساعه العاشره والنصف", "ar", "الساعة 10:25 صباحًا كنت: preparing to leave.", "memory:4"),
+        ("what was I doing at ten AM", "en", "Saved at 10:00 AM: making tea.", "memory:1"),
+        ("what was I doing at ten twelve", "en", "The closest saved moment before 10:12 AM was at 10:10 AM: reading.", "memory:2"),
+        ("what was I doing at half past ten a.m.", "en", "The closest saved moment before 10:30 AM was at 10:25 AM: preparing to leave.", "memory:4"),
+        ("ماذا كنت افعل الساعة العاشرة صباحا", "ar", "لحظة محفوظة الساعة 10:00 صباحًا: making tea.", "memory:1"),
+        ("ماذا كنت افعل الساعه العاشره والنصف", "ar", "أقرب لحظة محفوظة قبل الساعة 10:30 صباحًا كانت الساعة 10:25 صباحًا: preparing to leave.", "memory:4"),
     ],
 )
 def test_activity_at_a_spoken_clock_time_uses_the_moment_in_progress(
@@ -2350,7 +2359,7 @@ def test_activity_at_a_spoken_clock_time_uses_the_moment_in_progress(
 ) -> None:
     seed(client)
     body = client.post("/api/query", json={"question": question, "language": language}).json()
-    assert body["intent"] == "recent_activity"
+    assert body["intent"] == "time_anchored_activity"
     assert body["answer"] == answer
     assert body["source_ids"] == [source_id]
 
@@ -2425,7 +2434,7 @@ def test_database_media_storage_keeps_photos_without_local_files(
     assert not media_directory.exists() or not list(media_directory.iterdir())
     media_response = client.get(image_url)
     assert media_response.status_code == 200
-    assert media_response.content == b"fake-image-content"
+    assert media_response.content == b"\xff\xd8\xfffake-image-content"
     assert media_response.headers["content-type"] == "image/jpeg"
     assert client.get(image_url, headers={USER_ID_HEADER: "2"}).status_code == 404
 

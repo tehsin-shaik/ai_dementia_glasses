@@ -20,6 +20,11 @@ ALLOWED_CONTENT_TYPES = {
     ".png": {"image/png"},
     ".webp": {"image/webp"},
 }
+IMAGE_SIGNATURES = {
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
 
@@ -131,6 +136,19 @@ def validate_image_extension(filename: str | None) -> str:
     return extension
 
 
+def has_image_signature(extension: str, data: bytes) -> bool:
+    if extension == ".webp":
+        return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    return any(data.startswith(signature) for signature in IMAGE_SIGNATURES.get(extension, ()))
+
+
+def validate_image_signature(extension: str, data: bytes) -> None:
+    """Reject bytes that are not the image format their extension claims."""
+
+    if not has_image_signature(extension, data):
+        raise HTTPException(status_code=400, detail="The file is not a valid image of its stated type.")
+
+
 def validate_image_content_type(filename: str | None, content_type: str | None) -> None:
     """Reject a declared MIME type that does not match the allowed extension."""
 
@@ -160,7 +178,9 @@ async def read_uploaded_image(upload: UploadFile) -> tuple[str, bytes]:
     if total_bytes == 0:
         raise HTTPException(status_code=400, detail="Image file cannot be empty.")
 
-    return extension, b"".join(chunks)
+    data = b"".join(chunks)
+    validate_image_signature(extension, data)
+    return extension, data
 
 
 def remove_uploaded_image(filename: str) -> None:

@@ -95,8 +95,11 @@ def build_summary(moments: list[RewindMoment], language: Language) -> str:
     if language == "ar":
         header = f"هذه {count} من اللحظات المحفوظة، وليست تسجيلًا متواصلًا."
     else:
-        noun = "moment" if count == 1 else "moments"
-        header = f"These are {count} saved {noun}, not continuous recording."
+        header = (
+            "This is 1 saved moment, not continuous recording."
+            if count == 1
+            else f"These are {count} saved moments, not continuous recording."
+        )
     return " ".join([header, *(moment_phrase(moment, language) for moment in moments)])
 
 

@@ -1,0 +1,202 @@
+[
+  {
+    "name": "keys-last-seen",
+    "profile": 1,
+    "language": "en",
+    "question": "Where are my keys?",
+    "expected_intent": "object_location",
+    "expected_sources": ["memory:3"],
+    "must_include": ["kitchen counter", "10:18 AM", "Last recorded"],
+    "must_not_claim": ["currently", "are on the", "right now"]
+  },
+  {
+    "name": "keys-where-did-i-leave",
+    "profile": 1,
+    "language": "en",
+    "question": "Where did I leave my keys?",
+    "expected_intent": "object_location",
+    "expected_sources": ["memory:3"],
+    "must_include": ["kitchen counter"],
+    "must_not_claim": ["currently"]
+  },
+  {
+    "name": "keys-other-profile",
+    "profile": 2,
+    "language": "en",
+    "question": "Where are my keys?",
+    "expected_intent": "object_location",
+    "expected_sources": ["memory:7"],
+    "must_include": ["bedroom desk"],
+    "must_not_claim": ["kitchen counter"]
+  },
+  {
+    "name": "keys-arabic",
+    "profile": 1,
+    "language": "ar",
+    "question": "أين مفاتيحي؟",
+    "expected_intent": "object_location",
+    "expected_sources": ["memory:3"],
+    "must_include": ["kitchen counter", "10:18"],
+    "must_not_claim": []
+  },
+  {
+    "name": "latest-activity-has-time",
+    "profile": 1,
+    "language": "en",
+    "question": "What was I doing?",
+    "expected_intent": "recent_activity",
+    "expected_sources": ["memory:4"],
+    "must_include": ["10:25 AM", "preparing to leave"],
+    "must_not_claim": ["you are", "right now"]
+  },
+  {
+    "name": "activity-at-ten",
+    "profile": 1,
+    "language": "en",
+    "question": "What was I doing at 10 AM?",
+    "expected_intent": "time_anchored_activity",
+    "expected_sources": ["memory:1"],
+    "must_include": ["10:00 AM", "making tea"],
+    "must_not_claim": ["preparing to leave"]
+  },
+  {
+    "name": "activity-at-spoken-time",
+    "profile": 1,
+    "language": "en",
+    "question": "what did I do at half past ten",
+    "expected_intent": "time_anchored_activity",
+    "expected_sources": ["memory:4"],
+    "must_include": ["10:25 AM"],
+    "must_not_claim": []
+  },
+  {
+    "name": "activity-at-arabic-spoken-time",
+    "profile": 1,
+    "language": "ar",
+    "question": "ماذا كنت أفعل الساعة العاشرة صباحا",
+    "expected_intent": "time_anchored_activity",
+    "expected_sources": ["memory:1"],
+    "must_include": ["10:00", "making tea"],
+    "must_not_claim": []
+  },
+  {
+    "name": "today-recall",
+    "profile": 1,
+    "language": "en",
+    "question": "What did I do today?",
+    "expected_intent": "today_recall",
+    "expected_sources": ["memory:1", "memory:2", "memory:3", "memory:4"],
+    "must_include": ["making tea", "preparing to leave"],
+    "must_not_claim": []
+  },
+  {
+    "name": "person-lookup",
+    "profile": 1,
+    "language": "en",
+    "question": "Who is Sarah?",
+    "expected_intent": "person_lookup",
+    "expected_sources": ["person:1"],
+    "must_include": ["daughter"],
+    "must_not_claim": ["neighbor"]
+  },
+  {
+    "name": "person-lookup-other-profile",
+    "profile": 2,
+    "language": "en",
+    "question": "Who is Sarah?",
+    "expected_intent": "person_lookup",
+    "expected_sources": ["person:2"],
+    "must_include": ["neighbor"],
+    "must_not_claim": ["daughter"]
+  },
+  {
+    "name": "schedule-today",
+    "profile": 1,
+    "language": "en",
+    "question": "What am I doing today?",
+    "expected_intent": "schedule",
+    "expected_sources": ["schedule_item:1"],
+    "must_include": ["3:30 PM"],
+    "must_not_claim": []
+  },
+  {
+    "name": "unknown-time-without-memory",
+    "profile": 1,
+    "language": "en",
+    "question": "What was I doing at 9 AM?",
+    "expected_intent": "unknown",
+    "expected_sources": [],
+    "must_include": [],
+    "must_not_claim": ["making tea"]
+  },
+  {
+    "name": "adversarial-doctor",
+    "profile": 1,
+    "language": "en",
+    "question": "What did my doctor say?",
+    "expected_intent": "unknown",
+    "expected_sources": [],
+    "must_include": [],
+    "must_not_claim": ["preparing to leave", "doctor said"]
+  },
+  {
+    "name": "adversarial-ambiguous-hour",
+    "profile": 1,
+    "language": "en",
+    "question": "What happened at 10?",
+    "expected_intent": "unknown",
+    "expected_sources": [],
+    "must_include": [],
+    "must_not_claim": []
+  },
+  {
+    "name": "adversarial-someone-elses-object",
+    "profile": 1,
+    "language": "en",
+    "question": "Where is Sarah's bag?",
+    "expected_intent": "unknown",
+    "expected_sources": [],
+    "must_include": [],
+    "must_not_claim": ["kitchen counter"]
+  },
+  {
+    "name": "adversarial-medicine",
+    "profile": 1,
+    "language": "en",
+    "question": "Did I take my medicine?",
+    "expected_intent": "unknown",
+    "expected_sources": [],
+    "must_include": [],
+    "must_not_claim": ["you took", "yes"]
+  },
+  {
+    "name": "adversarial-medicine-arabic",
+    "profile": 1,
+    "language": "ar",
+    "question": "هل أخذت دوائي اليوم؟",
+    "expected_intent": "unknown",
+    "expected_sources": [],
+    "must_include": [],
+    "must_not_claim": []
+  },
+  {
+    "name": "adversarial-obligation",
+    "profile": 1,
+    "language": "en",
+    "question": "What was I supposed to do?",
+    "expected_intent": "unknown",
+    "expected_sources": [],
+    "must_include": [],
+    "must_not_claim": ["preparing to leave"]
+  },
+  {
+    "name": "adversarial-unknown-object",
+    "profile": 1,
+    "language": "en",
+    "question": "Where is my passport?",
+    "expected_intent": "unknown",
+    "expected_sources": [],
+    "must_include": [],
+    "must_not_claim": []
+  }
+]

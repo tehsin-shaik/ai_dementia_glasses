@@ -117,7 +117,7 @@ The current rules are deliberately narrow:
 * `recognized_person`: the latest successful explicit **Who is this?** event within a short window, using the stored `Person` name and relationship; and
 * `important_object`: a caregiver-marked important object with a recent last-seen observation and a recent activity explicitly matching a leaving-related phrase.
 
-Recognition cues have the highest priority, followed by schedule cues and then important-object cues. `GET /api/cues` evaluates and returns at most one cue without changing presentation state, so repeated polls and the demo inspector cannot consume it. Once the wearer HUD is active, visible, idle, and actually showing the cue, the client acknowledges it through `POST /api/cues/present`. That acknowledgement starts the patient-scoped configurable 20-minute cooldown. Repeating the same presentation ID is idempotent and does not extend the cooldown; a dismissal prevents that cue key from returning. The wearer can turn proactive polling off; manual questions, camera capture, and explicit face recognition remain available.
+Recognition cues have the highest priority, followed by schedule cues and then important-object cues. `GET /api/cues` evaluates and returns at most one cue without changing presentation state, so repeated polls and the demo inspector cannot consume it. Once the wearer HUD is active, visible, idle, and actually showing the cue, the client acknowledges it through `POST /api/cues/present`. That acknowledgement starts the patient-scoped configurable 20-minute cooldown. Repeating the same presentation ID is idempotent and does not extend the cooldown; a dismissal prevents that cue key from returning. Each recognition creates a new cue key, so a recognition cue is also suppressed while another recognition of the same person was shown or dismissed within the cooldown; seeing someone twice does not repeat the cue. The wearer can turn proactive polling off; manual questions, camera capture, and explicit face recognition remain available.
 
 The cue engine never infers medical needs, medication compliance, emotion, confusion, distress, wandering, falls, or behavioral anomalies. It does not continuously inspect video or perform background face recognition. It evaluates stored context only.
 
@@ -148,7 +148,7 @@ Important object definitions describe things a caregiver considers useful; they 
 
 Stage 7 adds opt-in recognition for people already present in a patient's caregiver-managed `Person` records. A caregiver with `manage_people` permission uploads a reference image containing exactly one face. The local API converts it to a pretrained dlib 128-dimensional ResNet embedding through the `dlib-bin` runtime and `face-recognition-models` package, then stores only that derived embedding in a patient-scoped enrollment row.
 
-The patient can then start the webcam and choose **Who is this?**. The simulator captures one frame and compares it only with enrolled people belonging to the selected patient. A configurable similarity threshold (`FACE_MATCH_THRESHOLD`, default `0.65`) and ambiguity margin (`FACE_MATCH_MARGIN`, default `0.08`) make larger-is-better scores conservative: weak or close matches return unknown. The name and relationship in a recognized cue are read from the stored `Person` record; they are never inferred from appearance.
+The patient can then start the webcam and choose **Who is this?**. The simulator captures one frame and compares it only with enrolled people belonging to the selected patient. A configurable similarity threshold (`FACE_MATCH_THRESHOLD`, default `0.65`) and ambiguity margin (`FACE_MATCH_MARGIN`, default `0.08`) make larger-is-better scores conservative: weak or close matches return unknown. Several reference faces of one person count as one candidate, so the margin is only measured against a different person. An unknown response carries an `outcome` (`no_enrollment`, `no_face`, `multiple_faces`, `low_confidence`, or `ambiguous`) so the HUD can say why without showing a score. `POST /api/face/recognize?diagnostics=true` additionally returns the best and second scores with the threshold and margin for development; the wearer app never requests it, and embeddings are never returned. The name and relationship in a recognized cue are read from the stored `Person` record; they are never inferred from appearance.
 
 This prototype has no global search, stranger or public-figure identification, internet lookup, auto-enrollment, continuous scanning, raw embedding API, cloud face provider, biometric authentication, or production security guarantees. No reference image is retained by the enrollment feature.
 
@@ -156,7 +156,7 @@ This prototype has no global search, stranger or public-figure identification, i
 
 ### 1. What was I doing?
 
-Recall the user's most recent activity.
+Recall the user's most recent saved activity and when it was saved ("Your last saved moment, at 10:25 AM: preparing to leave."). With a clock time ("What was I doing at 10 AM?", spoken or numeric) the `time_anchored_activity` intent returns the saved moment in progress at that time, or unknown when none was saved in the 30 minutes before it or the time cannot be resolved.
 
 ### 2. Where are my keys?
 
@@ -187,7 +187,11 @@ Return the user's simple daily schedule.
 
 ### 5. What did I do today?
 
-List today's saved moments in order, citing the episodes they belong to, or say it does not know when nothing was saved.
+List today's saved moments in order, citing the episodes they belong to, or say it does not know when nothing was saved (`today_recall` intent).
+
+### Questions that must stay unknown
+
+Questions about obligations or the future ("What was I supposed to do?", "What should I do next?"), medication taking ("Did I take my medicine?"), other people's belongings, things said by others, and bare ambiguous times ("What happened at 10?") return the unknown answer with no sources. MemoryCue stores no evidence that could support them. `tests/evaluation/scenarios.json` holds the deterministic question set that checks these rules.
 
 ## MVP Demo Data
 

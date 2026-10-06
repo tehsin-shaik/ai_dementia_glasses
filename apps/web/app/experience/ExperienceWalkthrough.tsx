@@ -126,6 +126,7 @@ export default function ExperienceWalkthrough() {
   const [savedSteps, setSavedSteps] = useState<Set<string>>(() => new Set());
   const [hud, setHud] = useState<HudAnswer>({ status: "idle" });
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
+  const [keysRevealed, setKeysRevealed] = useState(false);
   const [speakAnswers, setSpeakAnswers] = useState(false);
   const [speechOutput, setSpeechOutput] = useState(false);
   const [voiceInput, setVoiceInput] = useState(false);
@@ -173,6 +174,7 @@ export default function ExperienceWalkthrough() {
     setVoiceError(null);
     setDraft("");
     sceneRef.current?.showKeysMarker(null);
+    setKeysRevealed(false);
     sceneRef.current?.moveTo(EXPERIENCE_STEPS[stepIndex].view);
   }, [stepIndex, language, cancelVoice]);
 
@@ -213,9 +215,17 @@ export default function ExperienceWalkthrough() {
         speak(payload.answer, language);
       }
       const recordedAt = evidence[0]?.recordedAt;
-      if (!unknown && askedStep.kind === "question" && askedStep.revealView && recordedAt) {
+      const answerText = `${payload.answer} ${evidence[0]?.detail ?? ""}`.toLowerCase();
+      if (
+        !unknown &&
+        askedStep.kind === "question" &&
+        askedStep.revealView &&
+        recordedAt &&
+        askedStep.revealPlaces?.some((place) => answerText.includes(place))
+      ) {
         sceneRef.current?.moveTo(askedStep.revealView);
         sceneRef.current?.showKeysMarker(copy.lastRecorded(formatTime(recordedAt, language)));
+        setKeysRevealed(true);
       }
     } catch {
       if (requestRef.current === requestId) {
@@ -383,7 +393,12 @@ export default function ExperienceWalkthrough() {
       </header>
 
       <div className="exp-stage">
-        <canvas ref={canvasRef} className="exp-canvas" aria-hidden="true" />
+        <canvas
+          ref={canvasRef}
+          className="exp-canvas"
+          aria-hidden="true"
+          data-keys-revealed={keysRevealed ? "true" : "false"}
+        />
         {sceneUnavailable && <p className="exp-fallback" role="note">{copy.noWebgl}</p>}
         <div className="exp-lens" aria-hidden="true" />
         <aside className="exp-hud" role="status" aria-live="polite" aria-label="Glasses display" dir={dir}>

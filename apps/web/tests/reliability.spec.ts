@@ -461,3 +461,58 @@ test("the 390px camera heading aligns with its helper and the face-check sentenc
   const widths = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
   expect(widths.scroll).toBe(widths.client);
 });
+
+test("demo inspector cards stay inside a phone-width screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/**", async (route) => {
+    if (await fulfillPreflight(route)) {
+      return;
+    }
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/memories") {
+      return fulfillJson(route, [{
+        id: 3,
+        timestamp: "2026-10-03T10:18:00",
+        location: "kitchen counter",
+        activity: "preparing to leave",
+        description: "Keys visible on the kitchen counter next to the fruit bowl and a folded newspaper.",
+        object_name: "keys",
+        image_url: null,
+      }]);
+    }
+    if (path === "/api/query") {
+      return fulfillJson(route, {
+        answer: "Last recorded: your keys on the kitchen counter at 10:18 AM.",
+        intent: "object_location",
+        source_ids: ["memory:3"],
+        evidence: [{
+          source_id: "memory:3",
+          label: "Saved memory #3",
+          detail: "Keys visible on the kitchen counter next to the fruit bowl and a folded newspaper.",
+          recorded_at: "2026-10-03T10:18:00",
+          image_url: null,
+          corrected_at: null,
+          corrected_by: null,
+        }],
+        language: "en",
+      });
+    }
+    if (path === "/api/cues") {
+      return fulfillJson(route, { cues: [] });
+    }
+    return fulfillJson(route, { detail: "Not found" }, 404);
+  });
+  await page.goto("/demo");
+  await expect(page.getByRole("heading", { name: "Ask the memory system" })).toBeVisible();
+  await page.locator("#demo-question").fill("Where are my keys?");
+  await page.locator(".demo-query-card").getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(page.locator(".demo-query-card")).toContainText("Last recorded");
+  await expect(page.locator(".recent-description").first()).toContainText("Keys visible on the kitchen counter");
+
+  const overflowing = await page.evaluate(() =>
+    Array.from(document.querySelectorAll(".demo-card, .demo-card input, .demo-card button"))
+      .map((element) => element.getBoundingClientRect())
+      .filter((box) => box.width > 0 && (box.left < 0 || box.right > window.innerWidth)).length,
+  );
+  expect(overflowing).toBe(0);
+});
