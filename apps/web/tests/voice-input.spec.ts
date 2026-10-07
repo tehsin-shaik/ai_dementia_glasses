@@ -421,3 +421,45 @@ test("switching profile clears the question box and the camera answer", async ({
   await page.getByRole("combobox", { name: "Profile" }).selectOption({ label: "Alex" });
   await expect(questionInput(page)).toHaveValue("");
 });
+
+test("on a phone the camera answer fits inside the camera view with its dismiss button reachable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const evidence = (id: number, detail: string) => ({
+    source_id: `memory:${id}`,
+    label: `Saved memory #${id}`,
+    detail,
+    recorded_at: "2026-10-03T10:18:00",
+    image_url: null,
+    corrected_at: null,
+    corrected_by: null,
+  });
+  await routeApi(page, () => ({
+    body: {
+      ...answer(keysAnswer).body,
+      evidence: [
+        evidence(2, "Keys visible on the kitchen counter next to the fruit bowl."),
+        evidence(3, "Alex's keys were visible on the kitchen counter."),
+      ],
+    },
+  }));
+
+  await page.goto("/app");
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
+  await questionInput(page).fill("Where are my keys?");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  const cameraCue = page.getByRole("complementary", { name: "MemoryCue camera cue" });
+  await expect(cameraCue.getByText(keysAnswer)).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const view = document.querySelector(".camera-view")!.getBoundingClientRect();
+    const hud = document.querySelector(".hud-overlay")!.getBoundingClientRect();
+    const dismiss = document.querySelector(".hud-dismiss-button")!.getBoundingClientRect();
+    return { viewTop: view.top, viewBottom: view.bottom, hudTop: hud.top, hudBottom: hud.bottom, dismissTop: dismiss.top };
+  });
+  expect(layout.hudTop).toBeGreaterThanOrEqual(layout.viewTop);
+  expect(layout.hudBottom).toBeLessThanOrEqual(layout.viewBottom);
+  expect(layout.dismissTop).toBeGreaterThanOrEqual(layout.viewTop);
+  await cameraCue.getByRole("button", { name: "Dismiss" }).click();
+  await expect(cameraCue.getByText(keysAnswer)).toHaveCount(0);
+});

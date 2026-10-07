@@ -5611,3 +5611,12 @@ h3 { text-wrap: balance; }
     box-shadow: none;
   }
 }
+
+@media (max-width: 600px) {
+  .wearer-light .camera-panel.is-on .camera-view { aspect-ratio: 3 / 4; }
+}
+
+.wearer-light .hud-overlay {
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+}
