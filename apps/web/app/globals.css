@@ -39,7 +39,7 @@
 .demo-page-header h1 {
   font-family: var(--display);
   font-size: clamp(2.4rem, 5vw, 4.6rem);
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: -0.045em;
   line-height: 0.95;
 }
@@ -67,7 +67,7 @@
 .wearer-shell .question-panel h2 {
   font-family: var(--display);
   font-size: clamp(2rem, 4vw, 3.2rem);
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .wearer-shell .camera-panel {
@@ -283,6 +283,7 @@ h1,
 h2,
 h3 {
   font-family: var(--display);
+  font-weight: 400;
   letter-spacing: -0.045em;
 }
 
@@ -3450,7 +3451,7 @@ h2 {
 .demo-page-header h1 {
   font-family: var(--display);
   font-size: clamp(2.4rem, 5vw, 4.6rem);
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: -0.045em;
   line-height: 0.95;
 }
@@ -3472,7 +3473,7 @@ h2 {
 .wearer-shell .question-panel h2 {
   font-family: var(--display);
   font-size: clamp(2rem, 4vw, 3.2rem);
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .wearer-shell .camera-panel {
@@ -3488,7 +3489,7 @@ h2 {
 .wearer-shell .camera-controls,
 .wearer-shell .hud-controls { max-width: 760px; margin-right: auto; margin-left: auto; }
 .wearer-shell .camera-panel-heading { margin-bottom: 14px; }
-.wearer-shell .camera-panel-heading h2 { font-family: var(--display); font-size: 1.4rem; font-weight: 800; }
+.wearer-shell .camera-panel-heading h2 { font-family: var(--display); font-size: 1.4rem; font-weight: 400; }
 .wearer-shell .camera-helper { margin-top: 0; color: var(--muted); }
 
 .wearer-shell .camera-view {
@@ -3723,7 +3724,7 @@ h3 { text-wrap: balance; }
 .caregiver-page-shell.caregiver-experience h3,
 .demo-shell h1,
 .demo-shell h2,
-.demo-shell h3 { font-family: var(--ui-font); font-weight: 600; letter-spacing: -0.035em; }
+.demo-shell h3 { font-family: var(--display); font-weight: 400; letter-spacing: -0.035em; }
 .wearer-shell.wearer-experience .site-nav,
 .caregiver-page-shell.caregiver-experience .site-nav,
 .demo-shell .site-nav { width: min(1320px, calc(100% - 48px)); padding-top: 22px; padding-bottom: 22px; }
@@ -3758,7 +3759,7 @@ h3 { text-wrap: balance; }
 
 .caregiver-page-shell.caregiver-experience { background: #f4f3ee; }
 .caregiver-page-shell.caregiver-experience .caregiver-header h1,
-.demo-shell .demo-page-header h1 { font-size: clamp(2.15rem, 4.5vw, 3.8rem); font-weight: 600; }
+.demo-shell .demo-page-header h1 { font-size: clamp(2.15rem, 4.5vw, 3.8rem); font-weight: 400; }
 .caregiver-page-shell.caregiver-experience .management-panel,
 .demo-shell .demo-card,
 .demo-shell .demo-status-card { border-radius: var(--radius-surface); box-shadow: var(--shadow-quiet); }
@@ -3784,7 +3785,7 @@ h3 { text-wrap: balance; }
 
 .demo-shell { background: #f2f2ed; }
 .demo-shell .demo-card { padding: 26px; }
-.demo-shell .demo-card h2 { font-size: 1.5rem; font-weight: 600; }
+.demo-shell .demo-card h2 { font-size: 1.5rem; font-weight: 400; }
 .demo-shell .primary-button,
 .demo-shell .secondary-button,
 .demo-shell .suggestion-button,
@@ -4638,13 +4639,13 @@ h3 { text-wrap: balance; }
 .caregiver-page-shell.caregiver-experience h1,
 .caregiver-page-shell.caregiver-experience h2,
 .caregiver-page-shell.caregiver-experience h3 {
-  font-family: var(--spatial-font);
-  font-weight: 600;
+  font-family: var(--display);
+  font-weight: 400;
   letter-spacing: -0.03em;
 }
 
 .caregiver-page-shell.caregiver-experience .caregiver-header h1 {
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: -0.04em;
 }
 
@@ -5252,7 +5253,7 @@ h3 { text-wrap: balance; }
   margin: 0;
   font-family: var(--display);
   font-size: clamp(1.8rem, 4vw, 2.6rem);
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .wearer-light .language-toggle {

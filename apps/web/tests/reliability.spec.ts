@@ -543,3 +543,22 @@ test("caregiver section tabs all stay visible on a phone", async ({ page }) => {
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await expect(page.getByRole("button", { name: "Notes", exact: true })).toHaveClass(/is-active/);
 });
+
+test("page headings use the same typeface and weight on every page", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    if (await fulfillPreflight(route)) return;
+    return fulfillJson(route, []);
+  });
+  const styles: Record<string, string> = {};
+  for (const path of ["/", "/app", "/experience", "/caregiver"]) {
+    await page.goto(path);
+    await expect(page.locator("h1").first()).toBeVisible();
+    styles[path] = await page.locator("h1").first().evaluate((el) => {
+      const style = getComputedStyle(el);
+      return `${style.fontFamily} ${style.fontWeight}`;
+    });
+  }
+  for (const path of ["/app", "/experience", "/caregiver"]) {
+    expect(styles[path], path).toBe(styles["/"]);
+  }
+});
