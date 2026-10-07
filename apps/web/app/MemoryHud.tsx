@@ -1,8 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-
-import { isVoiceActive, type VoiceLanguage, type VoicePhase } from "./voice";
+import type { VoiceLanguage } from "./voice";
 
 export type MemoryHudState = "idle" | "querying" | "result" | "unknown" | "error";
 
@@ -36,69 +34,6 @@ type MemoryHudOverlayProps = {
   onDismiss: () => void;
 };
 
-type MemoryHudControlsProps = {
-  isCameraActive: boolean;
-  state: MemoryHudState;
-  onQuery: (question: string) => void;
-  proactiveCuesEnabled: boolean;
-  onProactiveCuesChange: (enabled: boolean) => void;
-  language: VoiceLanguage;
-  onLanguageChange: (language: VoiceLanguage) => void;
-  voicePhase: VoicePhase;
-  voiceTranscript: string | null;
-  onListeningChange: (listening: boolean) => void;
-  voiceInputSupported: boolean;
-  speakAnswers: boolean;
-  onSpeakAnswersChange: (enabled: boolean) => void;
-  speechOutputSupported: boolean;
-};
-
-const QUICK_ACTIONS: Record<VoiceLanguage, string[]> = {
-  en: ["What was I doing?", "Where are my keys?", "What am I doing today?"],
-  ar: ["ماذا كنت أفعل؟", "أين مفاتيحي؟", "ما هو جدولي اليوم؟"],
-};
-
-const COPY = {
-  en: {
-    kicker: "Camera cues",
-    heading: "Ask for a cue",
-    questions: "Questions",
-    optionalCues: "Optional cues",
-    askLabel: "Ask MemoryCue",
-    placeholder: "Where are my keys?",
-    ask: "Ask",
-    checking: "Checking...",
-    quickCues: "Quick cues",
-    speak: "Speak",
-    requesting: "Waiting for mic...",
-    listening: "Listening...",
-    processing: "Processing...",
-    speakAnswers: "Speak answers",
-    active: "Questions run only when you choose Ask or Speak. Optional cues use saved context and can be turned off.",
-    inactive: "Start the camera to use cues in the preview.",
-    noVoice: "This browser does not support voice input. Type your question instead.",
-  },
-  ar: {
-    kicker: "تلميحات الكاميرا",
-    heading: "اطلب تلميحًا",
-    questions: "الأسئلة",
-    optionalCues: "تلميحات اختيارية",
-    askLabel: "اسأل MemoryCue",
-    placeholder: "أين مفاتيحي؟",
-    ask: "اسأل",
-    checking: "جارٍ البحث...",
-    quickCues: "أسئلة سريعة",
-    speak: "تحدّث",
-    requesting: "بانتظار الميكروفون...",
-    listening: "أستمع...",
-    processing: "جارٍ المعالجة...",
-    speakAnswers: "نطق الإجابات",
-    active: "تُطرح الأسئلة فقط عند اختيار اسأل أو تحدّث. التلميحات الاختيارية تعتمد على معلومات محفوظة ويمكن إيقافها.",
-    inactive: "شغّل الكاميرا لاستخدام التلميحات في المعاينة.",
-    noVoice: "هذا المتصفح لا يدعم الإدخال الصوتي. اكتب سؤالك بدلاً من ذلك.",
-  },
-} as const;
-
 const OVERLAY_COPY = {
   en: {
     checking: "Checking memory",
@@ -128,7 +63,7 @@ const OVERLAY_COPY = {
   },
 } as const;
 
-function formatRecordedAt(recordedAt: string | null, language: VoiceLanguage): string | null {
+export function formatRecordedAt(recordedAt: string | null, language: VoiceLanguage): string | null {
   if (recordedAt === null) {
     return null;
   }
@@ -221,150 +156,5 @@ export function MemoryHudOverlay({
         </p>
       )}
     </aside>
-  );
-}
-
-export function MemoryHudControls({
-  isCameraActive,
-  state,
-  onQuery,
-  proactiveCuesEnabled,
-  onProactiveCuesChange,
-  language,
-  onLanguageChange,
-  voicePhase,
-  voiceTranscript,
-  onListeningChange,
-  voiceInputSupported,
-  speakAnswers,
-  onSpeakAnswersChange,
-  speechOutputSupported,
-}: MemoryHudControlsProps) {
-  const [question, setQuestion] = useState("");
-  const copy = COPY[language];
-  const isQuerying = state === "querying";
-  const isDisabled = !isCameraActive || isQuerying;
-  const isListening = isVoiceActive(voicePhase);
-  const voiceLabel =
-    voicePhase === "requesting" || voicePhase === "listening" || voicePhase === "processing"
-      ? copy[voicePhase]
-      : copy.speak;
-
-  useEffect(() => {
-    if (voiceTranscript) {
-      setQuestion(voiceTranscript);
-    }
-  }, [voiceTranscript]);
-
-  function submitQuestion(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedQuestion = question.trim();
-    if (!trimmedQuestion || isDisabled) {
-      return;
-    }
-    onQuery(trimmedQuestion);
-  }
-
-  return (
-    <div
-      className="hud-controls"
-      aria-label="MemoryCue camera cue controls"
-      lang={language}
-      dir={language === "ar" ? "rtl" : "ltr"}
-    >
-      <div className="hud-controls-heading">
-        <div>
-          <p className="section-kicker">{copy.kicker}</p>
-          <h3>{copy.heading}</h3>
-        </div>
-        <div className="hud-control-mode-row">
-          <span className="hud-mode-label">{copy.questions}</span>
-          <label className="hud-proactive-toggle">
-            <span>{copy.optionalCues}</span>
-            <input
-              type="checkbox"
-              checked={proactiveCuesEnabled}
-              onChange={(event) => onProactiveCuesChange(event.target.checked)}
-            />
-            <span aria-hidden="true">{proactiveCuesEnabled ? "On" : "Off"}</span>
-          </label>
-        </div>
-      </div>
-      <div className="hud-language-row" role="group" aria-label="Answer language">
-        <button
-          className={`hud-language-button ${language === "en" ? "is-selected" : ""}`}
-          type="button"
-          aria-pressed={language === "en"}
-          onClick={() => onLanguageChange("en")}
-        >
-          English
-        </button>
-        <button
-          className={`hud-language-button ${language === "ar" ? "is-selected" : ""}`}
-          type="button"
-          aria-pressed={language === "ar"}
-          onClick={() => onLanguageChange("ar")}
-        >
-          العربية
-        </button>
-      </div>
-      <form className="hud-query-form" onSubmit={submitQuestion}>
-        <label htmlFor="hud-question">{copy.askLabel}</label>
-        <div className="hud-query-input-row">
-          <input
-            id="hud-question"
-            type="text"
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder={copy.placeholder}
-            disabled={isDisabled}
-          />
-          {voiceInputSupported && (
-            <button
-              className={`hud-voice-button ${isListening ? "is-listening" : ""}`}
-              type="button"
-              aria-pressed={isListening}
-              onClick={() => onListeningChange(!isListening)}
-              disabled={!isCameraActive}
-            >
-              {voiceLabel}
-            </button>
-          )}
-          <button className="primary-button" type="submit" disabled={isDisabled || !question.trim()}>
-            {isQuerying ? copy.checking : copy.ask}
-          </button>
-        </div>
-      </form>
-      {speechOutputSupported && (
-        <label className="hud-speak-toggle">
-          <input
-            type="checkbox"
-            checked={speakAnswers}
-            onChange={(event) => onSpeakAnswersChange(event.target.checked)}
-          />
-          <span>{copy.speakAnswers}</span>
-        </label>
-      )}
-      <div className="hud-quick-actions">
-        <span>{copy.quickCues}</span>
-        <div>
-          {QUICK_ACTIONS[language].map((action) => (
-            <button
-              className="hud-quick-button"
-              key={action}
-              type="button"
-              onClick={() => onQuery(action)}
-              disabled={isDisabled}
-            >
-              {action}
-            </button>
-          ))}
-        </div>
-      </div>
-      <p className="hud-controls-helper">
-        {isCameraActive ? copy.active : copy.inactive}
-        {!voiceInputSupported && ` ${copy.noVoice}`}
-      </p>
-    </div>
   );
 }

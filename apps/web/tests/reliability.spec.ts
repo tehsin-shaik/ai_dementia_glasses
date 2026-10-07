@@ -449,15 +449,16 @@ test("demo failures differ from empty results and protected thumbnails stay prof
   )).toContain(jordanImageUrl);
 });
 
-test("the 390px camera heading aligns with its helper and the face-check sentence has spacing", async ({ page }) => {
+test("the 390px camera panel keeps its heading on one row and the face-check sentence has spacing", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route("**/api/**", async (route) => {
     if (await fulfillPreflight(route)) return;
     return fulfillJson(route, { cues: [] });
   });
   await page.goto("/app");
-  await expect(page.locator(".camera-panel-heading")).toHaveCSS("align-items", "flex-start");
-  await expect(page.locator(".camera-helper")).toContainText("Who is this? checks one image");
+  await expect(page.locator(".camera-panel-heading")).toHaveCSS("flex-direction", "row");
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await expect(page.locator(".camera-helper")).toContainText("Who is this? checks faces");
   const widths = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
   expect(widths.scroll).toBe(widths.client);
 });
@@ -515,4 +516,30 @@ test("demo inspector cards stay inside a phone-width screen", async ({ page }) =
       .filter((box) => box.width > 0 && (box.left < 0 || box.right > window.innerWidth)).length,
   );
   expect(overflowing).toBe(0);
+});
+
+test("caregiver section tabs all stay visible on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/caregiver/**", async (route) => {
+    if (await fulfillPreflight(route)) return;
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/caregiver/patients") return fulfillJson(route, [alex]);
+    return fulfillPatientDetail(route, 1);
+  });
+
+  await page.goto("/caregiver");
+  const tabs = page.getByRole("navigation", { name: "Profile setup sections" }).getByRole("button");
+  await expect(tabs).toHaveCount(6);
+  const clipped = await tabs.evaluateAll((buttons) =>
+    buttons
+      .filter((button) => {
+        const box = button.getBoundingClientRect();
+        return box.left < 0 || box.right > window.innerWidth;
+      })
+      .map((button) => button.textContent),
+  );
+  expect(clipped).toEqual([]);
+
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Notes", exact: true })).toHaveClass(/is-active/);
 });

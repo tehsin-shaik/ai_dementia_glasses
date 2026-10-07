@@ -205,3 +205,20 @@ test("the Arabic layout stays inside a phone-width screen", async ({ page }) => 
   );
   expect(overflow).toEqual([]);
 });
+
+test("on a phone the glasses display sits below the scene instead of covering it", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await routeQuery(page, () => keysAnswer);
+  await page.goto("/experience");
+  await saveAllMoments(page);
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(page.getByTestId("experience-answer")).toHaveText(keysAnswer.answer);
+
+  const layout = await page.evaluate(() => {
+    const canvas = document.querySelector(".exp-canvas")!.getBoundingClientRect();
+    const hud = document.querySelector(".exp-hud")!.getBoundingClientRect();
+    return { canvasBottom: canvas.bottom, canvasHeight: canvas.height, hudTop: hud.top };
+  });
+  expect(layout.canvasHeight).toBeGreaterThan(200);
+  expect(layout.hudTop).toBeGreaterThanOrEqual(layout.canvasBottom - 1);
+});

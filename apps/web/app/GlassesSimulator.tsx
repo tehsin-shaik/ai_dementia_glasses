@@ -4,14 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { captureVideoFrame } from "./camera";
 import { browserCameraSource, type Capture } from "./capture";
-import {
-  MemoryHudControls,
-  MemoryHudOverlay,
-  MemoryHudState,
-  ProactiveCue,
-  QueryEvidence,
-} from "./MemoryHud";
-import type { VoiceLanguage, VoicePhase } from "./voice";
+import { MemoryHudOverlay, MemoryHudState, ProactiveCue, QueryEvidence } from "./MemoryHud";
+import type { VoiceLanguage } from "./voice";
 
 export type CameraStatus =
   | "inactive"
@@ -25,7 +19,6 @@ export type CameraStatus =
   | "error";
 
 type GlassesSimulatorProps = {
-  profileId: number;
   capturedFrame: File | null;
   capturedPreviewUrl: string | null;
   isAnalyzing: boolean;
@@ -42,19 +35,10 @@ type GlassesSimulatorProps = {
   hudError: string | null;
   hudEvidence: QueryEvidence[];
   language: VoiceLanguage;
-  onLanguageChange: (language: VoiceLanguage) => void;
-  voicePhase: VoicePhase;
-  voiceTranscript: string | null;
-  onListeningChange: (listening: boolean) => void;
-  voiceInputSupported: boolean;
-  speakAnswers: boolean;
-  onSpeakAnswersChange: (enabled: boolean) => void;
-  speechOutputSupported: boolean;
   proactiveCue: ProactiveCue | null;
   proactiveCuesEnabled: boolean;
   onProactiveCuesChange: (enabled: boolean) => void;
   onProactiveCueVisibilityChange: (cue: ProactiveCue | null) => void;
-  onHudQuery: (question: string) => void;
   onDismissHud: () => void;
   onImagePreviewError: () => void;
 };
@@ -122,7 +106,6 @@ function statusLabel(status: CameraStatus): string {
 }
 
 export default function GlassesSimulator({
-  profileId,
   capturedFrame,
   capturedPreviewUrl,
   isAnalyzing,
@@ -139,19 +122,10 @@ export default function GlassesSimulator({
   hudError,
   hudEvidence,
   language,
-  onLanguageChange,
-  voicePhase,
-  voiceTranscript,
-  onListeningChange,
-  voiceInputSupported,
-  speakAnswers,
-  onSpeakAnswersChange,
-  speechOutputSupported,
   proactiveCue,
   proactiveCuesEnabled,
   onProactiveCuesChange,
   onProactiveCueVisibilityChange,
-  onHudQuery,
   onDismissHud,
   onImagePreviewError,
 }: GlassesSimulatorProps) {
@@ -328,98 +302,105 @@ export default function GlassesSimulator({
   }, [onProactiveCueVisibilityChange]);
 
   return (
-    <section className="camera-panel" aria-labelledby="camera-heading">
+    <section
+      className={`camera-panel ${showLivePreview || hasFrame ? "is-on" : "is-off"}`}
+      aria-labelledby="camera-heading"
+    >
       <div className="camera-panel-heading">
         <div>
-          <p className="section-kicker">Live camera</p>
-          <h2 id="camera-heading">Live view</h2>
+          <p className="section-kicker">Glasses view</p>
+          <h2 id="camera-heading">Camera</h2>
         </div>
         <span className={`camera-status camera-status-${status}`} role="status">
           <span className="status-dot" aria-hidden="true" />
           {statusLabel(status)}
         </span>
       </div>
-      <p className="camera-helper">
-        Capture an image. AI analysis is optional; review or edit the details before saving. <strong>Who is this?</strong>{" "}
-        checks one image against reference faces enrolled for this demo profile.
-      </p>
 
       <div className="camera-view" data-camera-active={showLivePreview}>
         {showLivePreview ? (
           <video ref={videoRef} autoPlay muted playsInline aria-label="Live camera preview" />
         ) : (
           <div className="camera-placeholder">
-            <span aria-hidden="true">◉</span>
-            <p>Camera preview will appear here.</p>
+            <span className="camera-placeholder-lens" aria-hidden="true" />
+            <p>Save a moment, or check who is in front of you.</p>
+            {!hasFrame && (
+              <button
+                className="primary-button camera-start-button"
+                type="button"
+                onClick={() => void startCamera()}
+                disabled={isStarting}
+              >
+                {isStarting ? "Starting camera..." : "Start camera"}
+              </button>
+            )}
           </div>
         )}
-        <MemoryHudOverlay
-          state={hudState}
-          answer={hudAnswer}
-          error={hudError}
-          evidence={hudEvidence}
-          language={language}
-          proactiveCue={visibleProactiveCue}
-          onDismiss={onDismissHud}
-        />
+        {isStreamActive && (
+          <MemoryHudOverlay
+            state={hudState}
+            answer={hudAnswer}
+            error={hudError}
+            evidence={hudEvidence}
+            language={language}
+            proactiveCue={visibleProactiveCue}
+            onDismiss={onDismissHud}
+          />
+        )}
       </div>
       <canvas ref={canvasRef} className="camera-canvas" aria-hidden="true" />
 
-      <MemoryHudControls
-        key={profileId}
-        isCameraActive={isStreamActive}
-        state={hudState}
-        onQuery={onHudQuery}
-        proactiveCuesEnabled={proactiveCuesEnabled}
-        onProactiveCuesChange={onProactiveCuesChange}
-        language={language}
-        onLanguageChange={onLanguageChange}
-        voicePhase={voicePhase}
-        voiceTranscript={voiceTranscript}
-        onListeningChange={onListeningChange}
-        voiceInputSupported={voiceInputSupported}
-        speakAnswers={speakAnswers}
-        onSpeakAnswersChange={onSpeakAnswersChange}
-        speechOutputSupported={speechOutputSupported}
-      />
+      {(isStreamActive || hasFrame) && (
+        <div className="camera-controls">
+          {isActive && (
+            <button className="primary-button" type="button" onClick={() => void captureFrame()} disabled={isRecognizing}>
+              Capture image
+            </button>
+          )}
+          {isActive && (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => void recognizeCurrentFrame()}
+              disabled={isRecognizing}
+            >
+              {isRecognizing ? "Checking..." : "Who is this?"}
+            </button>
+          )}
+          {hasFrame && (
+            <>
+              <button className="secondary-button" type="button" onClick={retakeFrame} disabled={isAnalyzing || isSaving}>
+                Retake
+              </button>
+              <button className="primary-button" type="button" onClick={onAnalyze} disabled={isAnalyzing || isSaving}>
+                {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
+              </button>
+            </>
+          )}
+          {isStreamActive && (
+            <button className="text-button" type="button" onClick={stopCamera} disabled={isAnalyzing || isSaving || isRecognizing}>
+              Stop camera
+            </button>
+          )}
+        </div>
+      )}
 
-      <div className="camera-controls">
-        {!streamRef.current && !hasFrame && (
-          <button className="secondary-button" type="button" onClick={() => void startCamera()} disabled={isStarting}>
-            {isStarting ? "Starting camera..." : "Start camera"}
-          </button>
-        )}
-        {isActive && (
-          <button className="primary-button" type="button" onClick={() => void captureFrame()} disabled={isRecognizing}>
-            Capture image
-          </button>
-        )}
-        {isActive && (
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => void recognizeCurrentFrame()}
-            disabled={isRecognizing}
-          >
-            {isRecognizing ? "Checking..." : "Who is this?"}
-          </button>
-        )}
-        {hasFrame && (
-          <>
-            <button className="secondary-button" type="button" onClick={retakeFrame} disabled={isAnalyzing || isSaving}>
-              Retake
-            </button>
-            <button className="primary-button" type="button" onClick={onAnalyze} disabled={isAnalyzing || isSaving}>
-              {isAnalyzing ? "Analyzing..." : "Analyze with AI"}
-            </button>
-          </>
-        )}
-        {streamRef.current && (
-          <button className="text-button" type="button" onClick={stopCamera} disabled={isAnalyzing || isSaving || isRecognizing}>
-            Stop camera
-          </button>
-        )}
-      </div>
+      {isStreamActive && (
+        <div className="camera-options">
+          <p className="camera-helper">
+            Nothing is saved until you review it. <strong>Who is this?</strong> checks faces a caregiver enrolled for
+            this profile.
+          </p>
+          <label className="hud-proactive-toggle">
+            <input
+              type="checkbox"
+              checked={proactiveCuesEnabled}
+              onChange={(event) => onProactiveCuesChange(event.target.checked)}
+            />
+            <span>Optional cues</span>
+          </label>
+        </div>
+      )}
 
       {hasFrame && (
         <div className="captured-frame">

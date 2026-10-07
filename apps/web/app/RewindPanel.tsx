@@ -6,7 +6,6 @@ import { memoryCueFetch } from "./api";
 import {
   fetchRecentStrip,
   fetchRewind,
-  REWIND_WINDOW_MINUTES,
   type Rewind,
   type RewindMoment,
 } from "./rewind";
@@ -33,12 +32,9 @@ const COPY = {
     capture: "Live capture",
     upload: "Uploaded photo",
     photo: "Saved photo",
-    sample: "Sample record",
     noPhoto: "No photo saved",
     corrected: "Caregiver corrected",
-    episode: "Part of",
     failed: "Saved moments could not be loaded.",
-    times: `Times are shown exactly as recorded. Rewind covers the last ${REWIND_WINDOW_MINUTES} minutes.`,
   },
   ar: {
     kicker: "اللحظات المحفوظة",
@@ -53,12 +49,9 @@ const COPY = {
     capture: "تصوير مباشر",
     upload: "صورة مرفوعة",
     photo: "صورة محفوظة",
-    sample: "سجل تجريبي",
     noPhoto: "لا توجد صورة محفوظة",
     corrected: "صحّحه مقدّم الرعاية",
-    episode: "جزء من",
     failed: "تعذّر تحميل اللحظات المحفوظة.",
-    times: `تُعرض الأوقات كما سُجّلت. يغطي الاسترجاع آخر ${REWIND_WINDOW_MINUTES} دقيقة.`,
   },
 } as const;
 
@@ -139,12 +132,7 @@ function MomentCard({
       <MomentPhoto apiUrl={apiUrl} userId={userId} moment={moment} fallback={copy.noPhoto} />
       <p className="rewind-card-description">{moment.description}</p>
       <span className="rewind-card-time">{formatMomentTime(moment.recorded_at, language)}</span>
-      <span className="rewind-card-source">{copy[moment.source]}</span>
-      {language === "en" && moment.episode_title && (
-        <span className="rewind-card-source">
-          {copy.episode} · {moment.episode_title}
-        </span>
-      )}
+      {moment.source !== "sample" && <span className="rewind-card-source">{copy[moment.source]}</span>}
       {moment.corrected_at !== null && (
         <span className="rewind-card-corrected">
           {copy.corrected} · {moment.corrected_by} · {formatMomentTime(moment.corrected_at, language)}
@@ -267,7 +255,6 @@ export default function RewindPanel({ apiUrl, userId, language, refreshToken }: 
         </div>
       )}
       {error && <p className="rewind-error">{error}</p>}
-      <p className="rewind-note">{copy.times}</p>
     </section>
   );
 }

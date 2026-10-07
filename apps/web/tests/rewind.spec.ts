@@ -117,7 +117,7 @@ test("each saved moment names where its photo came from", async ({ page }) => {
   await expect(card("Uploaded moment")).toContainText("Uploaded photo");
   await expect(card("Uploaded moment")).not.toContainText("Live capture");
   await expect(card("Unknown-origin moment")).toContainText("Saved photo");
-  await expect(card("Seeded moment")).toContainText("Sample record");
+  await expect(card("Seeded moment")).not.toContainText("Sample record");
   await expect(strip.getByText("Live capture")).toHaveCount(1);
 });
 
@@ -217,7 +217,7 @@ test("switching profile never shows the previous profile's moments or late recap
 
   await panel(page).getByRole("button", { name: "Rewind recent moments" }).click();
   await expect.poll(() => held.alexRecap.length).toBe(1);
-  await page.getByLabel("Demo profile").selectOption({ label: "Jordan" });
+  await page.getByRole("combobox", { name: "Profile" }).selectOption({ label: "Jordan" });
   await expect.poll(() => held.jordan.length).toBeGreaterThan(0);
   await expect(panel(page).getByText("Alex reading")).toHaveCount(0);
 
