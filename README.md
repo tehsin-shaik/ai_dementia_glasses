@@ -135,7 +135,8 @@ The wearer screen shows a strip of the latest saved moments, each with its photo
 | **Live capture** | a camera capture (`browser_camera`, and later `iphone_camera` or `meta_glasses`) |
 | **Uploaded photo** | an uploaded file or a bundled demo scene (`uploaded_image`) |
 | **Saved photo** | an unknown origin, such as memories migrated from older versions |
-| **Sample record** | a seeded demo moment with no photo |
+
+Seeded demo moments without a photo show no label.
 
 **Rewind recent moments** summarizes up to three moments saved in the last ten minutes, in order, and says it is not continuous recording. If nothing was saved in that window, it offers **Show earlier saved moments** instead. Object answers carry the saved photo as evidence and say `Last recorded`, so they never claim an object is still there.
 
@@ -202,13 +203,13 @@ Under each saved memory, MemoryCue keeps the chain **Observation → Event → E
 
 ### Glasses-style memory HUD
 
-While the webcam is active, the simulator also provides a compact glasses-style HUD over the live camera view. Choose one of the quick cues or type a question under **Ask MemoryCue**, then choose **Ask**. The HUD sends that question to the same grounded `/api/query` endpoint used by the normal question panel.
+The wearer screen leads with one **Ask MemoryCue** box and shows the answer directly beneath it, followed by the camera, **Add a memory**, and the saved-moments strip. While the webcam is active, the same answer also appears in a compact glasses-style HUD over the live camera view; there is no second question box. Both come from the same grounded `/api/query` request.
 
 The cue shows the existing answer directly, including a clear unknown state when MemoryCue has no matching context. Choose **Dismiss** to clear it without stopping the camera. MemoryCue does not continuously analyze video or run background queries. Face recognition is a separate, manually triggered action described below.
 
 ### Voice, answer language, and provenance
 
-Questions can be spoken instead of typed. Choose **Ask by voice** next to the main question box (no camera needed), or **Speak** in the camera HUD, and ask one question:
+Questions can be spoken instead of typed. Choose **Ask by voice** next to the question box (no camera needed) and ask one question:
 
 1. The browser asks for microphone permission the first time.
 2. Once the browser is actually recording, the button shows the microphone is on (**Stop listening** cancels at any time). Listening stops on its own when you finish speaking, or after 15 seconds.

@@ -5,6 +5,7 @@ from collections.abc import Generator
 from datetime import datetime, timedelta
 import json
 import os
+import re
 from pathlib import Path
 
 import httpx
@@ -616,8 +617,47 @@ def test_arabic_answers_stay_grounded_in_stored_records(client: TestClient) -> N
     ).json()
     assert body["intent"] == "object_location"
     assert body["language"] == "ar"
-    assert "kitchen counter" in body["answer"]
-    assert "صباحًا" in body["answer"]
+    assert body["answer"] == "آخر تسجيل: مفاتيحك على طاولة المطبخ الساعة 10:18 صباحًا."
+    assert body["evidence"][0]["detail"] == "طاولة المطبخ"
+
+
+@pytest.mark.parametrize(
+    ("question", "answer"),
+    [
+        ("ماذا كنت أفعل؟", "آخر لحظة محفوظة، الساعة 10:25 صباحًا: الاستعداد للخروج."),
+        ("Who is Sarah?", "سارة: ابنتك — حسب السجل المحفوظ لدى مقدّم الرعاية."),
+        ("What am I doing today?", "زيارة سارة الساعة 3:30 مساءً. العشاء الساعة 6:00 مساءً."),
+    ],
+)
+def test_arabic_answers_translate_known_saved_wording(client: TestClient, question: str, answer: str) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": question, "language": "ar"}).json()
+    assert body["answer"] == answer
+
+
+def test_arabic_today_recall_has_no_english_saved_text(client: TestClient) -> None:
+    seed(client)
+    body = client.post("/api/query", json={"question": "ماذا فعلت اليوم؟", "language": "ar"}).json()
+    assert body["intent"] == "today_recall"
+    assert "المفاتيح على طاولة المطبخ" in body["answer"]
+    assert re.search(r"[A-Za-z]", body["answer"]) is None
+
+
+def test_arabic_answers_quote_saved_text_without_a_known_translation(client: TestClient) -> None:
+    seed(client)
+    upload = upload_memory(
+        client,
+        timestamp=timestamp_in(-1),
+        location="Blue drawer",
+        description="Keys in the blue drawer.",
+        activity="tidying the drawer",
+        object_name="keys",
+    )
+    assert upload.status_code == 201
+    keys = client.post("/api/query", json={"question": "أين مفاتيحي؟", "language": "ar"}).json()
+    activity = client.post("/api/query", json={"question": "ماذا كنت أفعل؟", "language": "ar"}).json()
+    assert keys["answer"].startswith("آخر تسجيل: مفاتيحك في «Blue drawer» الساعة")
+    assert activity["answer"].endswith(": «tidying the drawer».")
 
 
 def test_arabic_unknown_answer_refuses_to_guess(client: TestClient) -> None:
@@ -2340,7 +2380,7 @@ def test_activity_at_a_clock_time_answers_in_arabic(client: TestClient) -> None:
         json={"question": "ماذا كنت أفعل الساعة 10 صباحًا؟", "language": "ar"},
     ).json()
     assert body["intent"] == "time_anchored_activity"
-    assert body["answer"] == "لحظة محفوظة الساعة 10:00 صباحًا: making tea."
+    assert body["answer"] == "لحظة محفوظة الساعة 10:00 صباحًا: تحضير الشاي."
     assert body["source_ids"] == ["memory:1"]
 
 
@@ -2350,8 +2390,8 @@ def test_activity_at_a_clock_time_answers_in_arabic(client: TestClient) -> None:
         ("what was I doing at ten AM", "en", "Saved at 10:00 AM: making tea.", "memory:1"),
         ("what was I doing at ten twelve", "en", "The closest saved moment before 10:12 AM was at 10:10 AM: reading.", "memory:2"),
         ("what was I doing at half past ten a.m.", "en", "The closest saved moment before 10:30 AM was at 10:25 AM: preparing to leave.", "memory:4"),
-        ("ماذا كنت افعل الساعة العاشرة صباحا", "ar", "لحظة محفوظة الساعة 10:00 صباحًا: making tea.", "memory:1"),
-        ("ماذا كنت افعل الساعه العاشره والنصف", "ar", "أقرب لحظة محفوظة قبل الساعة 10:30 صباحًا كانت الساعة 10:25 صباحًا: preparing to leave.", "memory:4"),
+        ("ماذا كنت افعل الساعة العاشرة صباحا", "ar", "لحظة محفوظة الساعة 10:00 صباحًا: تحضير الشاي.", "memory:1"),
+        ("ماذا كنت افعل الساعه العاشره والنصف", "ar", "أقرب لحظة محفوظة قبل الساعة 10:30 صباحًا كانت الساعة 10:25 صباحًا: الاستعداد للخروج.", "memory:4"),
     ],
 )
 def test_activity_at_a_spoken_clock_time_uses_the_moment_in_progress(

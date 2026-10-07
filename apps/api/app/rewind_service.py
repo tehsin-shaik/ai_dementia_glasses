@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from . import arabic_text
 from .correction_service import latest_correction
 from .episode_service import grounded_episode_titles
 from .formatting import format_time, media_url
@@ -86,7 +87,8 @@ def moment_phrase(moment: RewindMoment, language: Language) -> str:
     detail = moment.activity or moment.description.rstrip(".")
     recorded = format_time(moment.recorded_at, language)
     if language == "ar":
-        return f"الساعة {recorded} في {moment.location}: {detail}."
+        wording = arabic_text.activity(moment.activity) if moment.activity else arabic_text.quoted(moment.description)
+        return f"الساعة {recorded} {arabic_text.at_place(moment.location)}: {wording}."
     return f"At {recorded} in {moment.location}: {detail}."
 
 

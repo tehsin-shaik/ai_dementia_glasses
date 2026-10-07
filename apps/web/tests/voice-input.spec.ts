@@ -335,11 +335,11 @@ test("Arabic speech is recognized in Arabic and sent unchanged", async ({ page }
 
   await page.goto("/app");
   await page.getByRole("button", { name: "العربية" }).click();
-  await voiceButton(page).click();
+  await page.getByRole("button", { name: "اسأل بالصوت" }).click();
   await expect(answerText(page)).toHaveText("آخر تسجيل: مفاتيحك على طاولة المطبخ.");
 
   await setSpeech(page, { mode: "result", transcript: "ماذا كنت أفعل الساعة 10 صباحًا؟" });
-  await voiceButton(page).click();
+  await page.getByRole("button", { name: "اسأل بالصوت" }).click();
   await expect(questionInput(page)).toHaveValue("ماذا كنت أفعل الساعة 10 صباحًا؟");
   await expect(answerText(page)).toHaveText("كنت تقرأ.");
 
@@ -371,7 +371,7 @@ test("voice questions use the selected profile, and switching profile cancels li
   await setSpeech(page, { mode: "listening" });
   await voiceButton(page).click();
   await expect(voiceStatus(page)).toHaveText("Microphone on. Ask one question.");
-  await page.getByLabel("Demo profile").selectOption({ label: "Jordan" });
+  await page.getByRole("combobox", { name: "Profile" }).selectOption({ label: "Jordan" });
   await expect(voiceButton(page)).toBeVisible();
   expect((await speechLog(page)).aborts).toBe(1);
 
@@ -382,39 +382,84 @@ test("voice questions use the selected profile, and switching profile cancels li
   expect(api.queries.map((query) => query.userId)).toEqual(["1", "2"]);
 });
 
-test("the camera HUD Speak button fills the HUD question box", async ({ page }) => {
+test("with the camera on, the one question box also answers in the camera view", async ({ page }) => {
   await installSpeech(page, { mode: "result", transcript: "Where are my keys?" });
   const api = await routeApi(page, () => answer(keysAnswer));
 
   await page.goto("/app");
   await page.getByRole("button", { name: "Start camera" }).click();
   await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
-  const hudControls = page.getByLabel("MemoryCue camera cue controls");
-  await hudControls.getByRole("button", { name: "Speak" }).click();
+  await expect(page.getByRole("textbox", { name: /Ask a supported memory question/ })).toHaveCount(1);
+  await voiceButton(page).click();
 
   await expect(page.getByRole("complementary", { name: "MemoryCue camera cue" }).getByText(keysAnswer)).toBeVisible();
-  await expect(hudControls.getByRole("textbox", { name: "Ask MemoryCue" })).toHaveValue("Where are my keys?");
+  await expect(answerText(page)).toHaveText(keysAnswer);
+  await expect(questionInput(page)).toHaveValue("Where are my keys?");
   expect(api.queries).toEqual([{ question: "Where are my keys?", language: "en", userId: "1" }]);
   expect(api.otherWrites).toEqual([]);
 });
 
-test("switching profile clears the HUD question box", async ({ page }) => {
+test("switching profile clears the question box and the camera answer", async ({ page }) => {
   await installSpeech(page, { mode: "result", transcript: "Where are my keys?" });
   await routeApi(page, () => answer(keysAnswer));
 
   await page.goto("/app");
   await page.getByRole("button", { name: "Start camera" }).click();
   await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
-  const hudControls = page.getByLabel("MemoryCue camera cue controls");
-  const hudQuestion = hudControls.getByRole("textbox", { name: "Ask MemoryCue" });
-  await hudControls.getByRole("button", { name: "Speak" }).click();
-  await expect(hudQuestion).toHaveValue("Where are my keys?");
+  const cameraCue = page.getByRole("complementary", { name: "MemoryCue camera cue" });
+  await voiceButton(page).click();
+  await expect(questionInput(page)).toHaveValue("Where are my keys?");
+  await expect(cameraCue.getByText(keysAnswer)).toBeVisible();
 
-  await page.getByLabel("Demo profile").selectOption({ label: "Jordan" });
-  await expect(hudQuestion).toHaveValue("");
+  await page.getByRole("combobox", { name: "Profile" }).selectOption({ label: "Jordan" });
+  await expect(questionInput(page)).toHaveValue("");
+  await expect(cameraCue.getByText(keysAnswer)).toHaveCount(0);
+  await expect(answerText(page)).toHaveCount(0);
   await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
 
-  await hudQuestion.fill("Where is my wallet?");
-  await page.getByLabel("Demo profile").selectOption({ label: "Alex" });
-  await expect(hudQuestion).toHaveValue("");
+  await questionInput(page).fill("Where is my wallet?");
+  await page.getByRole("combobox", { name: "Profile" }).selectOption({ label: "Alex" });
+  await expect(questionInput(page)).toHaveValue("");
+});
+
+test("on a phone the camera answer fits inside the camera view with its dismiss button reachable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const evidence = (id: number, detail: string) => ({
+    source_id: `memory:${id}`,
+    label: `Saved memory #${id}`,
+    detail,
+    recorded_at: "2026-10-03T10:18:00",
+    image_url: null,
+    corrected_at: null,
+    corrected_by: null,
+  });
+  await routeApi(page, () => ({
+    body: {
+      ...answer(keysAnswer).body,
+      evidence: [
+        evidence(2, "Keys visible on the kitchen counter next to the fruit bowl."),
+        evidence(3, "Alex's keys were visible on the kitchen counter."),
+      ],
+    },
+  }));
+
+  await page.goto("/app");
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
+  await questionInput(page).fill("Where are my keys?");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  const cameraCue = page.getByRole("complementary", { name: "MemoryCue camera cue" });
+  await expect(cameraCue.getByText(keysAnswer)).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const view = document.querySelector(".camera-view")!.getBoundingClientRect();
+    const hud = document.querySelector(".hud-overlay")!.getBoundingClientRect();
+    const dismiss = document.querySelector(".hud-dismiss-button")!.getBoundingClientRect();
+    return { viewTop: view.top, viewBottom: view.bottom, hudTop: hud.top, hudBottom: hud.bottom, dismissTop: dismiss.top };
+  });
+  expect(layout.hudTop).toBeGreaterThanOrEqual(layout.viewTop);
+  expect(layout.hudBottom).toBeLessThanOrEqual(layout.viewBottom);
+  expect(layout.dismissTop).toBeGreaterThanOrEqual(layout.viewTop);
+  await cameraCue.getByRole("button", { name: "Dismiss" }).click();
+  await expect(cameraCue.getByText(keysAnswer)).toHaveCount(0);
 });

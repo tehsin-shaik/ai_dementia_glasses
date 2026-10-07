@@ -121,7 +121,7 @@ test("a spoken question is answered aloud with its saved source", async ({ page 
   await page.goto("/app");
   await page.getByRole("button", { name: "Start camera" }).click();
   await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Speak" }).click();
+  await page.getByRole("button", { name: "Ask by voice" }).click();
 
   await expect(hud(page).getByText(keysAnswer.answer, { exact: true })).toBeVisible();
   expect(questions).toEqual([{ question: "Where are my keys?", language: "en" }]);
@@ -141,7 +141,7 @@ test("the Arabic toggle sends and speaks Arabic answers", async ({ page }) => {
   const questions: QueryPayload[] = [];
   await routeApi(page, (payload) => {
     questions.push(payload);
-    return { ...keysAnswer, answer: "آخر تسجيل: مفاتيحك في kitchen counter.", language: "ar" };
+    return { ...keysAnswer, answer: "آخر تسجيل: مفاتيحك على طاولة المطبخ الساعة 10:18 صباحًا.", language: "ar" };
   });
 
   await page.goto("/app");
@@ -150,13 +150,13 @@ test("the Arabic toggle sends and speaks Arabic answers", async ({ page }) => {
   await page.getByRole("button", { name: "العربية" }).click();
   await page.getByRole("button", { name: "أين مفاتيحي؟" }).click();
 
-  await expect(hud(page).getByText("آخر تسجيل: مفاتيحك في kitchen counter.", { exact: true })).toBeVisible();
+  await expect(hud(page).getByText("آخر تسجيل: مفاتيحك على طاولة المطبخ الساعة 10:18 صباحًا.", { exact: true })).toBeVisible();
   expect(questions).toEqual([{ question: "أين مفاتيحي؟", language: "ar" }]);
 
   const spoken = await page.evaluate(
     () => (window as Window & { __spokenAnswers?: Array<{ text: string; lang: string }> }).__spokenAnswers ?? [],
   );
-  expect(spoken).toEqual([{ text: "آخر تسجيل: مفاتيحك في kitchen counter.", lang: "ar-AE" }]);
+  expect(spoken).toEqual([{ text: "آخر تسجيل: مفاتيحك على طاولة المطبخ الساعة 10:18 صباحًا.", lang: "ar-AE" }]);
 });
 
 test("an ungrounded question shows no sources and refuses to guess", async ({ page }) => {
@@ -172,13 +172,14 @@ test("an ungrounded question shows no sources and refuses to guess", async ({ pa
   await page.goto("/app");
   await page.getByRole("button", { name: "Start camera" }).click();
   await expect(page.getByText("Camera active", { exact: true })).toBeVisible();
-  const hudControls = page.getByLabel("MemoryCue camera cue controls");
-  await hudControls.getByRole("textbox", { name: "Ask MemoryCue" }).fill("Where is my passport?");
-  await hudControls.getByRole("button", { name: "Ask", exact: true }).click();
+  await page.locator("#question").fill("Where is my passport?");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
 
   await expect(
     hud(page).getByText("I couldn't find matching saved information for that.", { exact: true }),
   ).toBeVisible();
   await expect(page.getByTestId("hud-no-sources")).toContainText("does not guess");
   await expect(page.getByTestId("hud-provenance")).toHaveCount(0);
+  await expect(page.getByTestId("answer-no-sources")).toContainText("does not guess");
+  await expect(page.getByTestId("answer-sources")).toHaveCount(0);
 });

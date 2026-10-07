@@ -36,7 +36,7 @@
     "question": "أين مفاتيحي؟",
     "expected_intent": "object_location",
     "expected_sources": ["memory:3"],
-    "must_include": ["kitchen counter", "10:18"],
+    "must_include": ["طاولة المطبخ", "10:18"],
     "must_not_claim": []
   },
   {
@@ -76,7 +76,7 @@
     "question": "ماذا كنت أفعل الساعة العاشرة صباحا",
     "expected_intent": "time_anchored_activity",
     "expected_sources": ["memory:1"],
-    "must_include": ["10:00", "making tea"],
+    "must_include": ["10:00", "تحضير الشاي"],
     "must_not_claim": []
   },
   {

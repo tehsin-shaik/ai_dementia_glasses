@@ -5,6 +5,7 @@ import re
 
 from sqlalchemy.orm import Session
 
+from . import arabic_text
 from .correction_service import latest_correction
 from .episode_service import grounded_episode_titles
 from .formatting import format_time, media_url
@@ -251,6 +252,7 @@ def answer_question(
         activity = memory.activity.rstrip(".")
         activity_correction = latest_correction(db, memory.id)
         answer = activity_answer(activity, memory.timestamp, asked_time, language)
+        location = arabic_text.place(memory.location) if language == "ar" else memory.location
         return QueryResponse(
             answer=answer,
             intent=intent,
@@ -259,7 +261,7 @@ def answer_question(
                 QueryEvidence(
                     source_id=f"memory:{memory.id}",
                     label=f"Saved memory #{memory.id}",
-                    detail=memory.location,
+                    detail=location,
                     recorded_at=memory.timestamp,
                     image_url=media_url(memory.image_path),
                     corrected_at=activity_correction[0] if activity_correction else None,
@@ -282,11 +284,15 @@ def answer_question(
         )
         correction = latest_correction(db, observation.memory_id)
         observed_time = format_time(observation.observed_at, language)
-        answer = (
-            f"آخر تسجيل: {object_name} في {observation.location} الساعة {observed_time}."
-            if language == "ar"
-            else f"Last recorded: your {object_name} on the {observation.location} at {observed_time}."
-        )
+        if language == "ar":
+            location = arabic_text.place(observation.location)
+            answer = (
+                f"آخر تسجيل: {arabic_text.your_object(object_name)} "
+                f"{arabic_text.at_place(observation.location)} الساعة {observed_time}."
+            )
+        else:
+            location = observation.location
+            answer = f"Last recorded: your {object_name} on the {observation.location} at {observed_time}."
         return QueryResponse(
             answer=answer,
             intent=intent,
@@ -298,7 +304,7 @@ def answer_question(
                 QueryEvidence(
                     source_id=f"object_observation:{observation.id}",
                     label=f"Observation of {object_name}",
-                    detail=observation.location,
+                    detail=location,
                     recorded_at=observation.observed_at,
                     image_url=observation_photo,
                     corrected_at=correction[0] if correction else None,
@@ -307,7 +313,7 @@ def answer_question(
                 QueryEvidence(
                     source_id=f"memory:{observation.memory_id}",
                     label=f"Saved memory #{observation.memory_id}",
-                    detail=observation.location,
+                    detail=location,
                     recorded_at=observation.observed_at,
                     image_url=observation_photo,
                     corrected_at=correction[0] if correction else None,
@@ -324,11 +330,15 @@ def answer_question(
         person = find_person(db, user_id, person_name)
         if person is None:
             return unknown_response(language)
-        answer = (
-            f"{person.name}: {person.relationship} — حسب السجل المحفوظ لدى مقدّم الرعاية."
-            if language == "ar"
-            else f"{person.name} is your {person.relationship.lower()}."
-        )
+        if language == "ar":
+            person_detail = f"{arabic_text.name(person.name)} · {arabic_text.relationship(person.relationship)}"
+            answer = (
+                f"{arabic_text.name(person.name)}: {arabic_text.relationship(person.relationship)}"
+                " — حسب السجل المحفوظ لدى مقدّم الرعاية."
+            )
+        else:
+            person_detail = f"{person.name} · {person.relationship}"
+            answer = f"{person.name} is your {person.relationship.lower()}."
         return QueryResponse(
             answer=answer,
             intent=intent,
@@ -337,7 +347,7 @@ def answer_question(
                 QueryEvidence(
                     source_id=f"person:{person.id}",
                     label="Caregiver-entered person",
-                    detail=f"{person.name} · {person.relationship}",
+                    detail=person_detail,
                     recorded_at=None,
                 )
             ],
@@ -353,7 +363,9 @@ def answer_question(
     schedule_phrases = []
     for item in schedule_items:
         if language == "ar":
-            schedule_phrases.append(f"{item.title} الساعة {format_time(item.scheduled_at, language)}.")
+            schedule_phrases.append(
+                f"{arabic_text.schedule_title(item.title)} الساعة {format_time(item.scheduled_at, language)}."
+            )
             continue
         verb = "is at" if item.title.casefold() == "dinner" else "at"
         schedule_phrases.append(f"{item.title} {verb} {format_time(item.scheduled_at)}.")
@@ -366,7 +378,7 @@ def answer_question(
             QueryEvidence(
                 source_id=f"schedule_item:{item.id}",
                 label="Caregiver-entered schedule",
-                detail=item.title,
+                detail=arabic_text.schedule_title(item.title) if language == "ar" else item.title,
                 recorded_at=item.scheduled_at,
             )
             for item in schedule_items
@@ -383,6 +395,8 @@ def activity_answer(activity: str, saved_at: datetime, asked_time: time | None, 
     """
 
     saved_time = format_time(saved_at, language)
+    if language == "ar":
+        activity = arabic_text.activity(activity)
     if asked_time is None:
         if language == "ar":
             return f"آخر لحظة محفوظة، الساعة {saved_time}: {activity}."
@@ -404,10 +418,17 @@ def day_summary(db: Session, user_id: int, language: Language = "en") -> QueryRe
     if not memories:
         return unknown_response(language)
     episode_titles = grounded_episode_titles(db, user_id, {memory.episode_id for memory in memories if memory.episode_id})
-    phrases = [
-        f"{(memory.activity or memory.description).rstrip('.')} ({format_time(memory.timestamp, language)})"
-        for memory in memories
-    ]
+    if language == "ar":
+        phrases = [
+            f"{arabic_text.activity(memory.activity) if memory.activity else arabic_text.quoted(memory.description)}"
+            f" ({format_time(memory.timestamp, language)})"
+            for memory in memories
+        ]
+    else:
+        phrases = [
+            f"{(memory.activity or memory.description).rstrip('.')} ({format_time(memory.timestamp, language)})"
+            for memory in memories
+        ]
     if language == "ar":
         answer = f"لحظاتك المحفوظة اليوم: {'، '.join(phrases)}."
     else:
@@ -421,7 +442,7 @@ def day_summary(db: Session, user_id: int, language: Language = "en") -> QueryRe
             QueryEvidence(
                 source_id=f"memory:{memory.id}",
                 label=f"Saved memory #{memory.id}",
-                detail=memory.location,
+                detail=arabic_text.place(memory.location) if language == "ar" else memory.location,
                 recorded_at=memory.timestamp,
                 image_url=media_url(memory.image_path),
                 corrected_at=correction[0] if correction else None,

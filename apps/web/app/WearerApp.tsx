@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 import GlassesSimulator from "./GlassesSimulator";
-import { MemoryHudState, ProactiveCue, QueryEvidence } from "./MemoryHud";
+import { formatRecordedAt, MemoryHudState, ProactiveCue, QueryEvidence } from "./MemoryHud";
 import { memoryCueFetch } from "./api";
 import { observationFormData, type Capture } from "./capture";
 import RewindPanel from "./RewindPanel";
@@ -28,13 +28,74 @@ type QueryResult = {
   language: VoiceLanguage;
 };
 
-type VoiceTarget = "question" | "hud";
 
-const QUESTION_VOICE_STATUS: Partial<Record<VoicePhase, string>> = {
-  requesting: "Waiting for microphone permission...",
-  listening: "Microphone on. Ask one question.",
-  processing: "Processing what you said...",
+const QUESTION_VOICE_STATUS: Record<VoiceLanguage, Partial<Record<VoicePhase, string>>> = {
+  en: {
+    requesting: "Waiting for microphone permission...",
+    listening: "Microphone on. Ask one question.",
+    processing: "Processing what you said...",
+  },
+  ar: {
+    requesting: "بانتظار إذن الميكروفون...",
+    listening: "الميكروفون يعمل. اطرح سؤالًا واحدًا.",
+    processing: "جارٍ فهم ما قلته...",
+  },
 };
+
+const ASK_COPY = {
+  en: {
+    heading: "Ask MemoryCue",
+    label: "Ask a supported memory question",
+    placeholder: "Where are my keys?",
+    ask: "Ask",
+    asking: "Asking...",
+    voice: "Ask by voice",
+    stopVoice: "Stop listening",
+    heard: (transcript: string) => `Heard: “${transcript}”`,
+    noVoice: "Voice input is not available in this browser. Type your question instead.",
+    examples: "Try asking",
+    speakAnswers: "Speak answers",
+    answer: "Answer",
+    empty: "Ask a question and the answer will appear here.",
+    loading: "Looking that up...",
+    sources: "From your saved records",
+    corrected: "Caregiver corrected",
+    noSources: "No saved record matches this. MemoryCue does not guess about your life.",
+    suggestions: [
+      "What was I doing?",
+      "What was I doing at 10 AM?",
+      "Where are my keys?",
+      "Who is Sarah?",
+      "What am I doing today?",
+    ],
+  },
+  ar: {
+    heading: "اسأل MemoryCue",
+    label: "اطرح سؤالًا عن ذاكرتك",
+    placeholder: "أين مفاتيحي؟",
+    ask: "اسأل",
+    asking: "جارٍ السؤال...",
+    voice: "اسأل بالصوت",
+    stopVoice: "أوقف الاستماع",
+    heard: (transcript: string) => `سمعت: «${transcript}»`,
+    noVoice: "الإدخال الصوتي غير متاح في هذا المتصفح. اكتب سؤالك بدلًا من ذلك.",
+    examples: "جرّب أن تسأل",
+    speakAnswers: "نطق الإجابات",
+    answer: "الإجابة",
+    empty: "اطرح سؤالًا وستظهر الإجابة هنا.",
+    loading: "أبحث عن ذلك...",
+    sources: "من سجلاتك المحفوظة",
+    corrected: "صحّحه مقدّم الرعاية",
+    noSources: "لا يوجد سجل محفوظ يطابق ذلك. MemoryCue لا يخمّن عن حياتك.",
+    suggestions: [
+      "ماذا كنت أفعل؟",
+      "ماذا كنت أفعل الساعة 10 صباحًا؟",
+      "أين مفاتيحي؟",
+      "من هي سارة؟",
+      "ما هو جدولي اليوم؟",
+    ],
+  },
+} as const;
 
 type FaceRecognitionResult = {
   recognized: boolean;
@@ -87,13 +148,6 @@ type CuePresentationAttempt = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const SUGGESTED_QUESTIONS = [
-  "What was I doing?",
-  "What was I doing at 10 AM?",
-  "Where are my keys?",
-  "Who is Sarah?",
-  "What am I doing today?",
-];
 const DEMO_PROFILES = [
   { id: 1, name: "Alex" },
   { id: 2, name: "Jordan" },
@@ -254,6 +308,18 @@ function parseProactiveCues(payload: unknown): ProactiveCue[] {
   return payload.cues as ProactiveCue[];
 }
 
+function uniqueSources(evidence: QueryEvidence[]): QueryEvidence[] {
+  const seen = new Set<string>();
+  return evidence.filter((item) => {
+    const key = `${item.detail}|${item.recorded_at ?? ""}|${item.corrected_at ?? ""}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 function cueIsUnexpired(cue: ProactiveCue, now = Date.now()): boolean {
   return !cue.expires_at || new Date(cue.expires_at).getTime() > now;
 }
@@ -267,7 +333,7 @@ export default function WearerApp() {
   const [hudError, setHudError] = useState<string | null>(null);
   const [hudEvidence, setHudEvidence] = useState<QueryEvidence[]>([]);
   const [language, setLanguage] = useState<VoiceLanguage>("en");
-  const [voiceTarget, setVoiceTarget] = useState<VoiceTarget | null>(null);
+  const [voiceActive, setVoiceActive] = useState(false);
   const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
   const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -277,6 +343,7 @@ export default function WearerApp() {
   const [isRecognizingFace, setIsRecognizingFace] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
   const [memoryImage, setMemoryImage] = useState<File | null>(null);
   const [memoryImageSource, setMemoryImageSource] = useState<MemoryImageSource>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -322,18 +389,21 @@ export default function WearerApp() {
   proactiveCuesEnabledRef.current = proactiveCuesEnabled;
   proactiveCueRef.current = proactiveCue;
 
-  const questionVoiceActive = voiceTarget === "question" && isVoiceActive(voicePhase);
+  const askCopy = ASK_COPY[language];
+  const answerSources = result ? uniqueSources(result.evidence) : [];
+  const askDirection = language === "ar" ? "rtl" : "ltr";
+  const questionVoiceActive = voiceActive && isVoiceActive(voicePhase);
   let questionVoiceStatus: string | null = null;
-  if (voiceTarget === "question") {
+  if (voiceActive) {
     if (voicePhase === "transcript" && voiceTranscript) {
-      questionVoiceStatus = `Heard: “${voiceTranscript}”`;
+      questionVoiceStatus = askCopy.heard(voiceTranscript);
     } else if (voicePhase === "error") {
       questionVoiceStatus = voiceError;
     } else {
-      questionVoiceStatus = QUESTION_VOICE_STATUS[voicePhase] ?? null;
+      questionVoiceStatus = QUESTION_VOICE_STATUS[language][voicePhase] ?? null;
     }
   } else if (!voiceInputSupported) {
-    questionVoiceStatus = "Voice input is not available in this browser. Type your question instead.";
+    questionVoiceStatus = askCopy.noVoice;
   }
 
   const activeProfile = DEMO_PROFILES.find((profile) => profile.id === activeUserId) ?? DEMO_PROFILES[0];
@@ -578,29 +648,27 @@ export default function WearerApp() {
     }
   }
 
-  async function submitQuery(value: string, surface: "normal" | "hud") {
+  async function askQuestion(value = question) {
     const trimmedQuestion = value.trim();
     if (!trimmedQuestion) {
       return;
     }
     const requestUserId = activeUserId;
     const requestProfileVersion = profileVersionRef.current;
-    const hudRequestId = surface === "hud" ? hudRequestRef.current + 1 : 0;
-    const queryRequestId = surface === "normal" ? queryRequestRef.current + 1 : 0;
+    const queryRequestId = queryRequestRef.current + 1;
+    const hudRequestId = hudRequestRef.current + 1;
+    queryRequestRef.current = queryRequestId;
+    hudRequestRef.current = hudRequestId;
     clearProactiveCue();
-
-    if (surface === "normal") {
-      queryRequestRef.current = queryRequestId;
-      setQuestion(trimmedQuestion);
-      setIsLoading(true);
-      setError(null);
-    } else {
-      hudRequestRef.current = hudRequestId;
-      setHudState("querying");
-      setHudAnswer(null);
-      setHudError(null);
-      setHudEvidence([]);
-    }
+    stopSpeaking();
+    setQuestion(trimmedQuestion);
+    setResult(null);
+    setIsLoading(true);
+    setQueryError(null);
+    setHudState("querying");
+    setHudAnswer(null);
+    setHudError(null);
+    setHudEvidence([]);
 
     try {
       const response = await memoryCueFetch(`${API_URL}/api/query`, requestUserId, {
@@ -612,69 +680,51 @@ export default function WearerApp() {
         throw new Error(await errorMessage(response, "The question could not be answered."));
       }
       const queryResult = parseQueryResult(await response.json());
-      if (profileVersionRef.current !== requestProfileVersion) {
-        return;
-      }
-      if (surface === "normal" && queryRequestRef.current !== queryRequestId) {
+      if (profileVersionRef.current !== requestProfileVersion || queryRequestRef.current !== queryRequestId) {
         return;
       }
       setResult(queryResult);
-      if (surface === "hud" && hudRequestRef.current === hudRequestId) {
+      if (hudRequestRef.current === hudRequestId) {
         setHudAnswer(queryResult.answer);
         setHudEvidence(queryResult.evidence);
         setHudState(queryResult.intent === "unknown" ? "unknown" : "result");
-        if (speakAnswersRef.current) {
-          speak(queryResult.answer, queryResult.language);
-        }
+      }
+      if (speakAnswersRef.current) {
+        speak(queryResult.answer, queryResult.language);
       }
     } catch (requestError) {
-      if (profileVersionRef.current !== requestProfileVersion) {
+      if (profileVersionRef.current !== requestProfileVersion || queryRequestRef.current !== queryRequestId) {
         return;
       }
       const message = requestError instanceof Error ? requestError.message : "Something went wrong.";
-      if (surface === "hud") {
-        if (hudRequestRef.current === hudRequestId) {
-          setHudError(message);
-          setHudState("error");
-        }
-      } else if (queryRequestRef.current === queryRequestId) {
-        setError(message);
+      setQueryError(message);
+      if (hudRequestRef.current === hudRequestId) {
+        setHudError(message);
+        setHudState("error");
       }
     } finally {
-      if (
-        surface === "normal" &&
-        profileVersionRef.current === requestProfileVersion &&
-        queryRequestRef.current === queryRequestId
-      ) {
+      if (profileVersionRef.current === requestProfileVersion && queryRequestRef.current === queryRequestId) {
         setIsLoading(false);
       }
     }
-  }
-
-  async function askQuestion(value = question) {
-    await submitQuery(value, "normal");
-  }
-
-  function askHudQuestion(value: string) {
-    void submitQuery(value, "hud");
   }
 
   function cancelVoice() {
     speechTurnRef.current += 1;
     speechSessionRef.current?.cancel();
     speechSessionRef.current = null;
-    setVoiceTarget(null);
+    setVoiceActive(false);
     setVoicePhase("idle");
     setVoiceTranscript(null);
     setVoiceError(null);
   }
 
-  function startVoice(target: VoiceTarget) {
+  function startVoice() {
     cancelVoice();
     stopSpeaking();
     const turn = speechTurnRef.current;
     const isCurrentTurn = () => speechTurnRef.current === turn;
-    setVoiceTarget(target);
+    setVoiceActive(true);
     const session = startSpeechInput(languageRef.current, {
       onPhase: (phase) => {
         if (isCurrentTurn()) {
@@ -687,11 +737,7 @@ export default function WearerApp() {
         }
         setVoiceTranscript(transcript);
         setVoicePhase("transcript");
-        if (target === "question") {
-          void askQuestion(transcript);
-        } else {
-          askHudQuestion(transcript);
-        }
+        void askQuestion(transcript);
       },
       onError: (speechError) => {
         if (!isCurrentTurn()) {
@@ -700,10 +746,6 @@ export default function WearerApp() {
         const message = speechInputMessage(speechError);
         setVoiceError(message);
         setVoicePhase("error");
-        if (target === "hud") {
-          setHudError(message);
-          setHudState("error");
-        }
       },
       onEnd: () => {
         if (isCurrentTurn()) {
@@ -713,19 +755,11 @@ export default function WearerApp() {
     });
     if (session === null) {
       setVoiceInputSupported(false);
-      setVoiceTarget(null);
+      setVoiceActive(false);
       setVoicePhase("idle");
       return;
     }
     speechSessionRef.current = session;
-  }
-
-  function changeHudListening(listening: boolean) {
-    if (listening) {
-      startVoice("hud");
-    } else {
-      cancelVoice();
-    }
   }
 
   function changeLanguage(next: VoiceLanguage) {
@@ -1036,6 +1070,7 @@ export default function WearerApp() {
     setActiveUserId(nextUserId);
     setQuestion("");
     setResult(null);
+    setQueryError(null);
     setIsLoading(false);
     setIsAnalyzingVision(false);
     setIsSavingMemory(false);
@@ -1045,18 +1080,17 @@ export default function WearerApp() {
   }
 
   return (
-    <main className="wearer-shell wearer-experience page-shell">
-      <SiteNav tone="dark" />
+    <main className="wearer-shell wearer-light page-shell">
+      <SiteNav />
       <section className="app-card wearer-card" aria-labelledby="page-title">
         <header className="app-header">
           <div>
-            <p className="eyebrow">Wearer app</p>
+            <p className="eyebrow">Hello, {activeProfile.name}</p>
             <h1 id="page-title">MemoryCue</h1>
-            <p className="subtitle">A browser prototype for saved everyday context.</p>
           </div>
           <div className="header-actions">
             <label className="profile-selector">
-              <span>Demo profile</span>
+              <span>Profile</span>
               <select value={activeUserId} onChange={handleProfileChange}>
                 {DEMO_PROFILES.map((profile) => (
                   <option key={profile.id} value={profile.id}>
@@ -1064,78 +1098,49 @@ export default function WearerApp() {
                   </option>
                 ))}
               </select>
-              <small>Simulated profile — not a secure account</small>
             </label>
           </div>
         </header>
 
-        <GlassesSimulator
-          profileId={activeUserId}
-          capturedFrame={memoryImageSource === "camera" ? memoryImage : null}
-          capturedPreviewUrl={memoryImageSource === "camera" ? previewUrl : null}
-          isAnalyzing={isAnalyzingVision && memoryImageSource === "camera"}
-          isSaving={isSavingMemory && memoryImageSource === "camera"}
-          analysisComplete={Boolean(visionAnalysis && memoryImageSource === "camera")}
-          saved={cameraSaved}
-          onCapture={handleCameraCapture}
-          onRetake={handleCameraRetake}
-          onAnalyze={() => void analyzeImage()}
-          onRecognize={(file) => void recognizePerson(file)}
-          isRecognizing={isRecognizingFace}
-          hudState={hudState}
-          hudAnswer={hudAnswer}
-          hudError={hudError}
-          hudEvidence={hudEvidence}
-          language={language}
-          onLanguageChange={changeLanguage}
-          voicePhase={voiceTarget === "hud" ? voicePhase : "idle"}
-          voiceTranscript={voiceTarget === "hud" ? voiceTranscript : null}
-          onListeningChange={changeHudListening}
-          voiceInputSupported={voiceInputSupported}
-          speakAnswers={speakAnswers}
-          onSpeakAnswersChange={(enabled) => {
-            setSpeakAnswers(enabled);
-            if (!enabled) {
-              stopSpeaking();
-            }
-          }}
-          speechOutputSupported={speechOutputSupported}
-          proactiveCue={proactiveCue}
-          proactiveCuesEnabled={proactiveCuesEnabled}
-          onProactiveCueVisibilityChange={handleProactiveCueVisibilityChange}
-          onProactiveCuesChange={(enabled) => {
-            setProactiveCuesEnabled(enabled);
-            if (!enabled) {
-              proactiveRequestRef.current += 1;
-              clearProactiveCue();
-            }
-          }}
-          onHudQuery={askHudQuestion}
-          onDismissHud={dismissHud}
-          onImagePreviewError={reportImagePreviewError}
-        />
-
-        <RewindPanel
-          key={activeUserId}
-          apiUrl={API_URL}
-          userId={activeUserId}
-          language={language}
-          refreshToken={rewindRefreshToken}
-        />
-
-        <section className="question-panel" aria-labelledby="question-heading">
-          <p className="section-kicker">Need a cue?</p>
-          <h2 id="question-heading">Ask MemoryCue</h2>
+        <section
+          className="question-panel ask-panel"
+          aria-labelledby="question-heading"
+          lang={language}
+          dir={askDirection}
+        >
+          <div className="ask-heading-row">
+            <h2 id="question-heading">{askCopy.heading}</h2>
+            <div className="language-toggle" role="group" aria-label="Answer language">
+              <button
+                className={language === "en" ? "is-selected" : ""}
+                type="button"
+                aria-pressed={language === "en"}
+                onClick={() => changeLanguage("en")}
+                lang="en"
+              >
+                English
+              </button>
+              <button
+                className={language === "ar" ? "is-selected" : ""}
+                type="button"
+                aria-pressed={language === "ar"}
+                onClick={() => changeLanguage("ar")}
+                lang="ar"
+              >
+                العربية
+              </button>
+            </div>
+          </div>
           <form className="question-form" onSubmit={handleSubmit}>
             <label className="sr-only" htmlFor="question">
-              Ask a supported memory question
+              {askCopy.label}
             </label>
             <input
               id="question"
               type="text"
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Where are my keys?"
+              placeholder={askCopy.placeholder}
               autoComplete="off"
             />
             {voiceInputSupported && (
@@ -1143,14 +1148,14 @@ export default function WearerApp() {
                 className={`secondary-button voice-question-button ${questionVoiceActive ? "is-listening" : ""}`}
                 type="button"
                 aria-pressed={questionVoiceActive}
-                onClick={() => (questionVoiceActive ? cancelVoice() : startVoice("question"))}
+                onClick={() => (questionVoiceActive ? cancelVoice() : startVoice())}
                 disabled={isLoading && !questionVoiceActive}
               >
-                {questionVoiceActive ? "Stop listening" : "Ask by voice"}
+                {questionVoiceActive ? askCopy.stopVoice : askCopy.voice}
               </button>
             )}
             <button className="primary-button" type="submit" disabled={isLoading || !question.trim()}>
-              {isLoading ? "Asking..." : "Ask"}
+              {isLoading ? askCopy.asking : askCopy.ask}
             </button>
           </form>
           {questionVoiceStatus && (
@@ -1164,9 +1169,9 @@ export default function WearerApp() {
           )}
 
           <div className="suggestions" aria-label="Supported example questions">
-            <p>Supported examples</p>
+            <p>{askCopy.examples}</p>
             <div className="suggestion-list">
-              {SUGGESTED_QUESTIONS.map((suggestion) => (
+              {askCopy.suggestions.map((suggestion) => (
                 <button
                   className="suggestion-button"
                   key={suggestion}
@@ -1179,167 +1184,243 @@ export default function WearerApp() {
               ))}
             </div>
           </div>
-        </section>
 
-        <details
-          className="memory-panel memory-review"
-          open={Boolean(memoryImage || visionAnalysis || saveMessage)}
-          aria-labelledby="memory-heading"
-        >
-          <summary className="memory-review-summary">
-            <span>Add a memory</span>
-            <small>Review before saving</small>
-          </summary>
-          <div className="memory-panel-heading">
-            <div>
-              <p className="section-kicker">Review memory</p>
-              <h2 id="memory-heading">Review before saving</h2>
-            </div>
-            <p className="memory-helper">
-              If an external vision provider is configured, AI can suggest details. Review or edit every field before
-              saving, or complete the form manually.
-            </p>
-          </div>
+          {queryError && <p className="error-message" role="alert">{queryError}</p>}
 
-          <div className="memory-form">
-            <label className="file-picker">
-              <span>Upload an image</span>
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                onChange={handleImageChange}
-              />
-            </label>
-            <div className="demo-image-picker" aria-label="Demo images">
-              <span>Or choose a demo scene</span>
-              <div>
-                {DEMO_IMAGES.map((image) => (
-                  <button
-                    className="demo-image-button"
-                    type="button"
-                    key={image.path}
-                    onClick={() => void selectDemoImage(image.path, image.name)}
-                  >
-                    <img src={image.path} alt="" />
-                    <span>{image.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {memoryImage && (
-              <div className="selected-image">
-                {previewUrl && (
-                  <img src={previewUrl} alt="Selected memory preview" onError={handleImagePreviewError} />
-                )}
-                <div>
-                  <strong>{memoryImage.name}</strong>
-                  <span>{Math.max(1, Math.round(memoryImage.size / 1024))} KB selected</span>
-                </div>
-              </div>
-            )}
-            <div className="analysis-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => void analyzeImage()}
-                disabled={!memoryImage || isAnalyzingVision || isSavingMemory}
-              >
-                {isAnalyzingVision ? "Analyzing..." : "Analyze with AI"}
-              </button>
-              {visionMessage && (
-                <p className={`vision-status ${visionError ? "is-error" : ""}`} role="status">
-                  {visionMessage}
-                </p>
+          <div
+            className={`answer-panel ${result?.intent === "unknown" ? "is-unknown" : ""}`}
+            aria-live="polite"
+            aria-labelledby="answer-heading"
+          >
+            <div className="answer-heading-row">
+              <p className="section-kicker" id="answer-heading">{askCopy.answer}</p>
+              {speechOutputSupported && (
+                <label className="speak-toggle">
+                  <input
+                    type="checkbox"
+                    checked={speakAnswers}
+                    onChange={(event) => {
+                      setSpeakAnswers(event.target.checked);
+                      if (!event.target.checked) {
+                        stopSpeaking();
+                      }
+                    }}
+                  />
+                  <span>{askCopy.speakAnswers}</span>
+                </label>
               )}
             </div>
-            {visionAnalysis && (
-              <div className="ai-suggestions" role="status">
-                <strong>AI suggestions — review before saving</strong>
-                <span>
-                  Visible objects: {visionAnalysis.objects.length
-                    ? visionAnalysis.objects.map((object) => object.name).join(", ")
-                    : "none identified"}
-                </span>
-              </div>
+            {result ? (
+              <>
+                <p className="answer-text" lang={result.language} dir={result.language === "ar" ? "rtl" : "ltr"}>
+                  {result.answer}
+                </p>
+                {result.intent === "unknown" ? (
+                  <p className="answer-note" data-testid="answer-no-sources">{askCopy.noSources}</p>
+                ) : (
+                  answerSources.length > 0 && (
+                    <div className="answer-sources" data-testid="answer-sources">
+                      <span>{askCopy.sources}</span>
+                      <ul>
+                        {answerSources.map((item) => {
+                          const recordedAt = formatRecordedAt(item.recorded_at, language);
+                          return (
+                            <li key={item.source_id}>
+                              <strong>{item.detail}</strong>
+                              {recordedAt && <span>{recordedAt}</span>}
+                              {item.corrected_at && <span className="answer-source-corrected">{askCopy.corrected}</span>}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )
+                )}
+              </>
+            ) : (
+              <p className="empty-answer">{isLoading ? askCopy.loading : askCopy.empty}</p>
             )}
+          </div>
+        </section>
 
-            <div className="memory-form-grid">
-              <label>
-                <span>Time</span>
+        <div className="wearer-capture-row">
+          <GlassesSimulator
+            capturedFrame={memoryImageSource === "camera" ? memoryImage : null}
+            capturedPreviewUrl={memoryImageSource === "camera" ? previewUrl : null}
+            isAnalyzing={isAnalyzingVision && memoryImageSource === "camera"}
+            isSaving={isSavingMemory && memoryImageSource === "camera"}
+            analysisComplete={Boolean(visionAnalysis && memoryImageSource === "camera")}
+            saved={cameraSaved}
+            onCapture={handleCameraCapture}
+            onRetake={handleCameraRetake}
+            onAnalyze={() => void analyzeImage()}
+            onRecognize={(file) => void recognizePerson(file)}
+            isRecognizing={isRecognizingFace}
+            hudState={hudState}
+            hudAnswer={hudAnswer}
+            hudError={hudError}
+            hudEvidence={hudEvidence}
+            language={language}
+            proactiveCue={proactiveCue}
+            proactiveCuesEnabled={proactiveCuesEnabled}
+            onProactiveCueVisibilityChange={handleProactiveCueVisibilityChange}
+            onProactiveCuesChange={(enabled) => {
+              setProactiveCuesEnabled(enabled);
+              if (!enabled) {
+                proactiveRequestRef.current += 1;
+                clearProactiveCue();
+              }
+            }}
+            onDismissHud={dismissHud}
+            onImagePreviewError={reportImagePreviewError}
+          />
+
+          <details
+            className="memory-panel memory-review"
+            open={Boolean(memoryImage || visionAnalysis || saveMessage)}
+            aria-labelledby="memory-heading"
+          >
+            <summary className="memory-review-summary">
+              <span>Add a memory</span>
+              <small>Review before saving</small>
+            </summary>
+            <div className="memory-panel-heading">
+              <div>
+                <p className="section-kicker">Review memory</p>
+                <h2 id="memory-heading">Review before saving</h2>
+              </div>
+              <p className="memory-helper">
+                If an external vision provider is configured, AI can suggest details. Review or edit every field before
+                saving, or complete the form manually.
+              </p>
+            </div>
+
+            <div className="memory-form">
+              <label className="file-picker">
+                <span>Upload an image</span>
                 <input
-                  type="datetime-local"
-                  value={memoryTimestamp}
-                  onChange={(event) => setMemoryTimestamp(event.target.value)}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  onChange={handleImageChange}
+                />
+              </label>
+              <div className="demo-image-picker" aria-label="Demo images">
+                <span>Or choose a demo scene</span>
+                <div>
+                  {DEMO_IMAGES.map((image) => (
+                    <button
+                      className="demo-image-button"
+                      type="button"
+                      key={image.path}
+                      onClick={() => void selectDemoImage(image.path, image.name)}
+                    >
+                      <img src={image.path} alt="" />
+                      <span>{image.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {memoryImage && (
+                <div className="selected-image">
+                  {previewUrl && (
+                    <img src={previewUrl} alt="Selected memory preview" onError={handleImagePreviewError} />
+                  )}
+                  <div>
+                    <strong>{memoryImage.name}</strong>
+                    <span>{Math.max(1, Math.round(memoryImage.size / 1024))} KB selected</span>
+                  </div>
+                </div>
+              )}
+              <div className="analysis-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void analyzeImage()}
+                  disabled={!memoryImage || isAnalyzingVision || isSavingMemory}
+                >
+                  {isAnalyzingVision ? "Analyzing..." : "Analyze with AI"}
+                </button>
+                {visionMessage && (
+                  <p className={`vision-status ${visionError ? "is-error" : ""}`} role="status">
+                    {visionMessage}
+                  </p>
+                )}
+              </div>
+              {visionAnalysis && (
+                <div className="ai-suggestions" role="status">
+                  <strong>AI suggestions — review before saving</strong>
+                  <span>
+                    Visible objects: {visionAnalysis.objects.length
+                      ? visionAnalysis.objects.map((object) => object.name).join(", ")
+                      : "none identified"}
+                  </span>
+                </div>
+              )}
+
+              <div className="memory-form-grid">
+                <label>
+                  <span>Time</span>
+                  <input
+                    type="datetime-local"
+                    value={memoryTimestamp}
+                    onChange={(event) => setMemoryTimestamp(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Location</span>
+                  <input
+                    type="text"
+                    value={memoryLocation}
+                    onChange={(event) => setMemoryLocation(event.target.value)}
+                    placeholder="e.g. Kitchen counter"
+                  />
+                </label>
+              </div>
+              <label>
+                <span>Description</span>
+                <textarea
+                  value={memoryDescription}
+                  onChange={(event) => setMemoryDescription(event.target.value)}
+                  placeholder="e.g. I left my keys on the kitchen counter."
+                  rows={3}
                 />
               </label>
               <label>
-                <span>Location</span>
+                <span>Activity <em>(optional)</em></span>
                 <input
                   type="text"
-                  value={memoryLocation}
-                  onChange={(event) => setMemoryLocation(event.target.value)}
-                  placeholder="e.g. Kitchen counter"
+                  value={memoryActivity}
+                  onChange={(event) => setMemoryActivity(event.target.value)}
+                  placeholder="e.g. preparing to leave"
                 />
               </label>
+              <label>
+                <span>Object <em>(optional)</em></span>
+                <input
+                  type="text"
+                  value={memoryObjectName}
+                  onChange={(event) => setMemoryObjectName(event.target.value)}
+                  placeholder="e.g. keys"
+                />
+              </label>
+              <div className="save-row">
+                <button className="primary-button" type="button" onClick={saveMemory} disabled={isSavingMemory || isRecordingCapture}>
+                  {isSavingMemory ? "Saving..." : "Save memory"}
+                </button>
+                {saveMessage && <p className="success-message" role="status">{saveMessage}</p>}
+              </div>
             </div>
-            <label>
-              <span>Description</span>
-              <textarea
-                value={memoryDescription}
-                onChange={(event) => setMemoryDescription(event.target.value)}
-                placeholder="e.g. I left my keys on the kitchen counter."
-                rows={3}
-              />
-            </label>
-            <label>
-              <span>Activity <em>(optional)</em></span>
-              <input
-                type="text"
-                value={memoryActivity}
-                onChange={(event) => setMemoryActivity(event.target.value)}
-                placeholder="e.g. preparing to leave"
-              />
-            </label>
-            <label>
-              <span>Object <em>(optional)</em></span>
-              <input
-                type="text"
-                value={memoryObjectName}
-                onChange={(event) => setMemoryObjectName(event.target.value)}
-                placeholder="e.g. keys"
-              />
-            </label>
-            <div className="save-row">
-              <button className="primary-button" type="button" onClick={saveMemory} disabled={isSavingMemory || isRecordingCapture}>
-                {isSavingMemory ? "Saving..." : "Save memory"}
-              </button>
-              {saveMessage && <p className="success-message" role="status">{saveMessage}</p>}
-            </div>
-          </div>
-        </details>
+          </details>
+          {error && <p className="error-message" role="alert">{error}</p>}
+        </div>
 
-        {error && <p className="error-message" role="alert">{error}</p>}
-
-        <section className="answer-panel" aria-live="polite" aria-labelledby="answer-heading">
-          <div className="answer-heading-row">
-            <div>
-              <p className="section-kicker">Answer</p>
-              <h2 id="answer-heading">From saved information</h2>
-            </div>
-          </div>
-          {result ? (
-            <>
-              <p className="answer-text">{result.answer}</p>
-              <details className="debug-details">
-                <summary>Developer details</summary>
-                <p>Intent: {result.intent}</p>
-                <p>Source IDs: {result.source_ids.length ? result.source_ids.join(", ") : "None"}</p>
-              </details>
-            </>
-          ) : (
-            <p className="empty-answer">Choose a supported question to retrieve saved information.</p>
-          )}
-        </section>
+        <RewindPanel
+          key={activeUserId}
+          apiUrl={API_URL}
+          userId={activeUserId}
+          language={language}
+          refreshToken={rewindRefreshToken}
+        />
       </section>
     </main>
   );

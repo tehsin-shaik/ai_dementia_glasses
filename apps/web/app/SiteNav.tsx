@@ -50,9 +50,9 @@ export default function SiteNav({ tone = "light" }: SiteNavProps) {
       </Link>
       <div className="site-nav-links">
         <Link href="/" aria-current={isCurrent("/") ? "page" : undefined}>Product</Link>
-        <Link className="site-nav-cta" href="/app" aria-current={isCurrent("/app") ? "page" : undefined}>Try MemoryCue</Link>
         <Link href="/experience" aria-current={isCurrent("/experience") ? "page" : undefined}>Experience</Link>
         <Link href="/caregiver" aria-current={isCurrent("/caregiver") ? "page" : undefined}>Caregiver</Link>
+        <Link className="site-nav-cta" href="/app" aria-current={isCurrent("/app") ? "page" : undefined}>Try MemoryCue</Link>
       </div>
       <button
         ref={menuButtonRef}
@@ -75,9 +75,9 @@ export default function SiteNav({ tone = "light" }: SiteNavProps) {
         aria-label="Mobile navigation"
       >
         <Link href="/" aria-current={isCurrent("/") ? "page" : undefined} onClick={closeMenu}>Product</Link>
-        <Link href="/app" aria-current={isCurrent("/app") ? "page" : undefined} onClick={closeMenu}>Try MemoryCue</Link>
         <Link href="/experience" aria-current={isCurrent("/experience") ? "page" : undefined} onClick={closeMenu}>Experience</Link>
         <Link href="/caregiver" aria-current={isCurrent("/caregiver") ? "page" : undefined} onClick={closeMenu}>Caregiver</Link>
+        <Link href="/app" aria-current={isCurrent("/app") ? "page" : undefined} onClick={closeMenu}>Try MemoryCue</Link>
       </div>
     </nav>
   );
