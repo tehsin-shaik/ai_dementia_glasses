@@ -107,7 +107,13 @@ const TABS: Array<{ id: Tab; label: string }> = [
 ];
 
 function describePatientAccess(patient: PatientSummary): string {
-  const access = patient.role === "primary" ? "You can edit this setup" : "View only";
+  const canEditSections =
+    patient.can_manage_people || patient.can_manage_schedule || patient.can_manage_objects || patient.can_manage_notes;
+  const access = patient.can_manage_profile
+    ? "You can edit this setup"
+    : canEditSections
+      ? "You can edit some sections"
+      : "View only";
   if (patient.preferred_name && patient.preferred_name !== patient.name) {
     return `${patient.name} · ${access}`;
   }
@@ -1433,9 +1439,12 @@ export default function CaregiverPage() {
                 {isLoadingPatient ? (
                   <p className="caregiver-muted management-loading">Loading profile information...</p>
                 ) : !profile ? (
-                  <p className="caregiver-muted management-loading">
-                    Profile information is unavailable. Select the profile again to retry.
-                  </p>
+                  <div className="management-loading" role="alert">
+                    <p className="caregiver-muted">Profile information is unavailable.</p>
+                    <button className="text-button" type="button" onClick={() => selectPatient(selectedPatient.user_id)}>
+                      Retry
+                    </button>
+                  </div>
                 ) : (
                   <div className="management-section">
                     {!activeTabCanManage && (

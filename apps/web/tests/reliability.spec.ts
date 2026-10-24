@@ -594,3 +594,31 @@ test("caregiver profile hides unused fields and the list column when one profile
   await expect(buttons.first()).toContainText("You can edit this setup");
   await expect(buttons.first()).not.toHaveText(/Alex\s*Alex/);
 });
+
+test("a failed single-profile load offers Retry and section-level caregivers are not labeled view-only", async ({ page }) => {
+  let profileFailures = 0;
+  const notesOnly = { ...alex, user_id: 1, role: "viewer", can_manage_profile: false, can_manage_people: false, can_manage_schedule: false, can_manage_objects: false, can_manage_notes: true };
+  await page.route("**/api/caregiver/**", async (route) => {
+    if (await fulfillPreflight(route)) return;
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const caregiverId = request.headers()["x-memorycue-caregiver-id"];
+    if (path === "/api/caregiver/patients") {
+      return fulfillJson(route, caregiverId === "2" ? [notesOnly, jordan] : [alex]);
+    }
+    if (path.endsWith("/profile") && profileFailures === 0) {
+      profileFailures += 1;
+      return fulfillJson(route, { detail: "boom" }, 500);
+    }
+    return fulfillPatientDetail(route, 1);
+  });
+
+  await page.goto("/caregiver");
+  await expect(page.getByText("Profile information is unavailable.")).toBeVisible();
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByLabel("Preferred name")).toHaveValue("Alex");
+
+  await page.getByLabel("Demo caregiver").selectOption("2");
+  await expect(page.locator(".patient-button").first()).toContainText("You can edit some sections");
+  await expect(page.locator(".patient-button").nth(1)).toContainText("You can edit this setup");
+});
