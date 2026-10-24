@@ -106,6 +106,20 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "notes", label: "Notes" },
 ];
 
+function describePatientAccess(patient: PatientSummary): string {
+  const canEditSections =
+    patient.can_manage_people || patient.can_manage_schedule || patient.can_manage_objects || patient.can_manage_notes;
+  const access = patient.can_manage_profile
+    ? "You can edit this setup"
+    : canEditSections
+      ? "You can edit some sections"
+      : "View only";
+  if (patient.preferred_name && patient.preferred_name !== patient.name) {
+    return `${patient.name} · ${access}`;
+  }
+  return access;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
 }
@@ -877,49 +891,51 @@ export default function CaregiverPage() {
     if (!profile) return null;
     return (
       <form className="caregiver-form" onSubmit={saveProfile}>
-        <p className="caregiver-muted">
-          These fields are stored with the demo profile. Response style, bio, and home context do not currently change
-          wearer answers or cues.
-        </p>
-        <div className="caregiver-form-grid">
+        <label className="caregiver-single-field">
+          <span>Preferred name</span>
+          <input
+            type="text"
+            value={profileForm.preferred_name}
+            disabled={!canManageProfile || savingKey !== null}
+            onChange={(event) => setProfileForm({ ...profileForm, preferred_name: event.target.value })}
+          />
+        </label>
+        <details className="caregiver-coming-soon">
+          <summary>Coming soon: response style, short bio and home context</summary>
+          <p className="caregiver-muted">
+            These are saved with the profile but do not change the wearer&apos;s answers or cues yet.
+          </p>
+          <div className="caregiver-form-grid">
+            <label>
+              <span>Response style</span>
+              <input
+                type="text"
+                value={profileForm.response_style}
+                placeholder="e.g. short, calm"
+                disabled={!canManageProfile || savingKey !== null}
+                onChange={(event) => setProfileForm({ ...profileForm, response_style: event.target.value })}
+              />
+            </label>
+          </div>
           <label>
-            <span>Preferred name</span>
-            <input
-              type="text"
-              value={profileForm.preferred_name}
+            <span>Short bio</span>
+            <textarea
+              value={profileForm.short_bio}
+              rows={2}
               disabled={!canManageProfile || savingKey !== null}
-              onChange={(event) => setProfileForm({ ...profileForm, preferred_name: event.target.value })}
+              onChange={(event) => setProfileForm({ ...profileForm, short_bio: event.target.value })}
             />
           </label>
           <label>
-            <span>Response style <em>(not applied yet)</em></span>
-            <input
-              type="text"
-              value={profileForm.response_style}
-              placeholder="e.g. short, calm"
+            <span>Home context</span>
+            <textarea
+              value={profileForm.home_context}
+              rows={2}
               disabled={!canManageProfile || savingKey !== null}
-              onChange={(event) => setProfileForm({ ...profileForm, response_style: event.target.value })}
+              onChange={(event) => setProfileForm({ ...profileForm, home_context: event.target.value })}
             />
           </label>
-        </div>
-        <label>
-          <span>Short bio <em>(optional, stored only)</em></span>
-          <textarea
-            value={profileForm.short_bio}
-            rows={2}
-            disabled={!canManageProfile || savingKey !== null}
-            onChange={(event) => setProfileForm({ ...profileForm, short_bio: event.target.value })}
-          />
-        </label>
-        <label>
-          <span>Home context <em>(optional, stored only)</em></span>
-          <textarea
-            value={profileForm.home_context}
-            rows={2}
-            disabled={!canManageProfile || savingKey !== null}
-            onChange={(event) => setProfileForm({ ...profileForm, home_context: event.target.value })}
-          />
-        </label>
+        </details>
         <button className="primary-button" type="submit" disabled={!canManageProfile || savingKey !== null}>
           {savingKey === "profile" ? "Saving..." : "Save profile"}
         </button>
@@ -1351,7 +1367,7 @@ export default function CaregiverPage() {
           invitations, and medical records are not included.
         </div>
 
-        <div className="caregiver-layout">
+        <div className={`caregiver-layout ${patients.length === 1 && !patientListError ? "is-single-profile" : ""}`}>
           <aside className="patient-list-panel" aria-labelledby="patient-list-title">
             <p className="section-kicker">Linked profiles</p>
             <h2 id="patient-list-title">Profiles available to {activeCaregiver.name}</h2>
@@ -1378,7 +1394,7 @@ export default function CaregiverPage() {
                     onClick={() => selectPatient(patient.user_id)}
                   >
                     <strong>{patient.preferred_name ?? patient.name}</strong>
-                    <span>{patient.name}</span>
+                    <span>{describePatientAccess(patient)}</span>
                   </button>
                 ))}
               </div>
@@ -1423,9 +1439,12 @@ export default function CaregiverPage() {
                 {isLoadingPatient ? (
                   <p className="caregiver-muted management-loading">Loading profile information...</p>
                 ) : !profile ? (
-                  <p className="caregiver-muted management-loading">
-                    Profile information is unavailable. Select the profile again to retry.
-                  </p>
+                  <div className="management-loading" role="alert">
+                    <p className="caregiver-muted">Profile information is unavailable.</p>
+                    <button className="text-button" type="button" onClick={() => selectPatient(selectedPatient.user_id)}>
+                      Retry
+                    </button>
+                  </div>
                 ) : (
                   <div className="management-section">
                     {!activeTabCanManage && (

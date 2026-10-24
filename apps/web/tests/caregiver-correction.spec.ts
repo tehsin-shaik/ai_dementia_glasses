@@ -128,7 +128,6 @@ function savedMoment(): Moment {
 
 async function openMoments(page: Page) {
   await page.goto("/caregiver");
-  await page.getByRole("button", { name: "Alex" }).click();
   await page.getByRole("button", { name: "Saved moments" }).click();
 }
 

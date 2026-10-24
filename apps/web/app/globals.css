@@ -5621,3 +5621,33 @@ h3 { text-wrap: balance; }
   max-height: calc(100% - 32px);
   overflow-y: auto;
 }
+
+.caregiver-layout.is-single-profile,
+.caregiver-page-shell.caregiver-experience .caregiver-layout.is-single-profile {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.caregiver-layout.is-single-profile .patient-list-panel {
+  display: none;
+}
+
+.caregiver-coming-soon {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.caregiver-coming-soon summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.caregiver-coming-soon[open] summary {
+  margin-bottom: 10px;
+}
+
+.caregiver-coming-soon > label,
+.caregiver-coming-soon .caregiver-form-grid {
+  margin-top: 12px;
+}

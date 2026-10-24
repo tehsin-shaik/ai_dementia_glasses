@@ -231,7 +231,7 @@ test("stale caregiver detail responses cannot cross a patient selection", async 
 
   await page.goto("/caregiver");
   await expect.poll(() => alexNotesStarted).toBe(true);
-  await page.getByRole("button", { name: "Jordan Jordan" }).click();
+  await page.getByRole("button", { name: "Jordan You can edit this setup" }).click();
   await expect(page.getByRole("heading", { name: "Jordan's setup" })).toBeVisible();
   await expect(page.getByLabel("Preferred name")).toHaveValue("Jordan");
   releaseAlexNotes();
@@ -273,7 +273,7 @@ test("late caregiver mutation feedback cannot update another selected profile", 
   await page.getByLabel("Preferred name").fill("Changed Alex");
   await page.getByRole("button", { name: "Save profile" }).click();
   await expect.poll(() => saveStarted).toBe(true);
-  await page.getByRole("button", { name: "Jordan Jordan" }).click();
+  await page.getByRole("button", { name: "Jordan You can edit this setup" }).click();
   await expect(page.getByLabel("Preferred name")).toHaveValue("Jordan");
   releaseSave();
   await page.waitForTimeout(250);
@@ -561,4 +561,64 @@ test("page headings use the same typeface and weight on every page", async ({ pa
   for (const path of ["/app", "/experience", "/caregiver"]) {
     expect(styles[path], path).toBe(styles["/"]);
   }
+});
+
+test("caregiver profile hides unused fields and the list column when one profile is linked", async ({ page }) => {
+  await page.route("**/api/caregiver/**", async (route) => {
+    if (await fulfillPreflight(route)) return;
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const caregiverId = request.headers()["x-memorycue-caregiver-id"];
+    if (path === "/api/caregiver/patients") {
+      return fulfillJson(route, caregiverId === "3" ? [taylorAlex] : caregiverId === "2" ? [alex, jordan] : [alex]);
+    }
+    return fulfillPatientDetail(route, 1);
+  });
+
+  await page.goto("/caregiver");
+  await expect(page.getByRole("heading", { name: "Alex's setup" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Profiles available to/ })).toBeHidden();
+  await expect(page.getByLabel("Preferred name")).toBeVisible();
+  await expect(page.getByLabel("Response style")).toBeHidden();
+  await expect(page.getByLabel("Short bio")).toBeHidden();
+  await expect(page.getByLabel("Home context")).toBeHidden();
+  await expect(page.getByText("not applied yet")).toHaveCount(0);
+  await expect(page.getByText("stored only")).toHaveCount(0);
+  await page.getByText("Coming soon: response style, short bio and home context").click();
+  await expect(page.getByLabel("Response style")).toHaveValue("Short, calm reminders");
+
+  await page.getByLabel("Demo caregiver").selectOption("2");
+  await expect(page.getByRole("heading", { name: /Profiles available to/ })).toBeVisible();
+  const buttons = page.locator(".patient-button");
+  await expect(buttons).toHaveCount(2);
+  await expect(buttons.first()).toContainText("You can edit this setup");
+  await expect(buttons.first()).not.toHaveText(/Alex\s*Alex/);
+});
+
+test("a failed single-profile load offers Retry and section-level caregivers are not labeled view-only", async ({ page }) => {
+  let profileFailures = 0;
+  const notesOnly = { ...alex, user_id: 1, role: "viewer", can_manage_profile: false, can_manage_people: false, can_manage_schedule: false, can_manage_objects: false, can_manage_notes: true };
+  await page.route("**/api/caregiver/**", async (route) => {
+    if (await fulfillPreflight(route)) return;
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const caregiverId = request.headers()["x-memorycue-caregiver-id"];
+    if (path === "/api/caregiver/patients") {
+      return fulfillJson(route, caregiverId === "2" ? [notesOnly, jordan] : [alex]);
+    }
+    if (path.endsWith("/profile") && profileFailures === 0) {
+      profileFailures += 1;
+      return fulfillJson(route, { detail: "boom" }, 500);
+    }
+    return fulfillPatientDetail(route, 1);
+  });
+
+  await page.goto("/caregiver");
+  await expect(page.getByText("Profile information is unavailable.")).toBeVisible();
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByLabel("Preferred name")).toHaveValue("Alex");
+
+  await page.getByLabel("Demo caregiver").selectOption("2");
+  await expect(page.locator(".patient-button").first()).toContainText("You can edit some sections");
+  await expect(page.locator(".patient-button").nth(1)).toContainText("You can edit this setup");
 });
